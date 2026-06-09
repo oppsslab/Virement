@@ -1,0 +1,1 @@
+using ZSVC_PPS_VIREMENT as service from '../../srv/service';

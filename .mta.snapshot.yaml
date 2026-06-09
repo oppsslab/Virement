@@ -1,0 +1,223 @@
+_schema-version: '3.1'
+ID: virement
+version: 1.0.0
+description: A simple CAP project.
+parameters:
+  deploy_mode: html5-repo
+  enable-parallel-deployments: true
+  subdomain: epf-ent-cf-ap11-dev
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - rm -rf build/dist
+        - mkdir -p build/dist
+        - rm -rf build/ui-deployer
+        - mkdir -p build/ui-deployer
+    - builder: custom
+      commands:
+        - npm install --production
+        - >-
+          bash -c "cds -v | grep 'cds-dk' || npm i --production --no-save
+          @sap/cds-dk"
+        - bash -c "export PATH=$PATH:$(pwd)/node_modules/.bin"
+        - cds build --production
+  after-all:
+    - builder: custom
+      commands:
+        - npm install
+modules:
+  - name: virement-virement.zuippsvirement
+    type: html5
+    path: app/virement.zui_pps_virement
+    build-parameters:
+      builder: custom
+      commands:
+        - rm -rf dist-zip dist
+        - npm install
+        - >-
+          npx -p @ui5/cli@^3.0.0 ui5 build --dest dist
+          --include-task=generateCachebusterInfo
+        - mkdir dist-zip
+        - >-
+          bash -c "cd dist && npx bestzip ../dist-zip/virementzuippsvirement.zip
+          *"
+      _artifactName: virementzuippsvirement.zip
+      supported-platforms: []
+      build-result: dist-zip
+  - name: virement-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    build-parameters:
+      builder: npm
+      ignore:
+        - node_modules
+        - package-lock.json
+    requires:
+      - name: virement-service-uaa
+      - name: virement-service-db
+  - name: virement-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      memory: 256MB
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: ${default-url}
+    build-parameters:
+      builder: npm
+      ignore:
+        - node_modules
+        - package-lock.json
+    requires:
+      - name: virement-service-uaa
+      - name: virement-service-db
+      - name: virement-service-destination
+      - name: virement-service-metadata
+      - name: virement-service-connectivity
+      - name: virement-service-logs
+  - name: virement-aux-destinations
+    type: com.sap.application.content
+    parameters:
+      content:
+        subaccount:
+          existing_destinations_policy: update
+          destinations:
+            - Authentication: OAuth2UserTokenExchange
+              Name: virement-service-uaa
+              ServiceInstanceName: virement-uaa
+              ServiceKeyName: virement-uaa-key
+              sap.cloud.service: lcap.virement
+            - Authentication: OAuth2UserTokenExchange
+              Name: virement-app-srv
+              TokenServiceInstanceName: virement-uaa
+              TokenServiceKeyName: virement-uaa-key
+              URL: ~{srv-api/srv-url}
+              sap.cloud.service: lcap.virement
+            - Name: virement-service-html5-apps-repo-host
+              ServiceInstanceName: virement-html5-apps-repo-host
+              ServiceKeyName: virement-html5-apps-repo-host-key
+              sap.cloud.service: lcap.virement
+            - Authentication: OAuth2UserTokenExchange
+              Name: virement-ZSVC_PPS_VIREMENT
+              TokenServiceInstanceName: virement-uaa
+              TokenServiceKeyName: virement-uaa-key
+              URL: ~{srv-api/srv-url}/service/ZSVC_PPS_VIREMENT
+              sap.cloud.service: lcap.virement
+              sap.applicationdevelopment.actions.enabled: false
+              sap.build.usage: CAP
+              sap.processautomation.enabled: false
+              HTML5.DynamicDestination: false
+              WebIDEEnabled: false
+              MobileEnabled: false
+              AppgyverEnabled: false
+    build-parameters:
+      no-source: true
+    requires:
+      - name: virement-service-uaa
+        parameters:
+          service-key:
+            name: virement-uaa-key
+      - name: srv-api
+      - name: virement-service-html5-apps-repo-host
+        parameters:
+          service-key:
+            name: virement-html5-apps-repo-host-key
+      - name: virement-service-destination
+        parameters:
+          content-target: true
+  - name: virement-launchpad
+    type: html5
+    path: build/launchpad
+    build-parameters:
+      builder: custom
+      commands:
+        - npm install
+        - >-
+          npx -p @ui5/cli@^3.0.0 ui5 build --dest dist
+          --include-task=generateCachebusterInfo
+        - bash -c "cd dist && npx bestzip ../../../build/dist/launchpad.zip *"
+        - rm -rf dist
+      _artifactName: launchpad.zip
+      supported-platforms: []
+      build-result: ../../build/dist
+  - name: virement-aux-ui-deployer
+    type: com.sap.application.content
+    path: build/ui-deployer
+    build-parameters:
+      build-result: resources
+      requires:
+        - name: virement-virement.zuippsvirement
+          artifacts:
+            - virementzuippsvirement.zip
+          target-path: resources
+        - name: virement-launchpad
+          artifacts:
+            - launchpad.zip
+          target-path: resources
+    requires:
+      - name: virement-service-html5-apps-repo-host
+        parameters:
+          content-target: true
+resources:
+  - type: org.cloudfoundry.managed-service
+    name: virement-service-uaa
+    parameters:
+      service: xsuaa
+      service-plan: application
+      service-name: virement-uaa
+      path: xs-security.json
+      config:
+        oauth2-configuration:
+          redirect-uris:
+            - https://${subdomain}.launchpad.${default-domain}/login/*
+            - https://${subdomain}.${default-domain}/login/*
+          credential-types:
+            - binding-secret
+            - x509
+        xsappname: virement-${space}
+        role-collections: []
+  - type: org.cloudfoundry.managed-service
+    name: virement-service-db
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+      service-name: virement-db
+  - type: org.cloudfoundry.managed-service
+    name: virement-service-destination
+    parameters:
+      service: destination
+      service-plan: lite
+      service-name: virement-destination
+      config:
+        HTML5Runtime_enabled: true
+        version: 1.0.0
+  - type: org.cloudfoundry.user-provided-service
+    name: virement-service-metadata
+    parameters:
+      service: metadata
+      service-plan: standard
+      service-name: virement-metadata
+      config:
+        default-domain: ${default-domain}
+  - type: org.cloudfoundry.managed-service
+    name: virement-service-connectivity
+    parameters:
+      service: connectivity
+      service-plan: lite
+      service-name: virement-connectivity
+  - type: org.cloudfoundry.managed-service
+    name: virement-service-logs
+    parameters:
+      service: application-logs
+      service-plan: lite
+      service-name: virement-logs
+  - type: org.cloudfoundry.managed-service
+    name: virement-service-html5-apps-repo-host
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host
+      service-name: virement-html5-apps-repo-host

@@ -1,0 +1,49 @@
+{
+  "name": "virement",
+  "version": "1.0.0",
+  "dependencies": {
+    "@cap-js/hana": "^2",
+    "@sap-cloud-sdk/http-client": "^4.7.0",
+    "@sap-cloud-sdk/util": "^4.7.0",
+    "@sap/ams": "^3",
+    "@sap/cds": "^9",
+    "@sap/low-code-event-handler": "^1.2.5",
+    "@sap/xsenv": ">=3.3.2 <3.3.3",
+    "@sap/xssec": "^4",
+    "hdb": "^2.27.1",
+    "passport": "^0.7.0"
+  },
+  "devDependencies": {
+    "@cap-js/sqlite": "^2.4",
+    "@sap/ams-dev": "^2",
+    "@sap/dev-cap-tools": "^1.31.0"
+  },
+  "scripts": {
+    "start": "cds-serve",
+    "start-local": "npm run generate-entry-point && npm run cds-watch",
+    "generate-entry-point": "dev-cap-tools gen-entrypoint",
+    "cds-watch": "cds watch --open",
+    "watch-virement.zui_pps_virement": "cds watch --open virement.zui_pps_virement/webapp/index.html?sap-ui-xx-viewCache=false"
+  },
+  "private": true,
+  "cds": {
+    "requires": {
+      "[production]": {
+        "db": "hana",
+        "auth": "ias"
+      },
+      "auth": {
+        "[development]": {
+          "kind": "dummy"
+        },
+        "[production]": {
+          "kind": "xsuaa"
+        }
+      }
+    }
+  },
+  "lcap": true,
+  "sapux": [
+    "app/virement.zui_pps_virement"
+  ]
+}
