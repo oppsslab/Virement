@@ -16,8 +16,6 @@ entity Requests : cuid, managed {
     fiscalYear          : FiscalYear;
     submissionPeriod    : String;
     requestorCostCentre : String;
-    submissionDate      : Date;
-    requestor           : String;
     approvedBy          : String;
     totalAmount         : Decimal(15, 2);
     aging               : Integer;

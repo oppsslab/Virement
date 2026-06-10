@@ -32,13 +32,11 @@
         "db": "hana",
         "auth": "ias"
       },
-      "auth": {
-        "[development]": {
-          "kind": "dummy"
+      "[development]": {
+        "auth": {
+          "kind": "mocked"
         },
-        "[production]": {
-          "kind": "xsuaa"
-        }
+        "db": "hana"
       }
     }
   },

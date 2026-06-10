@@ -12,7 +12,7 @@
 |**Application Title**<br>Virement|
 |**Namespace**<br>|
 |**UI5 Theme**<br>sap_horizon|
-|**UI5 Version**<br>1.120.13|
+|**UI5 Version**<br>1.148.1|
 |**Enable TypeScript**<br>False|
 |**Add Eslint configuration**<br>False|
 |**Main Entity**<br>Requests|

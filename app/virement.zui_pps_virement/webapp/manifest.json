@@ -5,7 +5,7 @@
     "type": "application",
     "i18n": "i18n/i18n.properties",
     "applicationVersion": {
-      "version": "0.0.1"
+      "version": "0.0.2"
     },
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
@@ -58,11 +58,12 @@
   "sap.ui5": {
     "flexEnabled": true,
     "dependencies": {
-      "minUI5Version": "1.120.13",
+      "minUI5Version": "1.148.1",
       "libs": {
         "sap.m": {},
         "sap.ui.core": {},
-        "sap.fe.core": {}
+        "sap.fe.core": {},
+        "sap.fe.macros": {}
       }
     },
     "contentDensities": {

@@ -1,4 +1,4 @@
-_schema-version: '3.1'
+_schema-version: "3.1"
 ID: virement
 version: 1.0.0
 description: A simple CAP project.
@@ -40,8 +40,7 @@ modules:
         - >-
           bash -c "cd dist && npx bestzip ../dist-zip/virementzuippsvirement.zip *"
       _artifactName: virementzuippsvirement.zip
-      supported-platforms:
-        []
+      supported-platforms: []
       build-result: dist-zip
   - name: virement-db-deployer
     type: hdb
@@ -54,13 +53,12 @@ modules:
         - node_modules
         - package-lock.json
     requires:
-      - name: virement-service-uaa
       - name: virement-service-db
   - name: virement-srv
     type: nodejs
     path: gen/srv
     parameters:
-      memory: 256MB
+      memory: 2GB
       routes:
         - route: "${default-url}"
         - route: "${default-host}.cert.${default-domain}"
@@ -68,24 +66,24 @@ modules:
       - name: srv-api
         properties:
           srv-url: ${default-url}
-          srv-cert-url: '${protocol}://${default-host}.cert.${default-domain}'
+          srv-cert-url: "${protocol}://${default-host}.cert.${default-domain}"
     build-parameters:
       builder: npm
       ignore:
         - node_modules
         - package-lock.json
     requires:
-      - name: virement-service-uaa
       - name: virement-service-db
-      - name: virement-service-destination
+      - name: shared-destination
       - name: virement-service-metadata
-      - name: virement-service-connectivity
-      - name: virement-service-logs
+      - name: shared-connectivity
+      - name: shared-logs
       - name: virement-ias
         parameters:
           config:
             credential-type: X509_GENERATED
             app-identifier: srv
+            validity: 365
     deployed-after:
       - virement-ams-policies-deployer
     properties:
@@ -137,7 +135,7 @@ modules:
         parameters:
           service-key:
             name: virement-html5-apps-repo-host-key
-      - name: virement-service-destination
+      - name: shared-destination
         parameters:
           content-target: true
   - name: virement-launchpad
@@ -152,8 +150,7 @@ modules:
         - bash -c "cd dist && npx bestzip ../../../build/dist/launchpad.zip *"
         - rm -rf dist
       _artifactName: launchpad.zip
-      supported-platforms:
-        []
+      supported-platforms: []
       build-result: ../../build/dist
   - name: virement-aux-ui-deployer
     type: com.sap.application.content
@@ -178,19 +175,21 @@ modules:
     type: javascript.nodejs
     path: gen/policies
     parameters:
+      memory: 256M
       buildpack: nodejs_buildpack
       no-route: true
       no-start: true
       tasks:
         - name: deploy-dcl
           command: npm start
-          memory: 512M
+          memory: 256M
     requires:
       - name: virement-ias
         parameters:
           config:
             credential-type: X509_GENERATED
             app-identifier: ams-policy-deployer
+            validity: 365
 resources:
   - type: org.cloudfoundry.managed-service
     name: virement-service-uaa
@@ -208,23 +207,15 @@ resources:
             - binding-secret
             - x509
         xsappname: virement-${space}
-        role-collections:
-          []
+        role-collections: []
   - type: org.cloudfoundry.managed-service
     name: virement-service-db
     parameters:
       service: hana
       service-plan: hdi-shared
       service-name: virement-db
-  - type: org.cloudfoundry.managed-service
-    name: virement-service-destination
-    parameters:
-      service: destination
-      service-plan: lite
-      service-name: virement-destination
-      config:
-        HTML5Runtime_enabled: true
-        version: 1.0.0
+  - type: org.cloudfoundry.existing-service
+    name: shared-destination
   - type: org.cloudfoundry.user-provided-service
     name: virement-service-metadata
     parameters:
@@ -233,18 +224,10 @@ resources:
       service-name: virement-metadata
       config:
         default-domain: ${default-domain}
-  - type: org.cloudfoundry.managed-service
-    name: virement-service-connectivity
-    parameters:
-      service: connectivity
-      service-plan: lite
-      service-name: virement-connectivity
-  - type: org.cloudfoundry.managed-service
-    name: virement-service-logs
-    parameters:
-      service: application-logs
-      service-plan: lite
-      service-name: virement-logs
+  - type: org.cloudfoundry.existing-service
+    name: shared-connectivity
+  - type: org.cloudfoundry.existing-service
+    name: shared-logs
   - type: org.cloudfoundry.managed-service
     name: virement-service-html5-apps-repo-host
     parameters:
@@ -265,6 +248,9 @@ resources:
         oauth2-configuration:
           token-policy:
             access-token-format: "jwt"
+          redirect-uris:
+            - https://${subdomain}.launchpad.${default-domain}/login/*
+            - https://${subdomain}.${default-domain}/login/*
         authorization:
           enabled: true
         xsuaa-cross-consumption: true
