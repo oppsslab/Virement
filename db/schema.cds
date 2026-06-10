@@ -13,7 +13,7 @@ entity Requests : cuid, managed {
     requestNumber       : String(10);
     requestType         : Association to RequestType;
     status              : Association to RequestStatus;
-    fiscalYear          : FiscalYear;
+    fiscalYear          : FiscalYear @readonly;
     submissionPeriod    : String;
     requestorCostCentre : String;
     approvedBy          : String;

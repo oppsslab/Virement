@@ -101,6 +101,11 @@
           "name": "RequestsMain",
           "pattern": ":?query:",
           "target": "RequestsMain"
+        },
+        {
+          "name": "CreateRequestPage",
+          "pattern": "CreateRequest",
+          "target": "CreateRequestPage"
         }
       ],
       "targets": {
@@ -113,6 +118,17 @@
               "navigation": {},
               "contextPath": "/Requests",
               "viewName": "virement.zuippsvirement.ext.view.Main"
+            }
+          }
+        },
+        "CreateRequestPage": {
+          "type": "Component",
+          "id": "CreateRequestPage",
+          "name": "sap.fe.core.fpm",
+          "options": {
+            "settings": {
+              "viewName": "virement.zuippsvirement.ext.view.CreateRequest",
+              "contextPath": "/Requests"
             }
           }
         }

@@ -2,7 +2,7 @@ sap.ui.define(
     [
         'sap/fe/core/PageController'
     ],
-    function(PageController) {
+    function (PageController) {
         'use strict';
 
         return PageController.extend('virement.zuippsvirement.ext.view.Main', {
@@ -11,9 +11,14 @@ sap.ui.define(
              * Can be used to modify the View before it is displayed, to bind event handlers and do other one-time initialization.
              * @memberOf virement.zuippsvirement.ext.view.Main
              */
-            //  onInit: function () {
-            //      PageController.prototype.onInit.apply(this, arguments); // needs to be called to properly initialize the page controller
-            //  },
+            onInit: function () {
+                PageController.prototype.onInit.apply(this, arguments); // needs to be called to properly initialize the page controller
+
+                this._oRouter = this.getAppComponent().getRouter();
+                this._oRouter
+                    .getRoute("RequestsMain")
+                    .attachPatternMatched(this.onRouteChange, this);
+            },
 
             /**
              * Similar to onAfterRendering, but this hook is invoked before the controller's View is re-rendered
@@ -40,6 +45,14 @@ sap.ui.define(
             //  onExit: function() {
             //
             //  }
+
+            async onRouteChange() {
+
+            },
+
+            onCreateRequest: function () {
+                this._oRouter.navTo("CreateRequestPage");
+            }
         });
     }
 );

@@ -53,6 +53,7 @@ modules:
         - node_modules
         - package-lock.json
     requires:
+      - name: virement-service-uaa
       - name: virement-service-db
   - name: virement-srv
     type: nodejs
@@ -73,6 +74,7 @@ modules:
         - node_modules
         - package-lock.json
     requires:
+      - name: virement-service-uaa
       - name: virement-service-db
       - name: shared-destination
       - name: virement-service-metadata

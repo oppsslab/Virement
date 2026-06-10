@@ -30,7 +30,7 @@
     "requires": {
       "[production]": {
         "db": "hana",
-        "auth": "ias"
+        "auth": "xsuaa"
       },
       "[development]": {
         "auth": {
