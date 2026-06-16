@@ -1,9 +1,9 @@
-<mvc:View controllerName="virement.zuippsvirement.ext.view.CreateRequest" xmlns:core="sap.ui.core" xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m" xmlns:f="sap.f" xmlns:macros="sap.fe.macros" xmlns:form="sap.ui.layout.form">
+<mvc:View controllerName="virement.zuippsvirement.ext.view.ViewRequest" xmlns:core="sap.ui.core" xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m" xmlns:f="sap.f" xmlns:macros="sap.fe.macros" xmlns:form="sap.ui.layout.form">
     <f:DynamicPage headerExpanded="false" showFooter="true">
         <f:title>
             <f:DynamicPageTitle>
                 <f:heading>
-                    <Title text="Create Request"/>
+                    <Title text="Request"/>
                 </f:heading>
             </f:DynamicPageTitle>
         </f:title>
@@ -13,7 +13,7 @@
                 <form:SimpleForm editable="true" layout="ColumnLayout" columnsM="2" columnsL="3" columnsXL="4">
                     <form:content>
                         <Label required="true" text="Request Type"/>
-                        <macros:Field metaPath="/Requests/requestType_code" id="FieldRequestType" readOnly="false"/>
+                        <macros:Field metaPath="/Requests/requestType_code" readOnly="{= ${ui&gt;/isEditable} === false }"/>
                     </form:content>
                 </form:SimpleForm>
                 <Panel class="sapUiTinyMarginTop">
@@ -23,6 +23,7 @@
                         </OverflowToolbar>
                     </headerToolbar>
                     <core:Fragment fragmentName="virement.zuippsvirement.ext.fragment.RequestHeader" type="XML"/>
+                    
                 </Panel>
                 <Panel class="sapUiTinyMarginTop">
                     <headerToolbar>
@@ -35,7 +36,7 @@
                 <Panel class="sapUiTinyMarginTop">
                     <headerToolbar>
                         <OverflowToolbar>
-                            <Title text="Request Details"/>
+                            <Title text="Request Approvers"/>
                         </OverflowToolbar>
                     </headerToolbar>
                     <core:Fragment fragmentName="virement.zuippsvirement.ext.fragment.RequestApprovers" type="XML"/>
@@ -43,19 +44,22 @@
                 <Panel class="sapUiTinyMarginTop">
                     <headerToolbar>
                         <OverflowToolbar>
-                            <Title text="Request Details"/>
+                            <Title text="Request History"/>
                         </OverflowToolbar>
                     </headerToolbar>
                     <core:Fragment fragmentName="virement.zuippsvirement.ext.fragment.RequestHistory" type="XML"/>
-                </Panel>
+                </Panel>            
             </VBox>
         </f:content>
         <!-- Footer aggregation -->
         <f:footer>
             <OverflowToolbar>
                 <ToolbarSpacer/>
-                <Button text="Save as Draft" press="onSaveDraft"/>
-                <Button text="Submit" press="onSubmitRequest" type="Emphasized"/>
+                <Button text="Approve" press="onSaveDraft" type="Accept"/>
+                <Button text="Reject" press="onSaveDraft" type="Reject"/>
+                <Button text="Edit" press="onPressEdit" type="Emphasized"/>
+                <Button text="Save as Draft" press="onSaveDraft" visible="{ui&gt;/isEditable}"/>
+                <Button text="Submit" press="onSubmitRequest" type="Emphasized" visible="{ui&gt;/isEditable}"/>
                 <Button text="Cancel" press="onPressCancel"/>
             </OverflowToolbar>
         </f:footer>
