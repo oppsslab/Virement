@@ -1,7 +1,21 @@
 {
-  "scopes": [],
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.REQUEST_APPROVE",
+      "description": "REQUEST_APPROVE"
+    }
+  ],
   "attributes": [],
-  "role-templates": [],
+  "role-templates": [
+    {
+      "name": "REQUEST_APPROVE",
+      "description": "generated",
+      "scope-references": [
+        "$XSAPPNAME.REQUEST_APPROVE"
+      ],
+      "attribute-references": []
+    }
+  ],
   "xsappname": "virement",
   "tenant-mode": "dedicated"
 }

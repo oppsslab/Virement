@@ -179,7 +179,11 @@ resources:
             - binding-secret
             - x509
         xsappname: virement-${space}
-        role-collections: []
+        role-collections:
+          - description: REQUEST_APPROVE
+            name: virement-REQUEST_APPROVE-${space}
+            role-template-references:
+              - $XSAPPNAME.REQUEST_APPROVE
   - type: org.cloudfoundry.managed-service
     name: virement-service-db
     parameters:

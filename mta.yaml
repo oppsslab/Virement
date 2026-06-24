@@ -86,6 +86,7 @@ modules:
             credential-type: X509_GENERATED
             app-identifier: srv
             validity: 365
+      - name: virement-dms
     deployed-after:
       - virement-ams-policies-deployer
     properties:
@@ -209,7 +210,11 @@ resources:
             - binding-secret
             - x509
         xsappname: virement-${space}
-        role-collections: []
+        role-collections:
+          - description: REQUEST_APPROVE
+            name: virement-REQUEST_APPROVE-${space}
+            role-template-references:
+              - $XSAPPNAME.REQUEST_APPROVE
   - type: org.cloudfoundry.managed-service
     name: virement-service-db
     parameters:
@@ -256,3 +261,5 @@ resources:
         authorization:
           enabled: true
         xsuaa-cross-consumption: true
+  - type: org.cloudfoundry.existing-service
+    name: virement-dms

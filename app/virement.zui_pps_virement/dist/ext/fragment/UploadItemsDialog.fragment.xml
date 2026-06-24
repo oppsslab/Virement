@@ -1,0 +1,16 @@
+<core:FragmentDefinition xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:u="sap.ui.unified">
+    <Dialog id="uploadItemsDialog" title="{i18n>UploadTemplate}" contentWidth="420px">
+        <VBox class="sapUiTinyMargin">
+            <Text text="{i18n>UploadItemsHint}" />
+            <u:FileUploader id="itemsFileUploader" name="itemsUpload" fileType="xlsx" placeholder="{i18n>ChooseFile}" class="sapUiSmallMarginTop" width="100%" />
+        </VBox>
+        <beginButton>
+            <Button id="confirmUploadBtn" text="{i18n>Upload}" type="Emphasized" />
+        </beginButton>
+        <endButton>
+            <Button id="cancelUploadBtn" text="{i18n>Cancel}" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

@@ -3,3 +3,6 @@
 // hash of generated content: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 // ----------------------------------HEADER_END------------------------------------------------
 
+POLICY "VR_REQUEST_APPROVE" {
+	ASSIGN ROLE "REQUEST_APPROVE";
+}

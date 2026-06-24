@@ -63,7 +63,8 @@
         "sap.m": {},
         "sap.ui.core": {},
         "sap.fe.core": {},
-        "sap.fe.macros": {}
+        "sap.fe.macros": {},
+        "sap.fe.templates": {}
       }
     },
     "contentDensities": {
@@ -92,7 +93,11 @@
       }
     },
     "resources": {
-      "css": []
+      "css": [
+        {
+          "uri": "css/style.css"
+        }
+      ]
     },
     "routing": {
       "config": {},
@@ -103,32 +108,100 @@
           "target": "RequestsMain"
         },
         {
-          "name": "CreateRequestPage",
-          "pattern": "CreateRequest",
-          "target": "CreateRequestPage"
+          "name": "RequestsObjectPage",
+          "pattern": "Requests({RequestsKey}):?query:",
+          "target": "RequestsObjectPage"
         }
       ],
       "targets": {
         "RequestsMain": {
           "type": "Component",
           "id": "RequestsMain",
-          "name": "sap.fe.core.fpm",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "navigation": {
+                "Requests": {
+                  "detail": {
+                    "route": "RequestsObjectPage"
+                  }
+                }
+              },
+              "contextPath": "/Requests",
+              "viewName": "virement.zuippsvirement.ext.view.Main",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "disableCopyToClipboard": true,
+                    "type": "GridTable"
+                  }
+                }
+              },
+              "initialLoad": "Enabled",
+              "enhanceI18n": "i18n/custom-fe.properties"
+            }
+          }
+        },
+        "RequestsObjectPage": {
+          "type": "Component",
+          "id": "RequestsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
           "options": {
             "settings": {
               "navigation": {},
               "contextPath": "/Requests",
-              "viewName": "virement.zuippsvirement.ext.view.Main"
-            }
-          }
-        },
-        "CreateRequestPage": {
-          "type": "Component",
-          "id": "CreateRequestPage",
-          "name": "sap.fe.core.fpm",
-          "options": {
-            "settings": {
-              "viewName": "virement.zuippsvirement.ext.view.CreateRequest",
-              "contextPath": "/Requests"
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#RequestDetails": {
+                  "tableSettings": {
+                    "enableFullScreen": false,
+                    "enableMassEdit": true,
+                    "type": "GridTable"
+                  },
+                  "actions": {
+                    "downloadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
+                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadTemplate"
+                      }
+                    }
+                  }
+                },
+                "RequestHistory/@com.sap.vocabularies.UI.v1.LineItem#History": {
+                  "tableSettings": {
+                    "disableCopyToClipboard": true,
+                    "enableFullScreen": false,
+                    "enablePaste": false,
+                    "personalization": false
+                  }
+                },
+                "RequestAttachments/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "disableCopyToClipboard": true,
+                    "enableExport": false,
+                    "enableFullScreen": false,
+                    "enablePaste": false
+                  }
+                }
+              },
+              "enhanceI18n": "i18n/custom-fe.properties"
             }
           }
         }

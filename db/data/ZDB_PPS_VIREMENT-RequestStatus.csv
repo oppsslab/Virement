@@ -1,5 +1,6 @@
 code,name,descr
-D,Draft,Draft
-1,PendingApprovalL1,Pending Approval L1
-2,PendingApprovalL2,Pending Approval L2
-C,Completed,Completed
+0,Draft,Draft
+1,Rejected,Rejected
+2,PendingApproval,Pending Approval
+3,Completed,Completed
+5,Cancelled,Cancelled

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@cap-js/hana": "^2",
+    "@cap-js/sdm": "^1.10.0",
     "@sap-cloud-sdk/http-client": "^4.7.0",
     "@sap-cloud-sdk/util": "^4.7.0",
     "@sap/ams": "^3",
@@ -11,7 +12,8 @@
     "@sap/xsenv": ">=3.3.2 <3.3.3",
     "@sap/xssec": "^4",
     "hdb": "^2.27.1",
-    "passport": "^0.7.0"
+    "passport": "^0.7.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@cap-js/sqlite": "^2.4",
@@ -34,9 +36,28 @@
       },
       "[development]": {
         "auth": {
-          "kind": "mocked"
+          "kind": "mocked",
+          "users": {
+            "janine.louise.martinez@pwc.com": {
+              "password": "1234567",
+              "attr": {
+                "givenName": "Janine",
+                "familyName": "Martinez",
+                "email": "janine.louise.martinez@pwc.com",
+                "groups": []
+              },
+              "policies": [
+                "cap.VR_REQUEST_APPROVE"
+              ]
+            }
+          }
         },
         "db": "hana"
+      },
+      "sdm": {
+        "settings": {
+          "repositoryId": "e78f3508-7a7e-4f7c-9cee-b60102adeb41"
+        }
       }
     }
   },
