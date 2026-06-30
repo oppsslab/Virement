@@ -5,3 +5,26 @@
 .objectPageSectionHeader {
   margin-top: 0rem !important;
 }
+
+.detailsCellImageBackground {
+  background-image: url("../images/DetailsCellBG.png");
+  background-size: cover;
+  background-position: 0 40%;
+}
+
+.titleBanner {
+  height: 230px !important;
+  background-image: linear-gradient(
+    to right,
+    #eaf2ff,
+    #f5f9ff,
+    #ffffff
+  ) !important;
+  border-radius: 0.3rem !important;
+}
+
+.sideNavigationBackground {
+  background-image: url("../images/DetailsCellBG.png") !important;
+  background-size: cover !important;
+  background-position: 0 40% !important;
+}

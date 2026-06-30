@@ -1,0 +1,31 @@
+<mvc:View xmlns:core="sap.ui.core"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:tnt="sap.tnt" controllerName="virement.zuippsvirement.ext.view.Main" height="90%">
+    <tnt:ToolPage id="toolPage">
+        <tnt:header>
+            <tnt:ToolHeader>
+                <Button id="sideNavigationToggleButton" icon="sap-icon://menu2" type="Transparent" press=".onSideNavButtonPress">
+                    <layoutData>
+                        <OverflowToolbarLayoutData priority="NeverOverflow" />
+                    </layoutData>
+                </Button>
+                <ToolbarSpacer />
+                <Title level="H1" text="{MenuModel>/pageTitle}" wrapping="false" />
+                <ToolbarSpacer />
+            </tnt:ToolHeader>
+        </tnt:header>
+        <tnt:sideContent>
+            <tnt:SideNavigation id="sideNavigation" expanded="true" selectedKey="{MenuModel>/selectedKey}" itemSelect=".onItemSelect" class="sideNavigationBackground">
+                <tnt:NavigationList items="{MenuModel>/navigation}">
+                    <tnt:NavigationListItem text="{path: 'MenuModel>titleI18nKey', formatter: '.getBundleText'}" icon="{MenuModel>icon}" key="{MenuModel>key}" expanded="{MenuModel>expanded}" items="{MenuModel>items}">
+                        <tnt:NavigationListItem text="{path: 'MenuModel>titleI18nKey', formatter: '.getBundleText'}" key="{MenuModel>key}" enabled="{MenuModel>enabled}" />
+                    </tnt:NavigationListItem>
+                </tnt:NavigationList>
+            </tnt:SideNavigation>
+        </tnt:sideContent>
+        <tnt:mainContents>
+            <App id="appContent" />
+        </tnt:mainContents>
+    </tnt:ToolPage>
+</mvc:View>

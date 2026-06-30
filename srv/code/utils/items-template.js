@@ -46,7 +46,7 @@ function buildTemplate() {
   const base64 = XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
 
   return {
-    fileName: "RequestItems_Template.xlsx",
+    fileName: "Mass Upload Template.xlsx",
     content: base64,
     mimeType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

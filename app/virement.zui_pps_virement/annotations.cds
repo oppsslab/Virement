@@ -147,6 +147,7 @@ annotate service.Requests with @(
         ![@UI.Criticality]: status_code
     },
 
+    UI.CreateHidden,
     UI.DeleteHidden,
 
     UI.SelectionFields: [

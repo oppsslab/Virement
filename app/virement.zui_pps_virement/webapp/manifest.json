@@ -90,6 +90,10 @@
       "@i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "uri": "i18n/i18n.properties"
+      },
+      "MenuModel": {
+        "type": "sap.ui.model.json.JSONModel",
+        "uri": "model/menuData.json"
       }
     },
     "resources": {
@@ -99,8 +103,12 @@
         }
       ]
     },
+    "rootView": {
+      "viewName": "virement.zuippsvirement.ext.view.Main",
+      "id": "Main"
+    },
     "routing": {
-      "config": {},
+      "config": { "controlId": "appContent", "controlAggregation": "pages" },
       "routes": [
         {
           "name": "RequestsMain",
@@ -111,34 +119,27 @@
           "name": "RequestsObjectPage",
           "pattern": "Requests({RequestsKey}):?query:",
           "target": "RequestsObjectPage"
+        },
+        {
+          "name": "RequestsView",
+          "pattern": "RequestsView:?query:",
+          "target": "RequestsView"
+        },
+        {
+          "name": "RequestsCreate",
+          "pattern": "Requests/create:?query:",
+          "target": "RequestsCreate"
         }
       ],
       "targets": {
         "RequestsMain": {
           "type": "Component",
           "id": "RequestsMain",
-          "name": "sap.fe.templates.ListReport",
+          "name": "sap.fe.core.fpm",
           "options": {
             "settings": {
-              "navigation": {
-                "Requests": {
-                  "detail": {
-                    "route": "RequestsObjectPage"
-                  }
-                }
-              },
               "contextPath": "/Requests",
-              "viewName": "virement.zuippsvirement.ext.view.Main",
-              "controlConfiguration": {
-                "@com.sap.vocabularies.UI.v1.LineItem": {
-                  "tableSettings": {
-                    "disableCopyToClipboard": true,
-                    "type": "GridTable"
-                  }
-                }
-              },
-              "initialLoad": "Enabled",
-              "enhanceI18n": "i18n/custom-fe.properties"
+              "viewName": "virement.zuippsvirement.ext.view.Home"
             }
           }
         },
@@ -202,6 +203,44 @@
                 }
               },
               "enhanceI18n": "i18n/custom-fe.properties"
+            }
+          }
+        },
+        "RequestsView": {
+          "type": "Component",
+          "id": "RequestsView",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "navigation": {
+                "Requests": {
+                  "detail": {
+                    "route": "RequestsObjectPage"
+                  }
+                }
+              },
+              "contextPath": "/Requests",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "disableCopyToClipboard": true,
+                    "type": "GridTable"
+                  }
+                }
+              },
+              "initialLoad": "Enabled",
+              "enhanceI18n": "i18n/custom-fe.properties"
+            }
+          }
+        },
+        "RequestsCreate": {
+          "type": "Component",
+          "id": "RequestsCreate",
+          "name": "sap.fe.core.fpm",
+          "options": {
+            "settings": {
+              "viewName": "virement.zuippsvirement.ext.view.RequestsCreate",
+              "contextPath": "/Requests"
             }
           }
         }
