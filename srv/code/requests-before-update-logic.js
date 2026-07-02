@@ -1,9 +1,7 @@
 const cds = require("@sap/cds");
-const { recalcRequestTotal } = require("./utils/recalc-total-logic");
+const { recalcAmountsByType } = require("./utils/recalc-total-logic");
 
 const LOG = cds.log("requests-before-update-logic");
-
-const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
 /* ------------------------------------------------------------------ *
  * Request ID resolution helper
@@ -24,13 +22,19 @@ function resolveRequestId(request) {
  *
  * Fires when an already-created (active) Request is edited and saved
  * (draft activation of an existing record). Resequences the draft items'
- * srNo and recalculates the parent Request's totalAmount via the shared
+ * srNo and recalculates all amount fields on the parent Request via the shared
  * util, so the saved record reflects any item additions/deletions.
+ *
+ * Recalculates:
+ *   - supplementAmount
+ *   - returnAmount
+ *   - transferInAmount
+ *   - transferOutAmount
  *
  * @param {cds.Request} request
  */
 module.exports = async function (request) {
-  LOG.info("--- BEFORE UPDATE Requests started: recalc total ---");
+  LOG.info("--- BEFORE UPDATE Requests started: recalc amounts ---");
 
   try {
     LOG.info("Event:", request.event);
@@ -49,21 +53,22 @@ module.exports = async function (request) {
       return;
     }
 
-    // 2. Resequence srNo + recalculate the total on the draft (shared util).
-    const { totalAmount, resequenced } = await recalcRequestTotal({
-      tx,
+    // 2. Resequence srNo + recalculate all amounts on the draft (shared util).
+    const amounts = await recalcAmountsByType(
       requestId,
-      request,
-      doResequence: true,
-    });
+      true  // doResequence
+    );
 
-    // 3. Reflect the recalculated total on the incoming payload so the
-    //    active record is updated with the correct value during save.
-    request.data.totalAmount = totalAmount;
+    // 3. Reflect all recalculated amounts on the incoming payload so the
+    //    active record is updated with the correct values during save.
+    request.data.supplementAmount = amounts.supplementAmount;
+    request.data.returnAmount = amounts.returnAmount;
+    request.data.transferInAmount = amounts.transferInAmount;
+    request.data.transferOutAmount = amounts.transferOutAmount;
 
     LOG.info(
       "Recalculation completed on update:",
-      `total=${totalAmount}, resequenced=${resequenced} for request ${requestId}`,
+      `amounts=${JSON.stringify(amounts)}, resequenced=true for request ${requestId}`,
     );
 
     LOG.info("--- BEFORE UPDATE Requests ended successfully ---");

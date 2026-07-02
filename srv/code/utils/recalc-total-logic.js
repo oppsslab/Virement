@@ -1,108 +1,99 @@
 const cds = require("@sap/cds");
-const { calculateTotalAmount } = require("./requests-calculation-utils");
 
 const LOG = cds.log("recalc-total-logic");
 
-const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
-const SR_NO_LENGTH = 3;
-
-/* ------------------------------------------------------------------ *
- * srNo resequencing helper
- * ------------------------------------------------------------------ */
-
-async function resequenceItems({ tx, ItemsDraft, items }) {
-  let sequence = 1;
-  let updatedCount = 0;
-
-  for (const item of items || []) {
-    const newSrNo = String(sequence).padStart(SR_NO_LENGTH, "0");
-
-    if (item.srNo !== newSrNo) {
-      await tx.run(
-        UPDATE(ItemsDraft).set({ srNo: newSrNo }).where({ ID: item.ID }),
-      );
-      updatedCount++;
-    }
-
-    sequence++;
-  }
-
-  return updatedCount;
-}
-
-/* ------------------------------------------------------------------ *
- * Main util
- * ------------------------------------------------------------------ */
-
 /**
- * Recalculates the parent Request's totalAmount from its draft items,
- * and (optionally) resequences the srNo of those items. Operates entirely
- * on the draft entities.
+ * Recalculates the parent Request's amount fields from its draft items,
+ * and optionally resequences srNo.
  *
- * @param {object} options
- * @param {object} options.tx - The transaction (cds.tx(request))
- * @param {string} options.requestId - The parent Requests.ID
- * @param {object} [options.request] - Optional request, for deep payload fallback
- * @param {boolean} [options.doResequence=true] - Whether to also resequence srNo
- * @returns {Promise<{ totalAmount: string, resequenced: number }>}
+ * Calculates independent sums (NOT combined into totalAmount):
+ *   - supplementAmount (sum of all item.supplementAmount)
+ *   - returnAmount (sum of all item.returnAmount)
+ *   - transferInAmount (sum of all item.transferInAmount)
+ *   - transferOutAmount (sum of all item.transferOutAmount)
+ *
+ * @param {string} requestId - the parent Requests.ID
+ * @param {boolean} [doResequence=true] - whether to also resequence srNo
+ * @returns {Promise<object>} Object with calculated amounts
  */
-async function recalcRequestTotal({
-  tx,
-  requestId,
-  request,
-  doResequence = true,
-}) {
-  LOG.info("--- recalcRequestTotal started ---");
-
+async function recalcAmountsByType(requestId, doResequence = true) {
   if (!requestId) {
-    LOG.warn("recalcRequestTotal called without requestId; skipping.");
-    return { totalAmount: Number(0).toFixed(2), resequenced: 0 };
+    LOG.warn("recalcAmountsByType called without requestId.");
+    return {
+      supplementAmount: "0.00",
+      returnAmount: "0.00",
+      transferInAmount: "0.00",
+      transferOutAmount: "0.00"
+    };
   }
 
-  LOG.info("Recalculating for Request ID:", requestId);
-
-  const { Requests, RequestItems } = cds.entities(SERVICE_NAMESPACE);
+  const { Requests, RequestItems } = cds.entities("ZSVC_PPS_VIREMENT");
   const ItemsDraft = RequestItems.drafts;
   const RequestsDraft = Requests.drafts;
 
-  // 1. Resequence srNo of the draft items (close any gaps).
-  let resequenced = 0;
+  // Read all draft items for this request, ordered by srNo.
+  const items = await SELECT.from(ItemsDraft)
+    .columns(
+      "ID",
+      "srNo",
+      "supplementAmount",
+      "returnAmount",
+      "transferInAmount",
+      "transferOutAmount"
+    )
+    .where({ request_ID: requestId })
+    .orderBy("srNo");
 
-  if (doResequence) {
-    const items = await tx.run(
-      SELECT.from(ItemsDraft)
-        .columns("ID", "srNo")
-        .where({ request_ID: requestId })
-        .orderBy("srNo"),
-    );
+  LOG.info(`Recalc for request ${requestId}, items=${items.length}`);
 
-    LOG.info("Draft items to resequence:", items?.length || 0);
+  // Initialize accumulators
+  let totalSupplementAmount = 0;
+  let totalReturnAmount = 0;
+  let totalTransferInAmount = 0;
+  let totalTransferOutAmount = 0;
+  let seq = 1;
 
-    resequenced = await resequenceItems({ tx, ItemsDraft, items });
-    LOG.info("Resequenced srNo count:", resequenced);
+  // Process each item
+  for (const item of items) {
+    // Accumulate amounts
+    totalSupplementAmount += Number(item.supplementAmount) || 0;
+    totalReturnAmount += Number(item.returnAmount) || 0;
+    totalTransferInAmount += Number(item.transferInAmount) || 0;
+    totalTransferOutAmount += Number(item.transferOutAmount) || 0;
+
+    // Optionally resequence srNo (close gaps)
+    if (doResequence) {
+      const newSr = String(seq).padStart(3, "0");
+      if (item.srNo !== newSr) {
+        await UPDATE(ItemsDraft)
+          .set({ srNo: newSr })
+          .where({ ID: item.ID });
+      }
+      seq++;
+    }
   }
 
-  // 2. Recalculate the total amount (reuses the shared calculation util).
-  const totalAmount = await calculateTotalAmount({
-    tx,
-    RequestItems,
-    requestId,
-    request,
-  });
+  // Write all calculated amounts back to the DRAFT request
+  await UPDATE(RequestsDraft)
+    .set({
+      supplementAmount: Number(totalSupplementAmount).toFixed(2),
+      returnAmount: Number(totalReturnAmount).toFixed(2),
+      transferInAmount: Number(totalTransferInAmount).toFixed(2),
+      transferOutAmount: Number(totalTransferOutAmount).toFixed(2)
+    })
+    .where({ ID: requestId });
 
-  LOG.info("Recalculated totalAmount:", totalAmount);
+  const result = {
+    supplementAmount: Number(totalSupplementAmount).toFixed(2),
+    returnAmount: Number(totalReturnAmount).toFixed(2),
+    transferInAmount: Number(totalTransferInAmount).toFixed(2),
+    transferOutAmount: Number(totalTransferOutAmount).toFixed(2)
+  };
 
-  // 3. Write the recalculated total back to the draft Request.
-  await tx.run(
-    UPDATE(RequestsDraft).set({ totalAmount }).where({ ID: requestId }),
-  );
-
-  LOG.info("Updated totalAmount on draft Request:", requestId);
-  LOG.info("--- recalcRequestTotal ended successfully ---");
-
-  return { totalAmount, resequenced };
+  LOG.info(`Recalc complete: ${JSON.stringify(result)}`);
+  return result;
 }
 
 module.exports = {
-  recalcRequestTotal,
+  recalcAmountsByType
 };

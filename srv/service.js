@@ -10,11 +10,12 @@ const requests_After_Create_Logic = require('./code/requests-after-create-logic'
 const requests_CalculateValues_Logic = require('./code/requests-calculateValues-logic');
 const requests_Drafts_CalculateValues_Logic = require('./code/requests-drafts-calculateValues-logic');
 const requests_After_Read_Logic = require('./code/requests-after-read-logic');
-const downloaditemstemplate_Logic = require('./code/downloaditemstemplate-logic');
+const download_Items_Template_Logic = require('./code/download-items-template-logic');
 const requests_Drafts_Upload_Items_Logic = require('./code/requests-drafts-upload-items-logic');
 const requestitems_Drafts_Before_Delete_Logic = require('./code/requestitems-drafts-before-delete-logic');
 const requestitems_Drafts_After_Create_Logic = require('./code/requestitems-drafts-after-create-logic');
 const requests_Before_Update_Logic = require('./code/requests-before-update-logic');
+const post_To_S4_Logic = require('./code/post-to-s4-logic');
 
 class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
     async init() {
@@ -48,7 +49,7 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
         });
 
         this.on('downloadItemsTemplate', async (request) => {
-            return downloaditemstemplate_Logic(request);
+            return download_Items_Template_Logic(request);
         });
 
         this.on('uploadItems', 'Requests.drafts', async (request) => {
@@ -65,6 +66,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
         this.before('UPDATE', 'Requests', async (request) => {
             await requests_Before_Update_Logic(request);
+        });
+
+        this.on('postToS4', async (request) => {
+            return post_To_S4_Logic(request);
         });
 
         return super.init();

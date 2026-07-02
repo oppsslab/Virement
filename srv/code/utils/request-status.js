@@ -1,7 +1,7 @@
 /**
  * Centralized Request status codes.
  *
- * ⚠️ These MUST stay in sync with the RequestStatus entity codes
+ * These MUST stay in sync with the RequestStatus entity codes
  * defined in your data model (db/csv).
  *
  * Keep ALL status codes here so they're documented in one place
@@ -9,16 +9,14 @@
  */
 const REQUEST_STATUS = {
   DRAFT: 0,
-  // 1 = (reserved / adjust to your model)
   PENDING_APPROVAL: 2,
   APPROVED: 3,
   REJECTED: 4,
   POSTED: 5,
-  // ... add/adjust to match your RequestStatus entity exactly
 };
 
 /**
- * Optional: human-readable labels (handy for logs / history messages).
+ * Human-readable labels (handy for logs / history messages).
  */
 const REQUEST_STATUS_LABEL = {
   [REQUEST_STATUS.DRAFT]: "Draft",

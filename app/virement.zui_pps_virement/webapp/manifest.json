@@ -58,7 +58,7 @@
   "sap.ui5": {
     "flexEnabled": true,
     "dependencies": {
-      "minUI5Version": "1.148.1",
+      "minUI5Version": "1.149.1",
       "libs": {
         "sap.m": {},
         "sap.ui.core": {},
@@ -108,7 +108,10 @@
       "id": "Main"
     },
     "routing": {
-      "config": { "controlId": "appContent", "controlAggregation": "pages" },
+      "config": {
+        "controlId": "appContent",
+        "controlAggregation": "pages"
+      },
       "routes": [
         {
           "name": "RequestsMain",
@@ -190,7 +193,8 @@
                     "disableCopyToClipboard": true,
                     "enableFullScreen": false,
                     "enablePaste": false,
-                    "personalization": false
+                    "personalization": false,
+                    "type": "GridTable"
                   }
                 },
                 "RequestAttachments/@com.sap.vocabularies.UI.v1.LineItem": {
@@ -198,7 +202,53 @@
                     "disableCopyToClipboard": true,
                     "enableExport": false,
                     "enableFullScreen": false,
-                    "enablePaste": false
+                    "enablePaste": false,
+                    "type": "ResponsiveTable"
+                  }
+                },
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#SupplementItems": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  },
+                  "columns": {
+                    "DataField::srNo": {
+                      "width": "6em"
+                    }
+                  }
+                },
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#RequestDetailsItems": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  }
+                },
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#ReturnItems": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  },
+                  "columns": {
+                    "DataField::srNo": {
+                      "width": "6em"
+                    }
+                  }
+                },
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferItems": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  },
+                  "columns": {
+                    "DataField::srNo": {
+                      "width": "6em"
+                    }
+                  }
+                },
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferInItems": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  },
+                  "columns": {
+                    "DataField::srNo": {
+                      "width": "6em"
+                    }
                   }
                 }
               },

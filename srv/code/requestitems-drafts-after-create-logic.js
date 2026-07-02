@@ -3,8 +3,6 @@ const { recalcRequestTotal } = require("./utils/recalc-total-logic");
 
 const LOG = cds.log("requestitems-drafts-after-create-logic");
 
-const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
-
 /* ------------------------------------------------------------------ *
  * Parent resolution helper
  * ------------------------------------------------------------------ */

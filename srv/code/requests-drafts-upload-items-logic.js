@@ -1,3 +1,7 @@
+//!!!!NEED TO UPDATE LOGIC BASED ON THE SPECIFIC TEMPLATES
+//!!!!ADD COMMENTS
+//!!!!COMMENTS LIKE OTHERS
+
 const cds = require("@sap/cds");
 const XLSX = require("xlsx");
 const { TEMPLATE_COLUMNS } = require("./utils/items-template");

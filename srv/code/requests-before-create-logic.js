@@ -1,5 +1,5 @@
 const cds = require("@sap/cds");
-const { calculateTotalAmount } = require("./utils/requests-calculation-utils");
+const { calculateAmountsByType } = require("./utils/requests-calculation-utils");
 const { getLocalDateParts } = require("./utils/date-utils");
 const { REQUEST_STATUS } = require("./utils/request-status");
 
@@ -254,6 +254,16 @@ function validateSubmission(
 
 /**
  * @Before(event = { "CREATE" }, entity = "ZSVC_PPS_VIREMENT.Requests")
+ *
+ * Performs calculations before the request is created:
+ * - Sets status to Pending Approval
+ * - Sets submission date and period
+ * - Calculates all amount fields (supplementAmount, returnAmount,
+ *   transferInAmount, transferOutAmount) from items
+ * - Calculates aging
+ * - Generates request number
+ * - Generates request link
+ *
  * @param {cds.Request} request
  */
 module.exports = async function (request) {
@@ -306,14 +316,20 @@ module.exports = async function (request) {
     LOG.info("Set submissionDate:", request.data.submissionDate);
     LOG.info("Set submissionPeriod:", request.data.submissionPeriod);
 
-    // 3. Calculate total amount.
-    request.data.totalAmount = await calculateTotalAmount({
+    // 3. Calculate all amount fields (independent, not combined).
+    const amounts = await calculateAmountsByType({
       tx,
       RequestItems,
       requestId,
       request,
     });
-    LOG.info("Calculated totalAmount:", request.data.totalAmount);
+    
+    request.data.supplementAmount = amounts.supplementAmount;
+    request.data.returnAmount = amounts.returnAmount;
+    request.data.transferInAmount = amounts.transferInAmount;
+    request.data.transferOutAmount = amounts.transferOutAmount;
+    
+    LOG.info("Calculated amounts:", JSON.stringify(amounts));
 
     // 4. Calculate aging.
     request.data.aging = await calculateAging({

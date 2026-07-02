@@ -1,7 +1,4 @@
 code,name,descr
-S,Supplement,Supplement
-R,Return,Return
-P,Project,Project
-N,NonProject,Non Project
-F,Functional,Functional
-J,JKEW,JKEW
+S,SUPPL,Supplement
+R,RETN,Return
+T,TRAN,Virement

@@ -7,12 +7,13 @@ using {
 } from '@sap/cds/common';
 
 
-type FiscalYear          : String(4) @assert.format: '^[0-9]{4}$';
+type FiscalYear        : String(4) @assert.format: '^[0-9]{4}$';
 
 entity Requests : cuid, managed {
     @assert.unique
     requestNumber       : String(10)                 @readonly;
     requestType         : Association to RequestType @Core.Immutable;
+    budgetType          : Association to BudgetType  @Core.Immutable;
     status              : Association to RequestStatus default 0;
     fiscalYear          : FiscalYear                 @readonly;
     submissionPeriod    : Integer; // Month of submission date (1-12)
@@ -20,7 +21,10 @@ entity Requests : cuid, managed {
     requestor           : String(100)                @readonly;
     requestorCostCentre : String(20);
     approvedBy          : String(100); // Last approver (summary)
-    totalAmount         : Decimal(15, 2) default 0   @readonly;
+    supplementAmount    : Decimal(15, 2) default 0   @readonly;
+    returnAmount        : Decimal(15, 2) default 0   @readonly;
+    transferInAmount    : Decimal(15, 2) default 0   @readonly;
+    transferOutAmount   : Decimal(15, 2) default 0   @readonly;
     aging               : Integer default 0          @readonly;
     docNumber           : String(20);
     postingDate         : Date;
@@ -37,17 +41,18 @@ entity Requests : cuid, managed {
 }
 
 entity RequestItems : cuid, managed {
-    request     : Association to Requests;
-    // itemNumber : String(10);   // ← PENDING: transfer-in/out pairing rule
-    srNo        : String(3);
-    costCentre  : String(20);
-    glAccount   : String(20);
-    material    : String(40);
-    wbs         : String(40);
-    assetStatus : Association to AssetStatus;
-    type        : Association to RequestItemType;
-    amount      : Decimal(15, 2);
-    description : String(255);
+    request           : Association to Requests;
+    srNo              : String(3);
+    costCentre        : String(20);
+    glAccount         : String(20);
+    material          : String(40);
+    wbs               : String(40);
+    assetStatus       : Association to AssetStatus;
+    supplementAmount  : Decimal(15, 2) default 0;
+    returnAmount      : Decimal(15, 2) default 0;
+    transferInAmount  : Decimal(15, 2) default 0;
+    transferOutAmount : Decimal(15, 2) default 0;
+    description       : String(255);
 }
 
 entity RequestHistory : cuid, managed {
@@ -80,31 +85,17 @@ entity Approvers : cuid, managed {
 //  Code Lists
 //
 
-type RequestTypeCode     : String(1) enum {
-    Supplement = 'S';
-    Return = 'R';
-    Project = 'P';
-    NonProject = 'N';
-    Functional = 'F';
-    JKEW = 'J';
+type RequestTypeCode   : String(1) enum {
+    SUPPL = 'S';
+    RETN = 'R';
+    TRAN = 'T';
 };
 
 entity RequestType : CodeList {
     key code : RequestTypeCode
 };
 
-type RequestItemTypeCode : String(1) enum {
-    Supplement = 'S';
-    Return = 'R';
-    TransferIn = 'I';
-    TransferOut = 'O';
-};
-
-entity RequestItemType : CodeList {
-    key code : RequestItemTypeCode
-};
-
-type RequestStatusCode   : Integer enum {
+type RequestStatusCode : Integer enum {
     Draft = 0;
     Rejected = 1;
     PendingApproval = 2;
@@ -115,7 +106,7 @@ entity RequestStatus : CodeList {
     key code : RequestStatusCode
 };
 
-type AssetStatusCode     : String(1) enum {
+type AssetStatusCode   : String(1) enum {
     New = 'N';
     Addition = 'A';
     Replacement = 'R';
@@ -123,4 +114,13 @@ type AssetStatusCode     : String(1) enum {
 
 entity AssetStatus : CodeList {
     key code : AssetStatusCode
+};
+
+type BudgetTypeCode    : String(1) enum {
+    PROJECT = 'P';
+    NONPROJ = 'N';
+};
+
+entity BudgetType : CodeList {
+    key code : BudgetTypeCode
 };

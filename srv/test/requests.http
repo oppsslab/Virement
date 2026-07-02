@@ -1,0 +1,8 @@
+### Test POST to S4 Action
+POST http://localhost:4004/service/ZSVC_PPS_VIREMENT/postToS4
+Content-Type: application/json
+
+{
+  "requestId": "00000000-0000-0000-0000-000000000001",
+  "testMode": "X"
+}

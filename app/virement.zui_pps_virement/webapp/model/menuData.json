@@ -34,6 +34,13 @@
           "route": "RequestsCreate",
           "matchRoutes": ["RequestsCreate"],
           "enabled": true
+        },
+        {
+          "titleI18nKey": "SideNavigation.Text.PendingApprovals",
+          "key": "RequestApprovals",
+          "route": "RequestApprovals",
+          "matchRoutes": ["RequestApprovals"],
+          "enabled": true
         }
       ]
     }

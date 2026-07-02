@@ -2,15 +2,15 @@ using ZSVC_PPS_VIREMENT as service from '../../srv/service';
 using from '../../db/schema';
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Requests - Field Labels, Value Helps, Field Controls
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 annotate service.Requests with {
-    requestNumber       @(title: 'Request Number');
+    requestNumber       @(title: '{i18n>RequestNumber}');
 
     requestType         @(
-        title                          : 'Request Type',
+        title                          : '{i18n>RequestType}',
         Common.Text                    : requestType.descr,
         Common.Text.@UI.TextArrangement: #TextOnly,
         Common.ValueListWithFixedValues: true,
@@ -27,8 +27,26 @@ annotate service.Requests with {
         Common.FieldControl            : #Mandatory
     );
 
+    budgetType          @(
+        title                          : '{i18n>BudgetType}',
+        Common.Text                    : budgetType.descr,
+        Common.Text.@UI.TextArrangement: #TextOnly,
+        Common.ValueListWithFixedValues: true,
+        Common.ValueList               : {
+            $Type          : 'Common.ValueListType',
+            CollectionPath : 'BudgetType',
+            SearchSupported: false,
+            Parameters     : [{
+                $Type            : 'Common.ValueListParameterInOut',
+                LocalDataProperty: budgetType_code,
+                ValueListProperty: 'code'
+            }]
+        },
+        Common.FieldControl            : #Mandatory
+    );
+
     status              @(
-        title                          : 'Status',
+        title                          : '{i18n>Status}',
         Common.Text                    : status.descr,
         Common.Text.@UI.TextArrangement: #TextOnly,
         Common.ValueListWithFixedValues: true,
@@ -44,40 +62,31 @@ annotate service.Requests with {
         }
     );
 
-    fiscalYear          @(title: 'Fiscal Year');
-
-    submissionPeriod    @(title: 'Submission Period');
-
-    submissionDate      @(title: 'Submission Date');
-
+    fiscalYear          @(title: '{i18n>FiscalYear}');
+    submissionPeriod    @(title: '{i18n>SubmissionPeriod}');
+    submissionDate      @(title: '{i18n>SubmissionDate}');
     requestor           @(
-        title              : 'Requestor',
+        title              : '{i18n>Requestor}',
         Common.FieldControl: #ReadOnly
     );
-
-    requestorCostCentre @(title: 'Requestor Cost Centre');
-
-    approvedBy          @(title: 'Approved By');
-
-    totalAmount         @(title: 'Amount');
-
-    aging               @(title: 'Aging(Days)');
-
-    docNumber           @(title: 'Doc Number');
-
-    postingDate         @(title: 'Posting Date');
-
-    postingPeriod       @(title: 'Posting Period');
-
-    reason              @(title: 'Reason');
-
+    requestorCostCentre @(title: '{i18n>RequestorCostCentre}');
+    approvedBy          @(title: '{i18n>ApprovedBy}');
+    supplementAmount    @(title: '{i18n>SupplementAmount}');
+    returnAmount        @(title: '{i18n>ReturnAmount}');
+    transferInAmount    @(title: '{i18n>TransferInAmount}');
+    transferOutAmount   @(title: '{i18n>TransferOutAmount}');
+    aging               @(title: '{i18n>Aging}');
+    docNumber           @(title: '{i18n>DocNumber}');
+    postingDate         @(title: '{i18n>PostingDate}');
+    postingPeriod       @(title: '{i18n>PostingPeriod}');
+    reason              @(title: '{i18n>Reason}');
     requestLink         @UI.Hidden;
 };
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Requests - List Report
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 annotate service.Requests with @(
     UI.LineItem       : {
@@ -120,7 +129,19 @@ annotate service.Requests with @(
             },
             {
                 $Type: 'UI.DataField',
-                Value: totalAmount
+                Value: supplementAmount
+            },
+            {
+                $Type: 'UI.DataField',
+                Value: returnAmount
+            },
+            {
+                $Type: 'UI.DataField',
+                Value: transferInAmount
+            },
+            {
+                $Type: 'UI.DataField',
+                Value: transferOutAmount
             },
             {
                 $Type: 'UI.DataField',
@@ -143,7 +164,6 @@ annotate service.Requests with @(
                 Value: reason
             }
         ],
-
         ![@UI.Criticality]: status_code
     },
 
@@ -155,6 +175,7 @@ annotate service.Requests with @(
         status_code,
         requestType_code
     ],
+
     UI.Identification : [
         {
             $Type        : 'UI.DataFieldForAction',
@@ -201,17 +222,17 @@ annotate service.Requests with @(
                     false
                 ]}
             ]}}
-        },
-    ],
+        }
+    ]
 );
 
 
-// -----------------------------------------------------------------------------
-// Requests - Object Page
-// -----------------------------------------------------------------------------
+// =============================================================================
+// Requests - Object Page Header
+// =============================================================================
 
 annotate service.Requests with @(
-    UI.HeaderInfo               : {
+    UI.HeaderInfo                  : {
         TypeName      : '{i18n>VirementRequest}',
         TypeNamePlural: '{i18n>VirementRequests}',
         Title         : {
@@ -224,28 +245,48 @@ annotate service.Requests with @(
         }
     },
 
-    UI.DataPoint #Status        : {
+    UI.DataPoint #Status           : {
         Title      : '{i18n>Status}',
         Value      : status.descr,
         Criticality: status_code
     },
 
-    UI.DataPoint #TotalAmount   : {
-        Title: '{i18n>TotalAmount}',
-        Value: totalAmount
+    UI.DataPoint #BudgetType       : {
+        Title: '{i18n>BudgetType}',
+        Value: budgetType.descr
     },
 
-    UI.DataPoint #Requestor     : {
+    UI.DataPoint #SupplementAmount : {
+        Title: '{i18n>SupplementAmount}',
+        Value: supplementAmount
+    },
+
+    UI.DataPoint #ReturnAmount     : {
+        Title: '{i18n>ReturnAmount}',
+        Value: returnAmount
+    },
+
+    UI.DataPoint #TransferInAmount : {
+        Title: '{i18n>TransferInAmount}',
+        Value: transferInAmount
+    },
+
+    UI.DataPoint #TransferOutAmount: {
+        Title: '{i18n>TransferOutAmount}',
+        Value: transferOutAmount
+    },
+
+    UI.DataPoint #Requestor        : {
         Title: '{i18n>Requestor}',
         Value: requestor
     },
 
-    UI.DataPoint #FiscalYear    : {
+    UI.DataPoint #FiscalYear       : {
         Title: '{i18n>FiscalYear}',
         Value: fiscalYear
     },
 
-    UI.HeaderFacets             : [
+    UI.HeaderFacets                : [
         {
             $Type : 'UI.ReferenceFacet',
             ID    : 'StatusHeaderFacet',
@@ -254,13 +295,53 @@ annotate service.Requests with @(
         },
         {
             $Type : 'UI.ReferenceFacet',
-            ID    : 'TotalAmountHeaderFacet',
-            Label : '{i18n>TotalAmount}',
-            Target: '@UI.DataPoint#TotalAmount'
+            ID    : 'BudgetTypeHeaderFacet',
+            Label : '{i18n>BudgetType}',
+            Target: '@UI.DataPoint#BudgetType'
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'SupplementAmountHeaderFacet',
+            Label        : '{i18n>SupplementAmount}',
+            Target       : '@UI.DataPoint#SupplementAmount',
+            ![@UI.Hidden]: {$edmJson: {$Ne: [
+                {$Path: 'requestType_code'},
+                'S'
+            ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'ReturnAmountHeaderFacet',
+            Label        : '{i18n>ReturnAmount}',
+            Target       : '@UI.DataPoint#ReturnAmount',
+            ![@UI.Hidden]: {$edmJson: {$Ne: [
+                {$Path: 'requestType_code'},
+                'R'
+            ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'TransferInAmountHeaderFacet',
+            Label        : '{i18n>TransferInAmount}',
+            Target       : '@UI.DataPoint#TransferInAmount',
+            ![@UI.Hidden]: {$edmJson: {$Ne: [
+                {$Path: 'requestType_code'},
+                'T'
+            ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'TransferOutAmountHeaderFacet',
+            Label        : '{i18n>TransferOutAmount}',
+            Target       : '@UI.DataPoint#TransferOutAmount',
+            ![@UI.Hidden]: {$edmJson: {$Ne: [
+                {$Path: 'requestType_code'},
+                'T'
+            ]}}
         }
     ],
 
-    UI.Facets                   : [
+    UI.Facets                      : [
         {
             $Type : 'UI.ReferenceFacet',
             ID    : 'RequestHeader',
@@ -269,46 +350,38 @@ annotate service.Requests with @(
         },
         {
             $Type        : 'UI.ReferenceFacet',
-            ID           : 'RequestDetails',
+            ID           : 'SupplementRequestItems',
             Label        : '{i18n>RequestDetails}',
-            Target       : 'RequestItems/@UI.PresentationVariant#RequestDetails',
+            Target       : 'RequestItems/@UI.PresentationVariant#SupplementItems',
             ![@UI.Hidden]: {$edmJson: {$Or: [
-                {$Eq: [
+                {$Ne: [
                     {$Path: 'requestType_code'},
-                    'N'
+                    'S'
                 ]},
-                {$And: [
-                    {$Eq: [
-                        {$Path: 'requestType_code'},
-                        'S'
-                    ]},
-                    {$Ne: [
-                        {$Path: 'status_code'},
-                        2
-                    ]}
+                {$Eq: [
+                    {$Path: 'status_code'},
+                    0
                 ]}
             ]}}
         },
         {
             $Type        : 'UI.ReferenceFacet',
-            ID           : 'RequestDetails',
+            ID           : 'ReturnRequestItems',
             Label        : '{i18n>RequestDetails}',
-            Target       : 'RequestItems/@UI.PresentationVariant#RequestDetails',
-            ![@UI.Hidden]: {$edmJson: {$Or: [
-                {$Eq: [
-                    {$Path: 'requestType_code'},
-                    'N'
-                ]},
-                {$And: [
-                    {$Eq: [
-                        {$Path: 'requestType_code'},
-                        'S'
-                    ]},
-                    {$Ne: [
-                        {$Path: 'status_code'},
-                        2
-                    ]}
-                ]}
+            Target       : 'RequestItems/@UI.PresentationVariant#ReturnItems',
+            ![@UI.Hidden]: {$edmJson: {$Ne: [
+                {$Path: 'requestType_code'},
+                'R'
+            ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'TransferRequestItems',
+            Label        : '{i18n>TransferInDetails}',
+            Target       : 'RequestItems/@UI.PresentationVariant#TransferInItems',
+            ![@UI.Hidden]: {$edmJson: {$Ne: [
+                {$Path: 'requestType_code'},
+                'T'
             ]}}
         },
         {
@@ -329,7 +402,7 @@ annotate service.Requests with @(
         }
     ],
 
-    UI.FieldGroup #RequestHeader: {
+    UI.FieldGroup #RequestHeader   : {
         $Type: 'UI.FieldGroupType',
         Data : [
             {
@@ -349,20 +422,17 @@ annotate service.Requests with @(
 );
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Requests - Side Effects
-// -----------------------------------------------------------------------------
-
-// annotate service.Requests with @(Common.SideEffects #RequestTypeChanged: {
-//     SourceProperties: [
-//         requestType_code,
-//         status_code
-//     ],
-//     TargetProperties: ['hideRequestDetailsSection']
-// });
+// =============================================================================
 
 annotate service.Requests actions {
-    calculateValues @(Common.SideEffects: {TargetProperties: ['in/totalAmount']})
+    calculateValues @(Common.SideEffects: {TargetProperties: [
+        'in/supplementAmount',
+        'in/returnAmount',
+        'in/transferInAmount',
+        'in/transferOutAmount'
+    ]})
 };
 
 annotate service.Requests with @Common.SideEffects #RefreshItemsAfterItemChange: {
@@ -371,26 +441,21 @@ annotate service.Requests with @Common.SideEffects #RefreshItemsAfterItemChange:
 };
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // RequestItems - Field Labels, Value Helps, Field Controls
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 annotate service.RequestItems with {
-    srNo        @(
-        title              : 'SR No',
+    srNo              @(
+        title              : '{i18n>SRNo}',
         Common.FieldControl: #ReadOnly
     );
-
-    costCentre  @(title: 'Cost Centre');
-
-    glAccount   @(title: 'GL');
-
-    material    @(title: 'Material');
-
-    wbs         @(title: 'WBS');
-
-    assetStatus @(
-        title                          : 'Asset Status',
+    costCentre        @(title: '{i18n>CostCentre}');
+    glAccount         @(title: '{i18n>GL}');
+    material          @(title: '{i18n>Material}');
+    wbs               @(title: '{i18n>WBS}');
+    assetStatus       @(
+        title                          : '{i18n>AssetStatus}',
         Common.Text                    : assetStatus.descr,
         Common.Text.@UI.TextArrangement: #TextOnly,
         Common.ValueListWithFixedValues: true,
@@ -405,22 +470,35 @@ annotate service.RequestItems with {
             }]
         }
     );
-
-    amount      @(
-        title       : 'Amount',
-        Common.Label: '{i18n>Amount}',
+    supplementAmount  @(
+        title       : '{i18n>SupplementAmount}',
+        Common.Label: '{i18n>Amount}'
     );
-
-    description @(title: 'Description');
+    returnAmount      @(
+        title       : '{i18n>ReturnAmount}',
+        Common.Label: '{i18n>Amount}'
+    );
+    transferInAmount  @(
+        title       : '{i18n>TransferInAmount}',
+        Common.Label: '{i18n>Amount}'
+    );
+    transferOutAmount @(
+        title       : '{i18n>TransferOutAmount}',
+        Common.Label: '{i18n>Amount}'
+    );
+    description       @(title: '{i18n>Description}');
 };
 
 
-// -----------------------------------------------------------------------------
-// RequestItems - Object Page Table
-// -----------------------------------------------------------------------------
+// =============================================================================
+// RequestItems - Object Page Tables (Three Separate Tables by Type)
+// =============================================================================
 
 annotate service.RequestItems with @(
-    UI.LineItem #RequestDetails           : [
+    // =========================================================================
+    // Supplement Items Table (Type S)
+    // =========================================================================
+    UI.LineItem #SupplementItems           : [
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -447,7 +525,7 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: amount
+            Value: supplementAmount
         },
         {
             $Type: 'UI.DataField',
@@ -455,87 +533,191 @@ annotate service.RequestItems with @(
         }
     ],
 
-    UI.PresentationVariant #RequestDetails: {
+    UI.PresentationVariant #SupplementItems: {
         SortOrder     : [{
             $Type     : 'Common.SortOrderType',
             Property  : srNo,
             Descending: false
         }],
-        Visualizations: ['@UI.LineItem#RequestDetails'],
+        Visualizations: ['@UI.LineItem#SupplementItems']
     },
 
-    Capabilities.SearchRestrictions       : {Searchable: false}
+    // =========================================================================
+    // Return Items Table (Type R)
+    // =========================================================================
+    UI.LineItem #ReturnItems               : [
+        {
+            $Type: 'UI.DataField',
+            Value: srNo
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentre
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glAccount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: wbs
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: assetStatus_code
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: returnAmount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: description
+        }
+    ],
+
+    UI.PresentationVariant #ReturnItems    : {
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : srNo,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem#ReturnItems']
+    },
+
+    // =========================================================================
+    // Transfer In Items Table (Type T)
+    // =========================================================================
+    UI.LineItem #TransferInItems             : [
+        {
+            $Type: 'UI.DataField',
+            Value: srNo
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentre
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glAccount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: wbs
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: assetStatus_code
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: transferInAmount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: description
+        }
+    ],
+
+    UI.PresentationVariant #TransferInItems  : {
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : srNo,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem#TransferInItems']
+    },
+
+    Capabilities.SearchRestrictions        : {Searchable: false}
 );
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Code Lists - Request Type
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 annotate service.RequestType with {
     code  @(
         Common.Text                    : descr,
         Common.Text.@UI.TextArrangement: #TextOnly
     );
-
-    descr @(title: 'Type');
+    descr @(title: '{i18n>RequestType}');
 };
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Code Lists - Request Status
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 annotate service.RequestStatus with {
     code  @(
         Common.Text                    : descr,
         Common.Text.@UI.TextArrangement: #TextOnly
     );
-
-    descr @(title: 'Status');
+    descr @(title: '{i18n>Status}');
 };
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Code Lists - Asset Status
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 annotate service.AssetStatus with {
     code  @(
         Common.Text                    : descr,
         Common.Text.@UI.TextArrangement: #TextOnly
     );
-
-    descr @(title: 'Asset Status');
+    descr @(title: '{i18n>AssetStatus}');
 };
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
+// Code Lists - Budget Type
+// =============================================================================
+
+annotate service.BudgetType with {
+    code  @(
+        Common.Text                    : descr,
+        Common.Text.@UI.TextArrangement: #TextOnly
+    );
+    descr @(title: '{i18n>BudgetType}');
+};
+
+
+// =============================================================================
 // RequestHistory - List Report
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 annotate service.RequestHistory with @(
     UI.LineItem #History           : [
         {
             $Type: 'UI.DataField',
             Value: date,
-            Label: 'Date',
+            Label: '{i18n>Date}'
         },
         {
             $Type: 'UI.DataField',
             Value: time,
-            Label: 'Time',
+            Label: '{i18n>Time}'
         },
         {
             $Type: 'UI.DataField',
             Value: changedBy,
-            Label: 'Name',
+            Label: '{i18n>ChangedBy}'
         },
         {
             $Type: 'UI.DataField',
             Value: changes,
-            Label: 'Changes',
-        },
+            Label: '{i18n>Changes}'
+        }
     ],
     Capabilities.SearchRestrictions: {Searchable: false},
     Capabilities.UpdateRestrictions: {Updatable: false},
@@ -544,8 +726,8 @@ annotate service.RequestHistory with @(
 );
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Request Attachments
-// -----------------------------------------------------------------------------
+// =============================================================================
 
-annotate service.Requests.RequestAttachments with @(Capabilities.SearchRestrictions: {Searchable: false}, );
+annotate service.Requests.RequestAttachments with @(Capabilities.SearchRestrictions: {Searchable: false});
