@@ -48,7 +48,9 @@
                 "groups": []
               },
               "policies": [
-                "cap.VR_REQUEST_APPROVE"
+                "cap.VR_REQUEST_APPROVE",
+                "cap.VR_FUNCTIONAL",
+                "cap.VR_JKEW"
               ]
             }
           }

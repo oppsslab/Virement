@@ -161,33 +161,6 @@
               },
               "editableHeaderContent": false,
               "controlConfiguration": {
-                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#RequestDetails": {
-                  "tableSettings": {
-                    "enableFullScreen": false,
-                    "enableMassEdit": true,
-                    "type": "GridTable"
-                  },
-                  "actions": {
-                    "downloadTemplate": {
-                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
-                      "visible": true,
-                      "enabled": true,
-                      "requiresSelection": false,
-                      "text": "{i18n>downloadTemplate}"
-                    },
-                    "uploadTemplate": {
-                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
-                      "visible": "{= !${ui>/isEditable} ? false : true }",
-                      "enabled": true,
-                      "requiresSelection": false,
-                      "text": "{i18n>UploadTemplate}",
-                      "position": {
-                        "placement": "Before",
-                        "anchor": "downloadTemplate"
-                      }
-                    }
-                  }
-                },
                 "RequestHistory/@com.sap.vocabularies.UI.v1.LineItem#History": {
                   "tableSettings": {
                     "disableCopyToClipboard": true,
@@ -216,11 +189,6 @@
                     }
                   }
                 },
-                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#RequestDetailsItems": {
-                  "tableSettings": {
-                    "type": "GridTable"
-                  }
-                },
                 "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#ReturnItems": {
                   "tableSettings": {
                     "type": "GridTable"
@@ -229,15 +197,14 @@
                     "DataField::srNo": {
                       "width": "6em"
                     }
-                  }
-                },
-                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferItems": {
-                  "tableSettings": {
-                    "type": "GridTable"
                   },
-                  "columns": {
-                    "DataField::srNo": {
-                      "width": "6em"
+                  "actions": {
+                    "downloadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
                     }
                   }
                 },
@@ -248,6 +215,15 @@
                   "columns": {
                     "DataField::srNo": {
                       "width": "6em"
+                    }
+                  },
+                  "actions": {
+                    "downloadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
                     }
                   }
                 }

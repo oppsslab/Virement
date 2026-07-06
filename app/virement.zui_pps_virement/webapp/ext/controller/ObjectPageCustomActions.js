@@ -70,20 +70,27 @@ sap.ui.define(
     function triggerDownload(sBase64, sFileName, sMimeType) {
       const sByteChars = atob(sBase64);
       const aByteNumbers = new Array(sByteChars.length);
-      for (let i = 0; i < sByteChars.length; i++)
+
+      for (let i = 0; i < sByteChars.length; i++) {
         aByteNumbers[i] = sByteChars.charCodeAt(i);
+      }
+
       const oBlob = new Blob([new Uint8Array(aByteNumbers)], {
         type:
           sMimeType ||
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
+
       const sUrl = window.URL.createObjectURL(oBlob);
       const oLink = document.createElement("a");
+
       oLink.href = sUrl;
       oLink.download = sFileName || "Mass Upload Template.xlsx";
+
       document.body.appendChild(oLink);
       oLink.click();
       document.body.removeChild(oLink);
+
       window.URL.revokeObjectURL(sUrl);
     }
 
@@ -423,28 +430,83 @@ sap.ui.define(
     return {
       onDownloadTemplate: function (oEvent) {
         const oModel = resolveModel(this, oEvent);
+        const oContext = resolveBindingContext(this, oEvent);
+
         if (!oModel) {
           MessageBox.error("Could not access the service. Please retry.");
           return;
         }
-        const oOperation = oModel.bindContext("/downloadItemsTemplate(...)");
-        oOperation
-          .execute()
+
+        if (!oContext) {
+          MessageBox.error("Could not determine the current request.");
+          console.error("DownloadTemplate: missing binding context.");
+          return;
+        }
+
+        console.log("DownloadTemplate context path:", oContext.getPath());
+
+        /*
+         * Bound action on Requests.
+         *
+         * Important:
+         * This must match the namespace in your $metadata.
+         * If needed, check:
+         * /service/ZSVC_PPS_VIREMENT/$metadata
+         */
+        const oOperation = oModel.bindContext(
+          "ZSVC_PPS_VIREMENT.downloadItemsTemplate(...)",
+          oContext,
+        );
+
+        /*
+         * Optional but helpful for draft/create mode.
+         * This makes sure selected requestType_code is patched before backend reads it.
+         */
+        const sUpdateGroupId =
+          oModel.getUpdateGroupId && oModel.getUpdateGroupId();
+
+        const pBeforeInvoke =
+          oModel.hasPendingChanges && oModel.hasPendingChanges()
+            ? oModel.submitBatch(sUpdateGroupId || "$auto")
+            : Promise.resolve();
+
+        pBeforeInvoke
+          .then(function () {
+            console.log("Invoking downloadItemsTemplate bound action...");
+
+            if (oOperation.invoke) {
+              return oOperation.invoke();
+            }
+
+            /*
+             * Fallback for UI5 versions where execute() is used.
+             * Your uploadItems code already uses execute(), so this keeps it compatible.
+             */
+            return oOperation.execute();
+          })
           .then(function () {
             const oCtx = oOperation.getBoundContext();
+
+            if (!oCtx) {
+              MessageBox.error("No response was returned from the service.");
+              return;
+            }
+
             const sContent = oCtx.getProperty("content");
             const sFileName = oCtx.getProperty("fileName");
             const sMimeType = oCtx.getProperty("mimeType");
+
             if (!sContent) {
               MessageBox.error("The template content is empty.");
               return;
             }
+
             triggerDownload(sContent, sFileName, sMimeType);
             MessageToast.show("Template downloaded.");
           })
           .catch(function (oError) {
             console.error("DownloadTemplate error:", oError);
-            MessageBox.error("Failed to download the template.");
+            MessageBox.error(extractErrorMessage(oError));
           });
       },
 

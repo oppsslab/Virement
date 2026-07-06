@@ -8,7 +8,7 @@ extend my.Requests {
 }
 
 @path: '/service/ZSVC_PPS_VIREMENT'
-service ZSVC_PPS_VIREMENT {
+service ZSVC_PPS_VIREMENT  @(requires: 'authenticated-user') {
     @odata.draft.enabled
     entity Requests       as
         projection on my.Requests {
@@ -27,6 +27,8 @@ service ZSVC_PPS_VIREMENT {
                                  comment: String)    returns Requests;
 
             action uploadItems(content: LargeString) returns Requests;
+
+            action downloadItemsTemplate() returns TemplateFile;
         };
 
     entity RequestItems   as projection on my.RequestItems;
@@ -39,8 +41,6 @@ service ZSVC_PPS_VIREMENT {
         content  : LargeString;
         mimeType : String;
     }
-
-    function downloadItemsTemplate() returns TemplateFile;
 
     action   postToS4(requestId: UUID, // ID of the Request to post
                       testMode: String // optional: 'X' = simulate, '' = actual post
