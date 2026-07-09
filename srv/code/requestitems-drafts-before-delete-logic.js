@@ -56,7 +56,7 @@ async function resequenceSiblings({ tx, ItemsDraft, siblings }) {
  * @param {cds.Request} request
  */
 module.exports = async function (request) {
-  LOG.info("--- BEFORE DELETE RequestItems started: resequence srNo ---");
+  LOG.info("--- BEFORE DELETE RequestItems.drafts started ---");
 
   try {
     LOG.info("Event:", request.event);
@@ -112,7 +112,7 @@ module.exports = async function (request) {
       `${resequenced} updated for request ${parentRequestId}`,
     );
 
-    LOG.info("--- BEFORE DELETE RequestItems ended successfully ---");
+    LOG.info("--- BEFORE DELETE RequestItems.drafts ended successfully ---");
   } catch (error) {
     LOG.error("Error in requestitems-drafts-before-delete-logic:", error);
     // Do not block the deletion; resequencing is best-effort.

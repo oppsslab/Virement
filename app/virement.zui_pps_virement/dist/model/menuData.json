@@ -1,0 +1,48 @@
+{
+  "selectedKey": "Home",
+  "pageTitle": "",
+  "navigation": [
+    {
+      "titleI18nKey": "SideNavigation.Text.Home",
+      "icon": "sap-icon://home",
+      "key": "Home",
+      "route": "RequestsMain",
+      "matchRoutes": ["RequestsMain"],
+      "useAppTitle": true,
+      "visible": true,
+      "role": [],
+      "expanded": false
+    },
+    {
+      "titleI18nKey": "SideNavigation.Text.VirementRequest",
+      "icon": "sap-icon://per-diem",
+      "key": "VirementRequest",
+      "visible": true,
+      "role": [],
+      "expanded": true,
+      "items": [
+        {
+          "titleI18nKey": "SideNavigation.Text.ViewRequests",
+          "key": "RequestsView",
+          "route": "RequestsView",
+          "matchRoutes": ["RequestsView"],
+          "enabled": true
+        },
+        {
+          "titleI18nKey": "SideNavigation.Text.CreateRequest",
+          "key": "RequestsCreate",
+          "route": "RequestsCreate",
+          "matchRoutes": ["RequestsCreate"],
+          "enabled": true
+        },
+        {
+          "titleI18nKey": "SideNavigation.Text.PendingApprovals",
+          "key": "RequestApprovals",
+          "route": "RequestApprovals",
+          "matchRoutes": ["RequestApprovals"],
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

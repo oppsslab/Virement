@@ -34,7 +34,7 @@ function resolveRequestId(request) {
  * @param {cds.Request} request
  */
 module.exports = async function (request) {
-  LOG.info("--- BEFORE UPDATE Requests started: recalc amounts ---");
+  LOG.info("--- BEFORE UPDATE Requests started ---");
 
   try {
     LOG.info("Event:", request.event);

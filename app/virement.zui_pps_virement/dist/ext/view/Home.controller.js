@@ -1,0 +1,2 @@
+sap.ui.define(["sap/fe/core/PageController","../../model/formatter"],function(e,t){"use strict";return e.extend("virement.zuippsvirement.ext.view.Home",{formatter:t,onInit:function(){e.prototype.onInit.apply(this,arguments)}})});
+//# sourceMappingURL=Home.controller.js.map

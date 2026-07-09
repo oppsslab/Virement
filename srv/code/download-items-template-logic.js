@@ -29,7 +29,9 @@ function getUserRoles(user) {
   if (user.roles) {
     if (Array.isArray(user.roles)) {
       user.roles.forEach(function (role) {
-        const normalizedRole = String(role || "").trim().toUpperCase();
+        const normalizedRole = String(role || "")
+          .trim()
+          .toUpperCase();
 
         if (normalizedRole && !userRoles.includes(normalizedRole)) {
           userRoles.push(normalizedRole);
@@ -37,7 +39,9 @@ function getUserRoles(user) {
       });
     } else if (typeof user.roles === "object") {
       Object.keys(user.roles).forEach(function (role) {
-        const normalizedRole = String(role || "").trim().toUpperCase();
+        const normalizedRole = String(role || "")
+          .trim()
+          .toUpperCase();
 
         if (
           user.roles[role] === true &&
@@ -114,7 +118,9 @@ function normalizeRequestType(value) {
     requestType = requestType.code;
   }
 
-  requestType = String(requestType || "").trim().toUpperCase();
+  requestType = String(requestType || "")
+    .trim()
+    .toUpperCase();
 
   if (!["T", "S", "R"].includes(requestType)) {
     throw new Error("Invalid request type found: " + requestType);
@@ -129,10 +135,7 @@ async function queryOne(tx, entity, columns, requestId) {
   }
 
   return tx.run(
-    SELECT.one
-      .from(entity)
-      .columns(columns)
-      .where({ ID: requestId })
+    SELECT.one.from(entity).columns(columns).where({ ID: requestId }),
   );
 }
 
@@ -164,9 +167,6 @@ async function determineRequestTemplateContext(request, tx) {
 
   /*
    * 1. Try service projection draft first.
-   *
-   * This is important because @odata.draft.enabled is declared
-   * on the service projection entity Requests.
    */
   if (serviceRequests && serviceRequests.drafts) {
     const serviceDraftColumns = getExistingColumns(serviceRequests.drafts, [
@@ -178,18 +178,20 @@ async function determineRequestTemplateContext(request, tx) {
 
     LOG.info(
       "Trying to read request type from service draft entity. Columns: " +
-        JSON.stringify(serviceDraftColumns)
+        JSON.stringify(serviceDraftColumns),
     );
 
     record = await queryOne(
       tx,
       serviceRequests.drafts,
       serviceDraftColumns,
-      requestId
+      requestId,
     );
 
     if (record) {
-      LOG.info("Service draft Requests record found: " + JSON.stringify(record));
+      LOG.info(
+        "Service draft Requests record found: " + JSON.stringify(record),
+      );
     }
   } else {
     LOG.info("Service draft entity request.target.drafts is not available.");
@@ -208,7 +210,7 @@ async function determineRequestTemplateContext(request, tx) {
 
     LOG.info(
       "Trying to read request type from DB draft entity. Columns: " +
-        JSON.stringify(dbDraftColumns)
+        JSON.stringify(dbDraftColumns),
     );
 
     record = await queryOne(tx, dbRequests.drafts, dbDraftColumns, requestId);
@@ -233,7 +235,7 @@ async function determineRequestTemplateContext(request, tx) {
 
     LOG.info(
       "Trying to read request type from active DB entity. Columns: " +
-        JSON.stringify(dbActiveColumns)
+        JSON.stringify(dbActiveColumns),
     );
 
     record = await queryOne(tx, dbRequests, dbActiveColumns, requestId);
@@ -245,8 +247,6 @@ async function determineRequestTemplateContext(request, tx) {
 
   /*
    * 4. Last fallback: active service projection.
-   *
-   * Only selected real columns are used to avoid virtual element errors.
    */
   if (!record && serviceRequests) {
     const serviceActiveColumns = getExistingColumns(serviceRequests, [
@@ -258,14 +258,19 @@ async function determineRequestTemplateContext(request, tx) {
 
     LOG.info(
       "Trying to read request type from active service projection. Columns: " +
-        JSON.stringify(serviceActiveColumns)
+        JSON.stringify(serviceActiveColumns),
     );
 
-    record = await queryOne(tx, serviceRequests, serviceActiveColumns, requestId);
+    record = await queryOne(
+      tx,
+      serviceRequests,
+      serviceActiveColumns,
+      requestId,
+    );
 
     if (record) {
       LOG.info(
-        "Active service Requests record found: " + JSON.stringify(record)
+        "Active service Requests record found: " + JSON.stringify(record),
       );
     }
   }
@@ -273,7 +278,7 @@ async function determineRequestTemplateContext(request, tx) {
   if (!record) {
     throw new Error(
       "No Requests record found in service draft, DB draft, active DB table, or active service projection for ID: " +
-        requestId
+        requestId,
     );
   }
 
@@ -282,7 +287,7 @@ async function determineRequestTemplateContext(request, tx) {
   if (!requestType) {
     throw new Error(
       "No request type found on Requests record. Record was: " +
-        JSON.stringify(record)
+        JSON.stringify(record),
     );
   }
 
@@ -304,18 +309,21 @@ module.exports = async function (request) {
 
     LOG.info("Request type used for template: " + templateContext.requestType);
 
+    /*
+     * Return template is role-independent.
+     * Roles only matter for Transfer.
+     */
+    const effectiveRoles = templateContext.requestType === "R" ? [] : userRoles;
+
     LOG.info(
       "Calling buildTemplate with: " +
         JSON.stringify({
-          userRoles: userRoles,
+          userRoles: effectiveRoles,
           requestType: templateContext.requestType,
-        })
+        }),
     );
 
-    const template = buildTemplate(
-      userRoles,
-      templateContext.requestType
-    );
+    const template = buildTemplate(effectiveRoles, templateContext.requestType);
 
     LOG.info("Template generated: " + template.fileName);
     LOG.info("=== ON downloadItemsTemplate ended successfully ===");
@@ -324,9 +332,6 @@ module.exports = async function (request) {
   } catch (error) {
     LOG.error("Error in downloadItemsTemplate: " + error.message);
 
-    return request.error(
-      500,
-      "Could not generate template: " + error.message
-    );
+    return request.error(500, "Could not generate template: " + error.message);
   }
 };

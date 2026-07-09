@@ -1,0 +1,4 @@
+<mvc:View xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m" controllerName="virement.zuippsvirement.ext.view.RequestsCreate">
+    <Page showHeader="false" busy="true" />
+</mvc:View>

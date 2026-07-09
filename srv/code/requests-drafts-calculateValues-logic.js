@@ -32,7 +32,7 @@ function resolveRequestId(request) {
  * @param {cds.Request} request
  */
 module.exports = async function (request) {
-  LOG.info("--- ON calculateValues (draft) started ---");
+  LOG.info("--- ON calculateValues Requests.drafts started ---");
 
   try {
     LOG.info("Event:", request.event);
@@ -71,7 +71,7 @@ module.exports = async function (request) {
     );
 
     LOG.info("Recalculated amounts:", JSON.stringify(amounts));
-    LOG.info("--- ON calculateValues (draft) ended successfully ---");
+    LOG.info("--- ON calculateValues Requests.drafts ended successfully ---");
 
     // 4. Return the freshly updated draft Request
     return await tx.run(

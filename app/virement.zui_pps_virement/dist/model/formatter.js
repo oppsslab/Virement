@@ -1,0 +1,2 @@
+sap.ui.define([],function(){"use strict";return{statusState:function(e){if(!e){return"None"}else if(e==="Sent to SAP"){return"Success"}else if(e==="Rejected"){return"Error"}else if(e.includes("Pending Approval")){return"Warning"}else{return"None"}}}});
+//# sourceMappingURL=formatter.js.map

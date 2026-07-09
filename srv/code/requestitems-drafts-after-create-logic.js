@@ -29,7 +29,7 @@ function resolveParentRequestId(data) {
  * @param {cds.Request} request
  */
 module.exports = async function (data, request) {
-  LOG.info("--- AFTER CREATE RequestItems started: recalc total ---");
+  LOG.info("--- AFTER CREATE RequestItems.drafts started ---");
 
   try {
     LOG.info("Event:", request.event);
@@ -59,7 +59,7 @@ module.exports = async function (data, request) {
       `total=${totalAmount}, resequenced=${resequenced} for request ${requestId}`,
     );
 
-    LOG.info("--- AFTER CREATE RequestItems ended successfully ---");
+    LOG.info("--- AFTER CREATE RequestItems.drafts ended successfully ---");
   } catch (error) {
     LOG.error("Error in requestitems-drafts-after-create-logic:", error);
     // After-phase failure should not corrupt the create result; log only.

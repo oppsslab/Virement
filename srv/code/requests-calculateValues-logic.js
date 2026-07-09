@@ -32,7 +32,7 @@ function resolveRequestId(request) {
  * @param {cds.Request} request
  */
 module.exports = async function (request) {
-  LOG.info("--- ON calculateValues (active) started ---");
+  LOG.info("--- ON calculateValues Requests started ---");
 
   try {
     LOG.info("Event:", request.event);
@@ -84,7 +84,7 @@ module.exports = async function (request) {
     );
 
     LOG.info("Updated all amounts on:", request.target?.name);
-    LOG.info("--- ON calculateValues (active) ended successfully ---");
+    LOG.info("--- ON calculateValues Requests ended successfully ---");
 
     // 5. Return the freshly updated Request
     return await tx.run(

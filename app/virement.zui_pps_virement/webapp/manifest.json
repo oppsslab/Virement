@@ -205,6 +205,17 @@
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
+                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadTemplate"
+                      }
                     }
                   }
                 },
@@ -224,6 +235,87 @@
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
+                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadTemplate"
+                      }
+                    }
+                  }
+                },
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferOutItems": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  },
+                  "columns": {
+                    "DataField::srNo": {
+                      "width": "6em"
+                    }
+                  }
+                },
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferFunctional": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  },
+                  "columns": {
+                    "DataField::srNo": {
+                      "width": "6em"
+                    }
+                  },
+                  "actions": {
+                    "downloadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
+                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadTemplate"
+                      }
+                    }
+                  }
+                },
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferJKEW": {
+                  "tableSettings": {
+                    "type": "GridTable"
+                  },
+                  "columns": {
+                    "DataField::srNo": {
+                      "width": "6em"
+                    }
+                  },
+                  "actions": {
+                    "downloadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
+                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadTemplate"
+                      }
                     }
                   }
                 }

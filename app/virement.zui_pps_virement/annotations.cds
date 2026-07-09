@@ -41,8 +41,7 @@ annotate service.Requests with {
                 LocalDataProperty: budgetType_code,
                 ValueListProperty: 'code'
             }]
-        },
-        Common.FieldControl            : #Mandatory
+        }
     );
 
     status              @(
@@ -251,11 +250,6 @@ annotate service.Requests with @(
         Criticality: status_code
     },
 
-    UI.DataPoint #BudgetType       : {
-        Title: '{i18n>BudgetType}',
-        Value: budgetType.descr
-    },
-
     UI.DataPoint #SupplementAmount : {
         Title: '{i18n>SupplementAmount}',
         Value: supplementAmount
@@ -294,19 +288,37 @@ annotate service.Requests with @(
             Target: '@UI.DataPoint#Status'
         },
         {
-            $Type : 'UI.ReferenceFacet',
-            ID    : 'BudgetTypeHeaderFacet',
-            Label : '{i18n>BudgetType}',
-            Target: '@UI.DataPoint#BudgetType'
-        },
-        {
             $Type        : 'UI.ReferenceFacet',
             ID           : 'SupplementAmountHeaderFacet',
             Label        : '{i18n>SupplementAmount}',
             Target       : '@UI.DataPoint#SupplementAmount',
-            ![@UI.Hidden]: {$edmJson: {$Ne: [
-                {$Path: 'requestType_code'},
-                'S'
+            ![@UI.Hidden]: {$edmJson: {$And: [
+                {$Ne: [
+                    {$Path: 'requestType_code'},
+                    'S'
+                ]},
+                {$Or: [
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'T'
+                    ]},
+                    {$And: [
+                        {$Ne: [
+                            {$Path: 'transferCategory'},
+                            'J'
+                        ]},
+                        {$Or: [
+                            {$Ne: [
+                                {$Path: 'transferCategory'},
+                                null
+                            ]},
+                            {$Ne: [
+                                {$Path: 'isJKEW'},
+                                true
+                            ]}
+                        ]}
+                    ]}
+                ]}
             ]}}
         },
         {
@@ -314,9 +326,33 @@ annotate service.Requests with @(
             ID           : 'ReturnAmountHeaderFacet',
             Label        : '{i18n>ReturnAmount}',
             Target       : '@UI.DataPoint#ReturnAmount',
-            ![@UI.Hidden]: {$edmJson: {$Ne: [
-                {$Path: 'requestType_code'},
-                'R'
+            ![@UI.Hidden]: {$edmJson: {$And: [
+                {$Ne: [
+                    {$Path: 'requestType_code'},
+                    'R'
+                ]},
+                {$Or: [
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'T'
+                    ]},
+                    {$And: [
+                        {$Ne: [
+                            {$Path: 'transferCategory'},
+                            'J'
+                        ]},
+                        {$Or: [
+                            {$Ne: [
+                                {$Path: 'transferCategory'},
+                                null
+                            ]},
+                            {$Ne: [
+                                {$Path: 'isJKEW'},
+                                true
+                            ]}
+                        ]}
+                    ]}
+                ]}
             ]}}
         },
         {
@@ -334,9 +370,37 @@ annotate service.Requests with @(
             ID           : 'TransferOutAmountHeaderFacet',
             Label        : '{i18n>TransferOutAmount}',
             Target       : '@UI.DataPoint#TransferOutAmount',
-            ![@UI.Hidden]: {$edmJson: {$Ne: [
-                {$Path: 'requestType_code'},
-                'T'
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Ne: [
+                    {$Path: 'requestType_code'},
+                    'T'
+                ]},
+                {$And: [
+                    {$Ne: [
+                        {$Path: 'transferCategory'},
+                        'J'
+                    ]},
+                    {$Ne: [
+                        {$Path: 'transferCategory'},
+                        'F'
+                    ]},
+                    {$Or: [
+                        {$Ne: [
+                            {$Path: 'transferCategory'},
+                            null
+                        ]},
+                        {$And: [
+                            {$Ne: [
+                                {$Path: 'isFunctional'},
+                                true
+                            ]},
+                            {$Ne: [
+                                {$Path: 'isJKEW'},
+                                true
+                            ]}
+                        ]}
+                    ]}
+                ]}
             ]}}
         }
     ],
@@ -376,12 +440,138 @@ annotate service.Requests with @(
         },
         {
             $Type        : 'UI.ReferenceFacet',
-            ID           : 'TransferRequestItems',
+            ID           : 'TransferInItems',
             Label        : '{i18n>TransferInDetails}',
             Target       : 'RequestItems/@UI.PresentationVariant#TransferInItems',
-            ![@UI.Hidden]: {$edmJson: {$Ne: [
-                {$Path: 'requestType_code'},
-                'T'
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Ne: [
+                    {$Path: 'requestType_code'},
+                    'T'
+                ]},
+                {$Eq: [
+                    {$Path: 'transferCategory'},
+                    'J'
+                ]},
+                {$Eq: [
+                    {$Path: 'transferCategory'},
+                    'F'
+                ]},
+                {$And: [
+                    {$Eq: [
+                        {$Path: 'transferCategory'},
+                        null
+                    ]},
+                    {$Or: [
+                        {$Eq: [
+                            {$Path: 'isFunctional'},
+                            true
+                        ]},
+                        {$Eq: [
+                            {$Path: 'isJKEW'},
+                            true
+                        ]}
+                    ]}
+                ]}
+            ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'TransferOutItems',
+            Label        : '{i18n>TransferOutDetails}',
+            Target       : 'RequestItems/@UI.PresentationVariant#TransferOutItems',
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Ne: [
+                    {$Path: 'requestType_code'},
+                    'T'
+                ]},
+                {$Ne: [
+                    {$Path: 'status_code'},
+                    2
+                ]},
+                {$Eq: [
+                    {$Path: 'transferCategory'},
+                    'J'
+                ]},
+                {$Eq: [
+                    {$Path: 'transferCategory'},
+                    'F'
+                ]},
+                {$And: [
+                    {$Eq: [
+                        {$Path: 'transferCategory'},
+                        null
+                    ]},
+                    {$Or: [
+                        {$Eq: [
+                            {$Path: 'isFunctional'},
+                            true
+                        ]},
+                        {$Eq: [
+                            {$Path: 'isJKEW'},
+                            true
+                        ]}
+                    ]}
+                ]}
+            ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'TransferFunctional',
+            Label        : '{i18n>RequestDetails}',
+            Target       : 'RequestItems/@UI.PresentationVariant#TransferFunctional',
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Ne: [
+                    {$Path: 'requestType_code'},
+                    'T'
+                ]},
+                {$And: [
+                    {$Ne: [
+                        {$Path: 'transferCategory'},
+                        'F'
+                    ]},
+                    {$Or: [
+                        {$Ne: [
+                            {$Path: 'transferCategory'},
+                            null
+                        ]},
+                        {$Ne: [
+                            {$Path: 'isFunctional'},
+                            true
+                        ]},
+                        {$Eq: [
+                            {$Path: 'isJKEW'},
+                            true
+                        ]}
+                    ]}
+                ]}
+            ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'TransferJKEW',
+            Label        : '{i18n>RequestDetails}',
+            Target       : 'RequestItems/@UI.PresentationVariant#TransferJKEW',
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Ne: [
+                    {$Path: 'requestType_code'},
+                    'T'
+                ]},
+                {$And: [
+                    {$Ne: [
+                        {$Path: 'transferCategory'},
+                        'J'
+                    ]},
+                    {$Or: [
+                        {$Ne: [
+                            {$Path: 'transferCategory'},
+                            null
+                        ]},
+                        {$Ne: [
+                            {$Path: 'isJKEW'},
+                            true
+                        ]}
+                    ]}
+                ]}
             ]}}
         },
         {
@@ -412,6 +602,46 @@ annotate service.Requests with @(
             {
                 $Type: 'UI.DataField',
                 Value: fiscalYear
+            },
+            {
+                $Type        : 'UI.DataField',
+                Value        : budgetType_code,
+                ![@UI.Hidden]: {$edmJson: {$And: [
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'S'
+                    ]},
+                    {$Or: [
+                        {$Ne: [
+                            {$Path: 'requestType_code'},
+                            'T'
+                        ]},
+                        {$Eq: [
+                            {$Path: 'transferCategory'},
+                            'J'
+                        ]},
+                        {$Eq: [
+                            {$Path: 'transferCategory'},
+                            'F'
+                        ]},
+                        {$And: [
+                            {$Eq: [
+                                {$Path: 'transferCategory'},
+                                null
+                            ]},
+                            {$Or: [
+                                {$Eq: [
+                                    {$Path: 'isFunctional'},
+                                    true
+                                ]},
+                                {$Eq: [
+                                    {$Path: 'isJKEW'},
+                                    true
+                                ]}
+                            ]}
+                        ]}
+                    ]}
+                ]}}
             },
             {
                 $Type: 'UI.DataField',
@@ -498,7 +728,7 @@ annotate service.RequestItems with @(
     // =========================================================================
     // Supplement Items Table (Type S)
     // =========================================================================
-    UI.LineItem #SupplementItems           : [
+    UI.LineItem #SupplementItems              : [
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -533,7 +763,7 @@ annotate service.RequestItems with @(
         }
     ],
 
-    UI.PresentationVariant #SupplementItems: {
+    UI.PresentationVariant #SupplementItems   : {
         SortOrder     : [{
             $Type     : 'Common.SortOrderType',
             Property  : srNo,
@@ -545,7 +775,7 @@ annotate service.RequestItems with @(
     // =========================================================================
     // Return Items Table (Type R)
     // =========================================================================
-    UI.LineItem #ReturnItems               : [
+    UI.LineItem #ReturnItems                  : [
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -580,7 +810,7 @@ annotate service.RequestItems with @(
         }
     ],
 
-    UI.PresentationVariant #ReturnItems    : {
+    UI.PresentationVariant #ReturnItems       : {
         SortOrder     : [{
             $Type     : 'Common.SortOrderType',
             Property  : srNo,
@@ -592,7 +822,7 @@ annotate service.RequestItems with @(
     // =========================================================================
     // Transfer In Items Table (Type T)
     // =========================================================================
-    UI.LineItem #TransferInItems             : [
+    UI.LineItem #TransferInItems              : [
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -627,7 +857,7 @@ annotate service.RequestItems with @(
         }
     ],
 
-    UI.PresentationVariant #TransferInItems  : {
+    UI.PresentationVariant #TransferInItems   : {
         SortOrder     : [{
             $Type     : 'Common.SortOrderType',
             Property  : srNo,
@@ -636,7 +866,171 @@ annotate service.RequestItems with @(
         Visualizations: ['@UI.LineItem#TransferInItems']
     },
 
-    Capabilities.SearchRestrictions        : {Searchable: false}
+    // =========================================================================
+    // Transfer Functional
+    // =========================================================================
+    UI.LineItem #TransferFunctional           : [
+        {
+            $Type: 'UI.DataField',
+            Value: srNo
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentre
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glAccount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: wbs
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: assetStatus_code
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: transferInAmount,
+            Label: '{i18n>TransferInAmount}',
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: transferOutAmount,
+            Label: '{i18n>TransferOutAmount}',
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: description
+        }
+    ],
+
+    UI.PresentationVariant #TransferFunctional: {
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : srNo,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem#TransferFunctional']
+    },
+
+
+    // =========================================================================
+    // Transfer JKEW
+    // =========================================================================
+    UI.LineItem #TransferJKEW                 : [
+        {
+            $Type: 'UI.DataField',
+            Value: srNo
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentre
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glAccount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: wbs
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: assetStatus_code
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: supplementAmount,
+            Label: '{i18n>SupplementAmount}',
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: returnAmount,
+            Label: '{i18n>ReturnAmount}',
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: transferInAmount,
+            Label: '{i18n>TransferInAmount}',
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: transferOutAmount,
+            Label: '{i18n>TransferOutAmount}',
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: description
+        }
+    ],
+
+    UI.PresentationVariant #TransferJKEW      : {
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : srNo,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem#TransferJKEW']
+    },
+
+    // =========================================================================
+    // Transfer Out Items Table (Type T)
+    // =========================================================================
+    UI.LineItem #TransferOutItems             : [
+        {
+            $Type: 'UI.DataField',
+            Value: srNo
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentre
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glAccount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: wbs
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: assetStatus_code
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: transferInAmount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: description
+        }
+    ],
+
+    UI.PresentationVariant #TransferOutItems  : {
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : srNo,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem#TransferOutItems']
+    },
+
+    Capabilities.SearchRestrictions           : {Searchable: false}
 );
 
 

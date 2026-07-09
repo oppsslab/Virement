@@ -13,7 +13,8 @@ entity Requests : cuid, managed {
     @assert.unique
     requestNumber       : String(10)                 @readonly;
     requestType         : Association to RequestType @Core.Immutable;
-    budgetType          : Association to BudgetType  @Core.Immutable;
+    budgetType          : Association to BudgetType default 'N';
+    transferCategory    : String(1);
     status              : Association to RequestStatus default 0;
     fiscalYear          : FiscalYear                 @readonly;
     submissionPeriod    : Integer; // Month of submission date (1-12)

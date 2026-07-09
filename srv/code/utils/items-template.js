@@ -13,10 +13,14 @@ const XLSX = require("xlsx");
  *   - description
  *
  * Conditional amount columns:
- *   - supplementAmount      : MASS_UPLOAD_ALL
- *   - returnAmount          : Return or MASS_UPLOAD_ALL
- *   - transferInAmount      : Transfer normal user, Transfer MASS_UPLOAD_TRANSFER, or MASS_UPLOAD_ALL
+ *   - supplementAmount      : MASS_UPLOAD_ALL, Transfer only
+ *   - returnAmount          : Return, or MASS_UPLOAD_ALL for Transfer
+ *   - transferInAmount      : Transfer normal user, MASS_UPLOAD_TRANSFER, or MASS_UPLOAD_ALL
  *   - transferOutAmount     : Transfer MASS_UPLOAD_TRANSFER or MASS_UPLOAD_ALL
+ *
+ * Important:
+ *   - Return ignores roles.
+ *   - Roles only affect Transfer templates.
  */
 
 const BASE_COLUMNS = [
@@ -69,7 +73,9 @@ const DESCRIPTION_COLUMN = {
 };
 
 function normalizeRequestType(requestType) {
-  return String(requestType || "").trim().toUpperCase();
+  return String(requestType || "")
+    .trim()
+    .toUpperCase();
 }
 
 function normalizeRoles(userRoles) {
@@ -78,7 +84,9 @@ function normalizeRoles(userRoles) {
   }
 
   return userRoles.map(function (role) {
-    return String(role || "").trim().toUpperCase();
+    return String(role || "")
+      .trim()
+      .toUpperCase();
   });
 }
 
@@ -86,31 +94,15 @@ function getTemplateDefinition(userRoles, requestType) {
   const roles = normalizeRoles(userRoles);
   const type = normalizeRequestType(requestType);
 
-  const isJKEW = roles.includes("MASS_UPLOAD_ALL");
-  const isFunctional = roles.includes("MASS_UPLOAD_TRANSFER");
+  const isMassUploadAll = roles.includes("MASS_UPLOAD_ALL");
+  const isMassUploadTransfer = roles.includes("MASS_UPLOAD_TRANSFER");
 
   const columns = BASE_COLUMNS.slice();
 
   /*
-   * MASS_UPLOAD_ALL:
-   * Gets all amount columns regardless of request type.
-   */
-  if (isJKEW) {
-    columns.push(SUPPLEMENT_AMOUNT_COLUMN);
-    columns.push(RETURN_AMOUNT_COLUMN);
-    columns.push(TRANSFER_IN_AMOUNT_COLUMN);
-    columns.push(TRANSFER_OUT_AMOUNT_COLUMN);
-    columns.push(DESCRIPTION_COLUMN);
-
-    return {
-      templateName: "JKEW",
-      columns: columns,
-    };
-  }
-
-  /*
    * Return:
-   * Gets returnAmount.
+   * Role should not matter.
+   * Return always gets returnAmount only.
    */
   if (type === "R") {
     columns.push(RETURN_AMOUNT_COLUMN);
@@ -123,16 +115,33 @@ function getTemplateDefinition(userRoles, requestType) {
   }
 
   /*
-   * Transfer + MASS_UPLOAD_TRANSFER:
-   * Gets transferInAmount and transferOutAmount.
+   * Transfer + MASS_UPLOAD_ALL:
+   * Gets all amount columns.
    */
-  if (type === "T" && isFunctional) {
+  if (type === "T" && isMassUploadAll) {
+    columns.push(SUPPLEMENT_AMOUNT_COLUMN);
+    columns.push(RETURN_AMOUNT_COLUMN);
     columns.push(TRANSFER_IN_AMOUNT_COLUMN);
     columns.push(TRANSFER_OUT_AMOUNT_COLUMN);
     columns.push(DESCRIPTION_COLUMN);
 
     return {
-      templateName: "Transfer_Functional",
+      templateName: "Transfer_All",
+      columns: columns,
+    };
+  }
+
+  /*
+   * Transfer + MASS_UPLOAD_TRANSFER:
+   * Gets transferInAmount and transferOutAmount.
+   */
+  if (type === "T" && isMassUploadTransfer) {
+    columns.push(TRANSFER_IN_AMOUNT_COLUMN);
+    columns.push(TRANSFER_OUT_AMOUNT_COLUMN);
+    columns.push(DESCRIPTION_COLUMN);
+
+    return {
+      templateName: "Transfer",
       columns: columns,
     };
   }
@@ -146,17 +155,16 @@ function getTemplateDefinition(userRoles, requestType) {
     columns.push(DESCRIPTION_COLUMN);
 
     return {
-      templateName: "Transfer",
+      templateName: "Transfer_Amount",
       columns: columns,
     };
   }
 
   /*
-   * Supplement and other request types are not supported
-   * unless user is MASS_UPLOAD_ALL, which was already handled above.
+   * Supplement or other request types are not supported.
    */
   throw new Error(
-    "Mass upload template is only available for Return and Transfer requests."
+    "Mass upload template is only available for Return and Transfer requests.",
   );
 }
 

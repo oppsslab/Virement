@@ -52,6 +52,16 @@
                 "cap.VR_FUNCTIONAL",
                 "cap.VR_JKEW"
               ]
+            },
+            "kevin.p.orense@pwc.com": {
+              "password": "1234567",
+              "attr": {
+                "givenName": "Kevin",
+                "familyName": "Orense",
+                "email": "kevin.p.orense@pwc.com",
+                "groups": []
+              },
+              "policies": []
             }
           }
         },

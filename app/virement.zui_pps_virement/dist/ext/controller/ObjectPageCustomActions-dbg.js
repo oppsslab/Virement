@@ -1,89 +1,108 @@
 sap.ui.define(
-  ["sap/m/MessageBox", "sap/m/MessageToast", "sap/ui/core/Fragment"],
-  function (MessageBox, MessageToast, Fragment) {
+  [
+    "sap/m/MessageBox",
+    "sap/m/MessageToast",
+    "sap/ui/core/Fragment",
+    "sap/ui/core/message/Message",
+    "sap/ui/core/message/MessageType",
+    "sap/ui/core/Messaging",
+  ],
+  function (
+    MessageBox,
+    MessageToast,
+    Fragment,
+    Message,
+    MessageType,
+    Messaging,
+  ) {
     "use strict";
 
-    // =========================================================================
-    //  SHARED STATE
-    // =========================================================================
     let oUploadDialog = null;
     let oUploadModel = null;
     let oUploadView = null;
     let oUploadContext = null;
     let sUploadedBase64 = null;
-
-    // =========================================================================
-    //  MODULE-SCOPE HELPERS (no dependency on `this`)
-    // =========================================================================
+    let aUploadMessages = [];
 
     function resolveView(oCtx, oEvent) {
-      if (oCtx && oCtx.getView && oCtx.getView()) {
-        return oCtx.getView();
-      }
+      if (oCtx && oCtx.getView && oCtx.getView()) return oCtx.getView();
+
       if (oCtx && oCtx.base && oCtx.base.getView && oCtx.base.getView()) {
         return oCtx.base.getView();
       }
-      if (oCtx && oCtx._view) {
-        return oCtx._view;
-      }
+
+      if (oCtx && oCtx._view) return oCtx._view;
+
       if (oEvent && oEvent.getSource && oEvent.getSource()) {
         let oControl = oEvent.getSource();
+
         while (oControl) {
           if (oControl.isA && oControl.isA("sap.ui.core.mvc.View")) {
             return oControl;
           }
+
           oControl = oControl.getParent && oControl.getParent();
         }
       }
+
       return null;
     }
 
     function resolveModel(oCtx, oEvent) {
-      if (oCtx && oCtx.getModel && oCtx.getModel()) {
-        return oCtx.getModel();
-      }
+      if (oCtx && oCtx.getModel && oCtx.getModel()) return oCtx.getModel();
+
       const oView = resolveView(oCtx, oEvent);
+
       if (oView && oView.getModel && oView.getModel()) {
         return oView.getModel();
       }
+
       if (oCtx && oCtx.base && oCtx.base.getModel && oCtx.base.getModel()) {
         return oCtx.base.getModel();
       }
+
       if (oEvent && oEvent.getSource && oEvent.getSource()) {
         const oSrc = oEvent.getSource();
+
         if (oSrc.getModel && oSrc.getModel()) {
           return oSrc.getModel();
         }
       }
+
       return null;
     }
 
     function resolveBindingContext(oCtx, oEvent) {
       const oView = resolveView(oCtx, oEvent);
+
       if (oView && oView.getBindingContext && oView.getBindingContext()) {
         return oView.getBindingContext();
       }
+
       if (oCtx && oCtx.getBindingContext && oCtx.getBindingContext()) {
         return oCtx.getBindingContext();
       }
+
       if (oEvent && oEvent.getSource && oEvent.getSource()) {
         const oSrc = oEvent.getSource();
+
         if (oSrc.getBindingContext && oSrc.getBindingContext()) {
           return oSrc.getBindingContext();
         }
       }
+
       return null;
     }
 
     function triggerDownload(sBase64, sFileName, sMimeType) {
       const sByteChars = atob(sBase64);
       const aByteNumbers = new Array(sByteChars.length);
+
       for (let i = 0; i < sByteChars.length; i++) {
         aByteNumbers[i] = sByteChars.charCodeAt(i);
       }
-      const oByteArray = new Uint8Array(aByteNumbers);
 
-      const oBlob = new Blob([oByteArray], {
+      const oBlob = new Blob([new Uint8Array(aByteNumbers)], {
         type:
           sMimeType ||
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -91,123 +110,308 @@ sap.ui.define(
 
       const sUrl = window.URL.createObjectURL(oBlob);
       const oLink = document.createElement("a");
+
       oLink.href = sUrl;
-      oLink.download = sFileName || "RequestItems_Template.xlsx";
+      oLink.download = sFileName || "Mass Upload Template.xlsx";
+
       document.body.appendChild(oLink);
       oLink.click();
       document.body.removeChild(oLink);
+
       window.URL.revokeObjectURL(sUrl);
     }
 
     function readFileAsBase64(oFile) {
       return new Promise(function (resolve, reject) {
         const oReader = new FileReader();
+
         oReader.onload = function (oLoadEvent) {
-          const sResult = oLoadEvent.target.result;
-          resolve(sResult.split(",")[1]);
+          resolve(oLoadEvent.target.result.split(",")[1]);
         };
+
         oReader.onerror = function () {
           reject(new Error("Failed to read the file."));
         };
+
         oReader.readAsDataURL(oFile);
       });
     }
 
-    function getItemsBinding(oView) {
-      if (!oView || !oView.findAggregatedObjects) {
+    function getItemsBinding(oModel, oContext) {
+      if (!oModel || !oContext) {
         return null;
       }
+
+      const sUpdateGroupId =
+        oModel.getUpdateGroupId && oModel.getUpdateGroupId();
+
+      /*
+       * Create a dedicated relative list binding for RequestItems.
+       * This avoids relying on whichever Object Page table is visible.
+       */
+      return oModel.bindList("RequestItems", oContext, null, null, null, {
+        $$updateGroupId: sUpdateGroupId || "$auto",
+      });
+    }
+
+    function refreshRequestItemsBindings(oView) {
+      if (!oView || !oView.findAggregatedObjects) {
+        return;
+      }
+
       const aControls = oView.findAggregatedObjects(true, function (oCtrl) {
         return (
           oCtrl.isA &&
           (oCtrl.isA("sap.m.Table") || oCtrl.isA("sap.ui.table.Table"))
         );
       });
-      for (let i = 0; i < aControls.length; i++) {
-        const oTable = aControls[i];
+
+      aControls.forEach(function (oTable) {
         const oBinding =
           oTable.getBinding("items") || oTable.getBinding("rows");
-        if (oBinding && oBinding.getPath) {
-          const sPath = oBinding.getPath();
-          if (sPath && sPath.indexOf("RequestItems") !== -1) {
-            return oBinding;
+
+        if (!oBinding || !oBinding.getPath) {
+          return;
+        }
+
+        const sPath = oBinding.getPath();
+
+        if (sPath && sPath.indexOf("RequestItems") !== -1) {
+          try {
+            console.log("Refreshing RequestItems binding:", sPath);
+            oBinding.refresh();
+          } catch (oError) {
+            console.warn("Could not refresh RequestItems binding:", oError);
           }
         }
-      }
-      return null;
+      });
     }
 
     function byFragId(oDialog, sLocalId, oView) {
       if (oView && oView.byId) {
         const oControl = oView.byId(sLocalId);
-        if (oControl) {
-          return oControl;
-        }
+
+        if (oControl) return oControl;
       }
+
       const aFound = oDialog.findAggregatedObjects(true, function (oCtrl) {
         const sId = oCtrl.getId && oCtrl.getId();
+
         return sId && sId.indexOf(sLocalId) !== -1;
       });
+
       return aFound && aFound.length ? aFound[0] : null;
     }
 
     function extractErrorMessage(oError) {
       let sMsg = "An unexpected error occurred.";
+
       if (oError && oError.message) {
         sMsg = oError.message;
       }
+
       if (oError && oError.responseText) {
         try {
           const oParsed = JSON.parse(oError.responseText);
+
           if (oParsed && oParsed.error && oParsed.error.message) {
-            sMsg = oParsed.error.message;
+            sMsg =
+              typeof oParsed.error.message === "string"
+                ? oParsed.error.message
+                : oParsed.error.message.value;
           }
-        } catch (e) {
-          /* keep */
-        }
+        } catch (e) {}
       }
+
       return sMsg;
     }
 
-    /**
-     * Normalizes the uploadItems action result into an items array.
-     * Handles: { items: [...] }, { value: [...] }, [...], or single object.
-     *
-     * @param {object|Array} oResult
-     * @returns {Array<object>}
-     */
-    function normalizeItems(oResult) {
-      if (!oResult) {
-        return [];
+    function clearUploadMessages() {
+      if (aUploadMessages.length) {
+        Messaging.removeMessages(aUploadMessages);
+        aUploadMessages = [];
       }
-      // Wrapped: { items: [...] }
-      if (Array.isArray(oResult.items)) {
-        return oResult.items;
-      }
-      // OData collection: { value: [...] }
-      if (Array.isArray(oResult.value)) {
-        return oResult.value;
-      }
-      // Plain array
-      if (Array.isArray(oResult)) {
-        return oResult;
-      }
-      // Single object — wrap it.
-      if (typeof oResult === "object") {
-        return [oResult];
-      }
-      return [];
     }
 
-    // ---- Upload event logic (module scope) --------------------------------
+    function normalizeMessage(vMessage) {
+      if (!vMessage) return "";
+      if (typeof vMessage === "string") return vMessage;
+      if (vMessage.value) return vMessage.value;
+
+      return String(vMessage);
+    }
+
+    function isGenericUploadWrapperMessage(sMessage) {
+      return (
+        sMessage === "Upload validation failed." ||
+        sMessage === "Failed to process the uploaded file." ||
+        sMessage === "Multiple errors occurred, see details below." ||
+        sMessage === "Multiple errors occurred, see details below"
+      );
+    }
+
+    function removeGenericUploadWrapperMessages() {
+      const oMessageModel = Messaging.getMessageModel();
+
+      if (!oMessageModel || !oMessageModel.getData) return;
+
+      const aMessages = oMessageModel.getData() || [];
+
+      const aMessagesToRemove = aMessages.filter(function (oMessage) {
+        const sMessage =
+          oMessage && oMessage.getMessage
+            ? oMessage.getMessage()
+            : oMessage && oMessage.message
+              ? oMessage.message
+              : "";
+
+        return isGenericUploadWrapperMessage(sMessage);
+      });
+
+      if (aMessagesToRemove.length) {
+        Messaging.removeMessages(aMessagesToRemove);
+      }
+    }
+
+    function collectMessagesFromError(oError) {
+      const aRawMessages = [];
+
+      function addRawMessage(sMessage, sTarget, sCode) {
+        if (!sMessage) return;
+
+        aRawMessages.push({
+          message: sMessage,
+          target: sTarget || "",
+          code: sCode || "ITEM_VALIDATION",
+        });
+      }
+
+      function readODataErrorBody(oBody) {
+        if (!oBody) return;
+
+        const oErr = oBody.error || oBody;
+
+        if (Array.isArray(oErr.details) && oErr.details.length) {
+          oErr.details.forEach(function (oDetail) {
+            addRawMessage(
+              normalizeMessage(oDetail.message),
+              oDetail.target,
+              oDetail.code,
+            );
+          });
+        }
+
+        if (oErr.message) {
+          addRawMessage(normalizeMessage(oErr.message), oErr.target, oErr.code);
+        }
+      }
+
+      try {
+        if (oError && oError.responseText) {
+          readODataErrorBody(JSON.parse(oError.responseText));
+        }
+      } catch (e) {}
+
+      try {
+        if (oError && oError.error) {
+          readODataErrorBody(oError.error);
+        }
+      } catch (e) {}
+
+      try {
+        if (oError && oError.cause && oError.cause.error) {
+          readODataErrorBody(oError.cause.error);
+        }
+      } catch (e) {}
+
+      if (!aRawMessages.length) {
+        addRawMessage(extractErrorMessage(oError));
+      }
+
+      const mSeen = {};
+
+      const aDeduped = aRawMessages.filter(function (oMessage) {
+        const sKey = oMessage.message + "|" + oMessage.target;
+
+        if (mSeen[sKey]) return false;
+
+        mSeen[sKey] = true;
+        return true;
+      });
+
+      const aUsefulMessages = aDeduped.filter(function (oMessage) {
+        return !isGenericUploadWrapperMessage(oMessage.message);
+      });
+
+      return aUsefulMessages.length ? aUsefulMessages : aDeduped;
+    }
+
+    function resolveUploadMessageTarget(oDetail, sContextPath) {
+      const sBackendTarget =
+        oDetail && oDetail.target ? String(oDetail.target) : "";
+
+      if (!sContextPath) return "";
+
+      if (sBackendTarget.indexOf("items/") === 0) {
+        return sContextPath + "/RequestItems";
+      }
+
+      if (sBackendTarget === "items") {
+        return sContextPath + "/RequestItems";
+      }
+
+      return sContextPath;
+    }
+
+    function pushBackendMessagesToFooter(oError, oModel, oContext) {
+      if (!oModel) return 0;
+
+      Messaging.registerMessageProcessor(oModel);
+
+      const sContextPath =
+        oContext && oContext.getPath ? oContext.getPath() : "";
+
+      const aDetails = collectMessagesFromError(oError);
+
+      const aMessages = aDetails.map(function (oDetail) {
+        return new Message({
+          message: oDetail.message,
+          description: oDetail.message,
+          type: MessageType.Error,
+          target: resolveUploadMessageTarget(oDetail, sContextPath),
+          processor: oModel,
+          persistent: true,
+          code: oDetail.code || "ITEM_VALIDATION",
+        });
+      });
+
+      if (aMessages.length) {
+        Messaging.addMessages(aMessages);
+        aUploadMessages = aUploadMessages.concat(aMessages);
+      }
+
+      return aMessages.length;
+    }
+
+    function normalizeItems(oResult) {
+      if (!oResult) return [];
+      if (Array.isArray(oResult.items)) return oResult.items;
+      if (Array.isArray(oResult.value)) return oResult.value;
+      if (Array.isArray(oResult)) return oResult;
+      if (typeof oResult === "object") return [oResult];
+
+      return [];
+    }
 
     function handleFileSelected(oEvent) {
       const aFiles = oEvent.getParameter("files");
       const oFile = aFiles && aFiles[0];
+
       if (!oFile) {
         sUploadedBase64 = null;
         return;
       }
+
       readFileAsBase64(oFile)
         .then(function (sBase64) {
           sUploadedBase64 = sBase64;
@@ -225,6 +429,7 @@ sap.ui.define(
         MessageToast.show("Please select an Excel file first.");
         return;
       }
+
       if (!oUploadModel || !oUploadContext) {
         console.error(
           "Upload: missing model/context.",
@@ -235,22 +440,21 @@ sap.ui.define(
         return;
       }
 
+      clearUploadMessages();
       oUploadDialog.setBusy(true);
 
       const oOperation = oUploadModel.bindContext(
         "ZSVC_PPS_VIREMENT.uploadItems(...)",
         oUploadContext,
       );
+
       oOperation.setParameter("content", sUploadedBase64);
 
       oOperation
         .execute()
         .then(function () {
           const oResult = oOperation.getBoundContext().getObject();
-          console.log("Raw uploadItems result:", oResult);
-
           const aItems = normalizeItems(oResult);
-          console.log("Normalized items count:", aItems.length);
 
           if (!aItems.length) {
             oUploadDialog.setBusy(false);
@@ -258,11 +462,16 @@ sap.ui.define(
             return Promise.reject(new Error("__handled__"));
           }
 
-          const oItemsBinding = getItemsBinding(oUploadView);
+          /*
+           * Do not use the visible table binding here.
+           * With multiple role/category-based tables, some table bindings may be
+           * hidden, not initialized, or unresolved.
+           */
+          const oItemsBinding = getItemsBinding(oUploadModel, oUploadContext);
+
           if (!oItemsBinding) {
             oUploadDialog.setBusy(false);
-            console.error("Items table binding not found.");
-            MessageBox.error("Could not find the items table binding.");
+            MessageBox.error("Could not create the items binding.");
             return Promise.reject(new Error("__handled__"));
           }
 
@@ -273,59 +482,169 @@ sap.ui.define(
               glAccount: oItem.glAccount,
               material: oItem.material,
               wbs: oItem.wbs,
+
+              /*
+               * Template header: Asset Status
+               * CAP field: assetStatus_code
+               */
               assetStatus_code: oItem.assetStatus_code,
-              type_code: oItem.type_code,
-              amount: oItem.amount,
+
+              /*
+               * Amount fields from uploaded template.
+               */
+              supplementAmount: oItem.supplementAmount,
+              returnAmount: oItem.returnAmount,
+              transferInAmount: oItem.transferInAmount,
+              transferOutAmount: oItem.transferOutAmount,
+
               description: oItem.description,
             });
           });
 
-          return oUploadModel.submitBatch(oUploadModel.getUpdateGroupId());
+          const sUpdateGroupId =
+            oUploadModel.getUpdateGroupId && oUploadModel.getUpdateGroupId();
+
+          return oUploadModel.submitBatch(sUpdateGroupId || "$auto");
         })
         .then(function () {
+          /*
+           * Important:
+           * The items were created using a separate binding, so refresh the visible
+           * RequestItems table bindings after submit.
+           */
+          refreshRequestItemsBindings(oUploadView);
+
+          /*
+           * Refresh the parent context too, so header totals/side effects can update.
+           */
+          if (
+            oUploadContext &&
+            oUploadContext.refresh &&
+            typeof oUploadContext.refresh === "function"
+          ) {
+            try {
+              oUploadContext.refresh();
+            } catch (oRefreshError) {
+              console.warn("Could not refresh upload context:", oRefreshError);
+            }
+          }
+
           oUploadDialog.setBusy(false);
           oUploadDialog.close();
-          sUploadedBase64 = null;
+
+          clearSelectedUploadFile();
+
           MessageToast.show("Items uploaded successfully.");
         })
         .catch(function (oError) {
           oUploadDialog.setBusy(false);
+
           if (oError && oError.message === "__handled__") {
             return;
           }
+
           console.error("Upload error:", oError);
-          MessageBox.error(extractErrorMessage(oError));
+
+          const iMessageCount = pushBackendMessagesToFooter(
+            oError,
+            oUploadModel,
+            oUploadContext,
+          );
+
+          removeGenericUploadWrapperMessages();
+
+          setTimeout(function () {
+            removeGenericUploadWrapperMessages();
+          }, 0);
+
+          oUploadDialog.close();
+          sUploadedBase64 = null;
+
+          MessageBox.error("Multiple errors occurred, see details below.", {
+            title: "Upload Validation Failed",
+          });
+
+          if (!iMessageCount) {
+            MessageBox.error(extractErrorMessage(oError));
+          }
         });
     }
 
     function handleCancelUpload() {
-      sUploadedBase64 = null;
+      clearSelectedUploadFile();
+
       if (oUploadDialog) {
         oUploadDialog.close();
       }
     }
 
-    // =========================================================================
-    //  RETURNED HANDLER OBJECT (thin entry points)
-    // =========================================================================
+    function clearSelectedUploadFile() {
+      sUploadedBase64 = null;
+
+      if (!oUploadDialog) {
+        return;
+      }
+
+      const oFileUploader = byFragId(
+        oUploadDialog,
+        "itemsFileUploader",
+        oUploadView,
+      );
+
+      if (oFileUploader && oFileUploader.clear) {
+        oFileUploader.clear();
+      }
+    }
+
     return {
-      /**
-       * Downloads the blank Excel template.
-       * @param {sap.ui.base.Event} oEvent
-       */
       onDownloadTemplate: function (oEvent) {
         const oModel = resolveModel(this, oEvent);
+        const oContext = resolveBindingContext(this, oEvent);
+
         if (!oModel) {
-          console.error("DownloadTemplate: OData model not found.");
           MessageBox.error("Could not access the service. Please retry.");
           return;
         }
 
-        const oOperation = oModel.bindContext("/downloadItemsTemplate(...)");
-        oOperation
-          .execute()
+        if (!oContext) {
+          MessageBox.error("Could not determine the current request.");
+          console.error("DownloadTemplate: missing binding context.");
+          return;
+        }
+
+        console.log("DownloadTemplate context path:", oContext.getPath());
+
+        const oOperation = oModel.bindContext(
+          "ZSVC_PPS_VIREMENT.downloadItemsTemplate(...)",
+          oContext,
+        );
+
+        const sUpdateGroupId =
+          oModel.getUpdateGroupId && oModel.getUpdateGroupId();
+
+        const pBeforeInvoke =
+          oModel.hasPendingChanges && oModel.hasPendingChanges()
+            ? oModel.submitBatch(sUpdateGroupId || "$auto")
+            : Promise.resolve();
+
+        pBeforeInvoke
+          .then(function () {
+            console.log("Invoking downloadItemsTemplate bound action...");
+
+            if (oOperation.invoke) {
+              return oOperation.invoke();
+            }
+
+            return oOperation.execute();
+          })
           .then(function () {
             const oCtx = oOperation.getBoundContext();
+
+            if (!oCtx) {
+              MessageBox.error("No response was returned from the service.");
+              return;
+            }
+
             const sContent = oCtx.getProperty("content");
             const sFileName = oCtx.getProperty("fileName");
             const sMimeType = oCtx.getProperty("mimeType");
@@ -334,32 +653,26 @@ sap.ui.define(
               MessageBox.error("The template content is empty.");
               return;
             }
+
             triggerDownload(sContent, sFileName, sMimeType);
             MessageToast.show("Template downloaded.");
           })
           .catch(function (oError) {
             console.error("DownloadTemplate error:", oError);
-            MessageBox.error("Failed to download the template.");
+            MessageBox.error(extractErrorMessage(oError));
           });
       },
 
-      /**
-       * Opens the upload dialog and wires its handlers programmatically.
-       * Buttons are wired via the dialog's begin/end aggregations (reliable).
-       * @param {sap.ui.base.Event} oEvent
-       */
       onOpenUploadDialog: function (oEvent) {
         const oModel = resolveModel(this, oEvent);
         const oView = resolveView(this, oEvent);
         const oContext = resolveBindingContext(this, oEvent);
 
         if (!oModel) {
-          console.error("UploadItems: OData model not found.");
           MessageBox.error("Could not access the service.");
           return;
         }
 
-        // Guard: ensure we are in edit mode (draft).
         if (oContext && oContext.getProperty("IsActiveEntity") === true) {
           MessageBox.warning(
             "Please switch to edit mode before uploading items.",
@@ -367,7 +680,6 @@ sap.ui.define(
           return;
         }
 
-        // Store in module-scope state.
         oUploadModel = oModel;
         oUploadView = oView;
         oUploadContext = oContext;
@@ -381,11 +693,11 @@ sap.ui.define(
           })
             .then(function (oDialog) {
               oUploadDialog = oDialog;
+
               if (oView) {
                 oView.addDependent(oDialog);
               }
 
-              // Wire buttons directly from dialog aggregations (reliable).
               const oConfirmBtn = oDialog.getBeginButton();
               const oCancelBtn = oDialog.getEndButton();
               const oFileUploader = byFragId(
@@ -403,13 +715,13 @@ sap.ui.define(
               if (oConfirmBtn) {
                 oConfirmBtn.attachPress(handleConfirmUpload);
               } else {
-                console.warn("Confirm (begin) button NOT FOUND!");
+                console.warn("Confirm button NOT FOUND!");
               }
 
               if (oCancelBtn) {
                 oCancelBtn.attachPress(handleCancelUpload);
               } else {
-                console.warn("Cancel (end) button NOT FOUND!");
+                console.warn("Cancel button NOT FOUND!");
               }
 
               oDialog.open();
