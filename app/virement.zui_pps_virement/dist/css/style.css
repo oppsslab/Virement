@@ -6,25 +6,158 @@
   margin-top: 0rem !important;
 }
 
-.detailsCellImageBackground {
-  background-image: url("../images/DetailsCellBG.png");
-  background-size: cover;
-  background-position: 0 40%;
+.buttonHeight .sapMBtnInner {
+  height: 2.5rem;
+  align-items: center;
+  padding: 1rem !important;
 }
 
-.titleBanner {
-  height: 230px !important;
-  background-image: linear-gradient(
-    to right,
-    #eaf2ff,
-    #f5f9ff,
-    #ffffff
-  ) !important;
-  border-radius: 0.3rem !important;
+.dynamicPagePadding {
+  padding-top: 3rem !important;
 }
 
-.sideNavigationBackground {
-  background-image: url("../images/DetailsCellBG.png") !important;
-  background-size: cover !important;
-  background-position: 0 40% !important;
+.dynamicPageHeader {
+  padding-bottom: 2rem !important;
+}
+
+.dynamicPageText .sapMTitle {
+  color: white;
+  font-size: 2rem;
+}
+
+.dynamicPageText .sapFDynamicPageTitleMain>.sapFDynamicPageTitleMainInner .sapFDynamicPageTitleMainHeading .sapFDynamicPageTitleMainHeadingInner .sapMTitle:not(.sapUICompVarMngmtTitle) {
+  font-size: 3rem;
+  color: #d4a939 !important;
+}
+
+.epfCustomBackground {
+  --indigo-light: #5459bd;
+  --indigo-mid: #353a96;
+  --indigo-deep: #1c215f;
+
+  position: relative;
+  overflow: hidden;
+
+  /* Fallback */
+  background-color: var(--indigo-deep);
+
+  background-image:
+    /* Soft highlight across the top */
+    radial-gradient(1200px 220px at 50% 0%,
+      rgba(124, 132, 235, 0.28) 0%,
+      rgba(124, 132, 235, 0.10) 45%,
+      transparent 75%),
+
+    /* Subtle gold glow behind the buttons */
+    radial-gradient(500px 220px at 12% 100%,
+      rgba(212, 169, 57, 0.16) 0%,
+      rgba(212, 169, 57, 0.06) 45%,
+      transparent 75%),
+
+    /* Main vertical gradient */
+    linear-gradient(180deg,
+      var(--indigo-light) 0%,
+      var(--indigo-mid) 45%,
+      var(--indigo-deep) 100%);
+
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+/* =========================================
+   DEFAULT STATE
+   ========================================= */
+.goldButton span.sapMBtnInner.sapMBtnEmphasized {
+  background-color: #d4a939 !important;
+  background-image: linear-gradient(135deg,
+      #d4a939 0%,
+      #b88a1e 100%) !important;
+
+  border: 1px solid #b88a1e !important;
+  color: #1e1b4b !important;
+  box-shadow: 0 6px 16px rgba(212, 169, 57, 0.35);
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease,
+    filter 0.2s ease;
+}
+
+/* =========================================
+   BUTTON TEXT AND ICON
+   ========================================= */
+.goldButton .sapMBtnContent,
+.goldButton .sapMBtnIcon {
+  color: #1e1b4b !important;
+}
+
+/* =========================================
+   HOVER STATE
+   ========================================= */
+.goldButton:hover span.sapMBtnInner.sapMBtnEmphasized {
+  background-color: #e3bd55 !important;
+  background-image: linear-gradient(135deg,
+      #e3bd55 0%,
+      #c99a26 100%) !important;
+
+  border-color: #c99a26 !important;
+  box-shadow: 0 8px 20px rgba(212, 169, 57, 0.50);
+  transform: translateY(-1px);
+}
+
+.goldButton:hover .sapMBtnContent,
+.goldButton:hover .sapMBtnIcon {
+  color: #1e1b4b !important;
+}
+
+/* =========================================
+   TRANSLUCENT BUTTON - DEFAULT STATE
+   ========================================= */
+.translucentButton span.sapMBtnInner.sapMBtnEmphasized {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-image: none !important;
+
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 8px 24px rgba(10, 15, 70, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+/* =========================================
+   HOVER STATE
+   ========================================= */
+.translucentButton:hover span.sapMBtnInner.sapMBtnEmphasized {
+  background-color: rgba(255, 255, 255, 0.14) !important;
+  background-image: none !important;
+
+  border-color: rgba(255, 255, 255, 0.45) !important;
+
+  box-shadow:
+    0 10px 28px rgba(10, 15, 70, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  transform: translateY(-1px);
+}
+
+.translucentButton:hover .sapMBtnContent,
+.translucentButton:hover .sapMBtnIcon {
+  color: #ffffff !important;
+}
+
+.actionTile.sapMGT {
+  width: 18rem !important;
+  height: 9rem !important;
+  background-color: white !important;
+}
+
+.actionTile .sapMGTContent {
+  height: 4rem !important;
 }

@@ -18,6 +18,7 @@ const requests_Before_Update_Logic = require("./code/requests-before-update-logi
 const post_To_S4_Logic = require("./code/post-to-s4-logic");
 const requests_Drafts_After_Read_Logic = require("./code/requests-drafts-after-read-logic");
 const recent_Requests_Read_Logic = require("./code/recent-requests-read-logic");
+const user_Details_Read_Logic = require("./code/user-details-read-logic");
 
 class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
   async init() {
@@ -79,6 +80,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("READ", "RecentRequests", async (request) => {
       return await recent_Requests_Read_Logic(request);
+    });
+
+    this.on("READ", "UserDetails", async (request) => {
+      return await user_Details_Read_Logic(request);
     });
 
     return super.init();

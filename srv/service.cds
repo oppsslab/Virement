@@ -83,7 +83,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         }
     ])
     @odata.draft.enabled
-    entity Requests       as
+    entity Requests             as
         projection on my.Requests {
             *,
             virtual hideApprovalBtn : Boolean,
@@ -106,10 +106,10 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             action downloadItemsTemplate()           returns TemplateFile;
         };
 
-    entity RequestItems   as projection on my.RequestItems;
+    entity RequestItems         as projection on my.RequestItems;
 
     @readonly
-    entity RequestHistory as projection on my.RequestHistory;
+    entity RequestHistory       as projection on my.RequestHistory;
 
     type TemplateFile {
         fileName : String;
@@ -138,9 +138,24 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
     @readonly
     @cds.persistence.skip
     entity RecentRequests {
-        key ID               : UUID;
-            requestNumber    : String;
-            requestType : String;
-            status      : String;
+        key ID            : UUID;
+            requestNumber : String;
+            requestType   : String;
+            status        : String;
+    }
+
+    @readonly
+    @cds.redirection.target: false
+    entity PendingApprovalCount as
+        select from my.Requests {
+            key count( * ) as pendingCount : Integer
+        }
+        where
+            status.code = 2;
+
+    @readonly
+    entity UserDetails {
+        key emailAddress : String(255);
+            fullName     : String(200);
     }
 }

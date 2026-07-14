@@ -2,7 +2,7 @@ sap.ui.define(["sap/fe/core/PageController"], function (PageController) {
   "use strict";
 
   const ROUTE_CREATE_REQUEST = "RequestsCreate";
-  const ROUTE_VIEW_REQUESTS = "RequestsView";
+  const ROUTE_VIEW_REQUESTS = "VirementRequests";
 
   const CREATE_FLOW_ACTIVE_FLAG = "virement.zuippsvirement.createFlowActive";
 
@@ -12,8 +12,8 @@ sap.ui.define(["sap/fe/core/PageController"], function (PageController) {
       /**
        * Called when the RequestsCreate controller is initialized.
        *
-       * This controller acts only as a launcher route for the standard
-       * Fiori Elements create flow.
+       * This page acts as a launcher for the standard
+       * Fiori elements create flow.
        *
        * @returns {void}
        */
@@ -23,6 +23,7 @@ sap.ui.define(["sap/fe/core/PageController"], function (PageController) {
         this._bCreateStarted = false;
 
         this._oRouter = this.getAppComponent().getRouter();
+
         this._oCreateRoute = this._oRouter.getRoute(ROUTE_CREATE_REQUEST);
 
         if (this._oCreateRoute) {
@@ -38,6 +39,7 @@ sap.ui.define(["sap/fe/core/PageController"], function (PageController) {
       onExit: function () {
         if (this._oCreateRoute) {
           this._oCreateRoute.detachPatternMatched(this._onCreateMatched, this);
+
           this._oCreateRoute = null;
         }
 
@@ -46,11 +48,11 @@ sap.ui.define(["sap/fe/core/PageController"], function (PageController) {
       },
 
       /**
-       * Handles the RequestsCreate route match.
+       * Starts the create flow when RequestsCreate is matched.
        *
-       * Important:
-       * The RequestsCreate route is a launcher route only.
-       * It should not stay in the browser history.
+       * Do not navigate to the list page first. Let the Fiori
+       * elements edit flow create the draft and navigate to the
+       * configured Object Page.
        *
        * @returns {void}
        */
@@ -60,94 +62,68 @@ sap.ui.define(["sap/fe/core/PageController"], function (PageController) {
         }
 
         this._bCreateStarted = true;
-
-        /*
-         * Mark create flow active before replacing route.
-         * Main.controller uses this to keep Create Request selected.
-         */
         this._markCreateFlowActive();
 
-        /*
-         * Replace RequestsCreate with RequestsView in history.
-         *
-         * Then createDocument opens the draft Object Page.
-         * After Cancel / Discard Draft, FE should naturally return to RequestsView.
-         */
-        this._oRouter.navTo(
-          ROUTE_VIEW_REQUESTS,
-          {
-            query: {
-              createLauncherTs: Date.now().toString(),
-            },
-          },
-          true,
-        );
-
-        setTimeout(
-          function () {
-            this._startCreateFlow();
-          }.bind(this),
-          300,
-        );
+        this._startCreateFlow();
       },
 
       /**
-       * Starts the standard Fiori Elements create flow.
+       * Starts the standard Fiori elements create flow.
        *
-       * @returns {void}
+       * @returns {Promise<void>}
        */
-      _startCreateFlow: function () {
+      _startCreateFlow: async function () {
         const oModel = this.getAppComponent().getModel();
 
         if (!oModel) {
-          this._bCreateStarted = false;
-          this._navigateToViewRequests();
-          return;
-        }
+          console.error("The default OData model is unavailable.");
 
-        const oListBinding = oModel.bindList("/Requests");
-
-        try {
-          const vCreateResult = this.editFlow.createDocument(oListBinding, {
-            creationMode: "NewPage",
-          });
-
-          Promise.resolve(vCreateResult)
-            .catch(
-              function () {
-                this._clearCreateFlowActive();
-                this._navigateToViewRequests();
-              }.bind(this),
-            )
-            .finally(
-              function () {
-                this._bCreateStarted = false;
-              }.bind(this),
-            );
-        } catch (oError) {
           this._bCreateStarted = false;
           this._clearCreateFlowActive();
           this._navigateToViewRequests();
+
+          return;
+        }
+
+        try {
+          const oListBinding = oModel.bindList("/Requests");
+
+          await this.editFlow.createDocument(oListBinding, {
+            creationMode: "NewPage",
+          });
+        } catch (oError) {
+          console.error("Failed to start the request create flow:", oError);
+
+          this._clearCreateFlowActive();
+          this._navigateToViewRequests();
+        } finally {
+          this._bCreateStarted = false;
         }
       },
 
       /**
-       * Navigates to View Requests.
+       * Navigates to View Requests after create-flow startup
+       * failure.
+       *
+       * This method is not called while Fiori elements is
+       * cancelling or deleting an existing draft.
        *
        * @returns {void}
        */
       _navigateToViewRequests: function () {
-        this.getAppComponent()
-          .getRouter()
-          .navTo(
-            ROUTE_VIEW_REQUESTS,
-            {
-              query: {
-                refreshTs: Date.now().toString(),
-              },
+        if (!this._oRouter) {
+          return;
+        }
+
+        this._oRouter.navTo(
+          ROUTE_VIEW_REQUESTS,
+          {
+            query: {
+              refreshTs: Date.now().toString(),
             },
-            true,
-          );
+          },
+          true,
+        );
       },
 
       /**

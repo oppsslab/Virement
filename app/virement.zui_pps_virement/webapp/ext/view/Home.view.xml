@@ -2,105 +2,67 @@
     xmlns="sap.m"
     xmlns:l="sap.ui.layout"
     xmlns:f="sap.f"
-    xmlns:card="sap.f.cards" controllerName="virement.zuippsvirement.ext.view.Home">
-    <Page id="homePage" showHeader="false" enableScrolling="true" class="homePage">
-        <l:BlockLayout>
-            <l:BlockLayoutRow>
-                <l:BlockLayoutCell class="blockCellCarousel">
-                    <Carousel id="carouselOverview" loop="true" arrowsPlacement="PageIndicator" backgroundDesign="Transparent" pageIndicatorBackgroundDesign="Transparent">
-                        <HBox class="titleBanner">
-                            <VBox width="80%" alignItems="Start" justifyContent="Center">
-                                <FlexBox alignItems="Start" justifyContent="Start" class="sapUiMediumMargin" direction="Column">
+    xmlns:card="sap.f.cards" controllerName="virement.zuippsvirement.ext.view.Home"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">
+    <f:DynamicPage id="dynamicPageId" headerExpanded="true" class="epfCustomBackground dynamicPagePadding" busy="{DashboardModel>/isLoading}">
+        <!-- DynamicPage Title -->
+        <f:title>
+            <f:DynamicPageTitle backgroundDesign="Transparent" class="sapUiLargeMarginTop dynamicPageText">
+                <f:heading>
+                    <Title text="{= 'Welcome, ' + ${DashboardModel>/fullName} }"/>
+                </f:heading>
+                <f:expandedContent>
+                    <Title text="{= ${DashboardModel>/pendingCount} === 1 ? '1 approval needs your review today.' : ${DashboardModel>/pendingCount} + ' approvals need your review today.'}" />
+                </f:expandedContent>
+                <f:snappedContent>
+                    <Title text="{= ${dashboard>/pendingCount} + ' approvals need your review today.' }"/>
+                </f:snappedContent>
+                <f:snappedTitleOnMobile>
+                    <Title text="{= ${dashboard>/pendingCount} + ' approvals need your review today.' }"/>
+                </f:snappedTitleOnMobile>
+                <f:content>
 
-                                    <Title class="titleBannerFontSize" text="Virement Request" />
+                </f:content>
+                <f:actions>
 
-                                    <Text text="Manage budget transfer requests efficiently by creating, reviewing, tracking, and approving virement requests in one centralized workspace." />
-                                </FlexBox>
-                            </VBox>
-                        </HBox>
-                        <HBox class="titleBanner">
-                            <VBox width="80%" alignItems="Start" justifyContent="Center">
-                                <FlexBox alignItems="Start" justifyContent="Start" class="sapUiMediumMargin" direction="Column">
-                                    <Title class="titleBannerFontSize" text="Key Features" />
-                                    <Text text="Create new virement requests, maintain request details, upload supporting attachments, review request history, and monitor the latest request status." />
-                                </FlexBox>
-                            </VBox>
-                        </HBox>
-                        <HBox class="titleBanner">
-                            <VBox width="80%" alignItems="Start" justifyContent="Center">
-                                <FlexBox alignItems="Start" justifyContent="Start" class="sapUiMediumMargin" direction="Column">
-                                    <Title class="titleBannerFontSize" text="How It Works" />
-                                    <Text text="Start by creating a virement request, complete the required information, attach supporting documents if needed, submit the request, and track its progress through the approval process." />
-                                </FlexBox>
-                            </VBox>
-                        </HBox>
-                        <HBox class="titleBanner">
-                            <VBox width="80%" alignItems="Start" justifyContent="Center">
-                                <FlexBox alignItems="Start" justifyContent="Start" class="sapUiMediumMargin" direction="Column">
-                                    <Title class="titleBannerFontSize" text="Benefits" />
-                                    <Text text="Improve request visibility, reduce manual follow-ups, support approval tracking, and keep budget transfer activities organized and transparent." />
-                                </FlexBox>
-                            </VBox>
-                        </HBox>
-                    </Carousel>
-                </l:BlockLayoutCell>
-            </l:BlockLayoutRow>
-            <l:BlockLayoutRow class="sapUiSmallMargin">
-                <l:BlockLayoutCell title="Recent Activity" class="detailsCellImageBackground cellRadius sapUiSmallMarginEnd">
-                    <f:Card class="sapUiTinyMarginTop">
-                        <f:header>
-                            <card:Header title="Virement Requests" subtitle="Recently updated requests" />
-                        </f:header>
-                        <f:content>
-                            <List id="recentRequestsList" class="sapUiSmallMarginBottom" showSeparators="None" items="{/RecentRequests}">
-                                <!-- <CustomListItem>
-                                    <HBox alignItems="Center" justifyContent="SpaceBetween">
-                                        <VBox class="sapUiSmallMarginBegin sapUiSmallMarginTopBottom">
-                                            <Title level="H6" text="{requestType}" />
-                                            <Text text="Request No. {requestNumber}" />
-                                        </VBox>
-                                        <ObjectStatus class="sapUiSmallMarginTop sapUiTinyMarginEnd" text="{status}" state="{
-                                                path: 'status',
-                                                formatter: '.formatter.statusState'
-                                            }" />
-                                    </HBox>
-                                </CustomListItem> -->
-                                <ObjectListItem title="{requestType}">
-                                    <firstStatus>
-                                        <ObjectStatus text="{status}" state="{
-											path: 'status',
-											formatter: '.formatter.statusState'
-										}" />
-                                    </firstStatus>
-                                    <ObjectAttribute text="{requestNumber}" />
-                                </ObjectListItem>
-                            </List>
-                        </f:content>
-                    </f:Card>
-                </l:BlockLayoutCell>
-                <l:BlockLayoutCell title="Request Overview" class="detailsCellImageBackground blockCellContentNoBackground cellRadius">
-                    <GenericTile class="sapUiTinyMarginBeginEnd sapUiTinyMarginTop" header="Open Requests" frameType="OneByHalf" press=".onOpenRequestsPress">
+                </f:actions>
+                <f:navigationActions>
+
+                </f:navigationActions>
+            </f:DynamicPageTitle>
+        </f:title>
+        <!-- DynamicPage Header -->
+        <f:header>
+            <f:DynamicPageHeader pinnable="false" backgroundDesign="Transparent" class="dynamicPageHeader">
+                <Button type="Emphasized" text="Create Virement Request" press=".onNavigate" app:route="RequestsCreate" icon="sap-icon://add" class="buttonHeight sapUiSmallMarginBottom goldButton"/>
+                <Button type="Emphasized" text="Review Pending Approvals" press=".onPress" icon="sap-icon://arrow-right" class="buttonHeight sapUiSmallMarginBottom sapUiSmallMarginBegin translucentButton" iconFirst="false"/>
+            </f:DynamicPageHeader>
+        </f:header>
+        <f:content>
+            <l:VerticalLayout width="100%" class="gridWrapper">
+                <l:Grid containerQuery="true">
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/addIcon}" frameType="TwoByOne" press=".onNavigate" app:route="RequestsCreate">
                         <TileContent>
-                            <NumericContent value="20" icon="sap-icon://request" />
+                            <NewsContent contentText="Create Request" subheader="Start a new virement document" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile class="sapUiTinyMarginBeginEnd sapUiTinyMarginTop" header="Pending Approvals" frameType="OneByHalf" press=".onPendingApprovalsPress">
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/approvalIcon}" frameType="TwoByOne" press=".onPress">
                         <TileContent>
-                            <NumericContent value="10" valueColor="Critical" icon="sap-icon://approvals" />
+                            <NewsContent contentText="Pending Approvals" subheader="Review and take action" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile class="sapUiTinyMarginBeginEnd sapUiTinyMarginTop" header="Draft Requests" frameType="OneByHalf" press=".onDraftRequestsPress">
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/viewRequestIcon}" frameType="TwoByOne" press=".onNavigate" app:route="VirementRequests">
                         <TileContent>
-                            <NumericContent value="2" valueColor="Neutral" icon="sap-icon://documents" />
+                            <NewsContent contentText="View All Requests" subheader="Track Status and history" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile class="sapUiTinyMarginBeginEnd sapUiTinyMarginTop" header="Returned Requests" frameType="OneByHalf" press=".onReturnedRequestsPress">
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/reportIcon}" frameType="TwoByOne" press=".onPress">
                         <TileContent>
-                            <NumericContent value="4" valueColor="Error" icon="sap-icon://message-warning" />
+                            <NewsContent contentText="Reports" subheader="Monitor budget movements" />
                         </TileContent>
                     </GenericTile>
-                </l:BlockLayoutCell>
-            </l:BlockLayoutRow>
-        </l:BlockLayout>
-    </Page>
+                </l:Grid>
+            </l:VerticalLayout>
+        </f:content>
+    </f:DynamicPage>
 </mvc:View>

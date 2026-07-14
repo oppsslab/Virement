@@ -3,27 +3,28 @@
     xmlns="sap.m"
     xmlns:tnt="sap.tnt" controllerName="virement.zuippsvirement.ext.view.Main" height="90%">
     <tnt:ToolPage id="toolPage">
-        <tnt:header>
+        <!-- <tnt:header>
             <tnt:ToolHeader>
-                <Button id="sideNavigationToggleButton" icon="sap-icon://menu2" type="Transparent" press=".onSideNavButtonPress">
-                    <layoutData>
-                        <OverflowToolbarLayoutData priority="NeverOverflow" />
-                    </layoutData>
-                </Button>
                 <ToolbarSpacer />
-                <Title level="H1" text="{MenuModel>/pageTitle}" wrapping="false" />
+                <VBox alignItems="Center">
+                    <Title level="H1" text="{i18n>appTitle}" wrapping="false" class="sapUiTinyMarginTop"/>
+                    <Text text="{i18n>appDescription}" wrapping="false" />
+                </VBox>
                 <ToolbarSpacer />
             </tnt:ToolHeader>
-        </tnt:header>
-        <tnt:sideContent>
-            <tnt:SideNavigation id="sideNavigation" expanded="true" selectedKey="{MenuModel>/selectedKey}" itemSelect=".onItemSelect" class="sideNavigationBackground">
-                <tnt:NavigationList items="{MenuModel>/navigation}">
-                    <tnt:NavigationListItem text="{path: 'MenuModel>titleI18nKey', formatter: '.getBundleText'}" icon="{MenuModel>icon}" key="{MenuModel>key}" expanded="{MenuModel>expanded}" items="{MenuModel>items}">
-                        <tnt:NavigationListItem text="{path: 'MenuModel>titleI18nKey', formatter: '.getBundleText'}" key="{MenuModel>key}" enabled="{MenuModel>enabled}" />
-                    </tnt:NavigationListItem>
-                </tnt:NavigationList>
-            </tnt:SideNavigation>
-        </tnt:sideContent>
+        </tnt:header> -->
+        <tnt:subHeader>
+            <tnt:ToolHeader class="epfCustomBackground">
+                <IconTabHeader id="ithMenu" selectedKey="{MenuModel>/selectedKey}" items="{MenuModel>/navigation}" select=".onItemSelect" mode="Inline" backgroundDesign="Transparent" class="headerIconTabBar">
+                    <layoutData>
+                        <OverflowToolbarLayoutData priority="NeverOverflow" shrinkable="true" />
+                    </layoutData>
+                    <items>
+                        <IconTabFilter text="{path: 'MenuModel>titleI18nKey', formatter: '.getBundleText'}" key="{MenuModel>key}" visible="{MenuModel>visible}"/>
+                    </items>
+                </IconTabHeader>
+            </tnt:ToolHeader>
+        </tnt:subHeader>
         <tnt:mainContents>
             <App id="appContent" />
         </tnt:mainContents>

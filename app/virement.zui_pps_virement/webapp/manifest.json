@@ -5,7 +5,7 @@
     "type": "application",
     "i18n": "i18n/i18n.properties",
     "applicationVersion": {
-      "version": "0.0.2"
+      "version": "0.0.71"
     },
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
@@ -114,9 +114,9 @@
       },
       "routes": [
         {
-          "name": "RequestsMain",
+          "name": "Home",
           "pattern": ":?query:",
-          "target": "RequestsMain"
+          "target": "Home"
         },
         {
           "name": "RequestsObjectPage",
@@ -124,9 +124,9 @@
           "target": "RequestsObjectPage"
         },
         {
-          "name": "RequestsView",
-          "pattern": "RequestsView:?query:",
-          "target": "RequestsView"
+          "name": "VirementRequests",
+          "pattern": "VirementRequests:?query:",
+          "target": "VirementRequests"
         },
         {
           "name": "RequestsCreate",
@@ -135,9 +135,9 @@
         }
       ],
       "targets": {
-        "RequestsMain": {
+        "Home": {
           "type": "Component",
-          "id": "RequestsMain",
+          "id": "Home",
           "name": "sap.fe.core.fpm",
           "options": {
             "settings": {
@@ -324,9 +324,9 @@
             }
           }
         },
-        "RequestsView": {
+        "VirementRequests": {
           "type": "Component",
-          "id": "RequestsView",
+          "id": "VirementRequests",
           "name": "sap.fe.templates.ListReport",
           "options": {
             "settings": {
@@ -358,7 +358,14 @@
           "options": {
             "settings": {
               "viewName": "virement.zuippsvirement.ext.view.RequestsCreate",
-              "contextPath": "/Requests"
+              "contextPath": "/Requests",
+              "navigation": {
+                "Requests": {
+                  "detail": {
+                    "route": "RequestsObjectPage"
+                  }
+                }
+              }
             }
           }
         }

@@ -1,0 +1,106 @@
+<mvc:View xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:l="sap.ui.layout"
+    xmlns:f="sap.f"
+    xmlns:card="sap.f.cards" controllerName="virement.zuippsvirement.ext.view.Home">
+    <Page id="homePage" showHeader="false" enableScrolling="true" class="homePage">
+        <l:BlockLayout>
+            <l:BlockLayoutRow>
+                <l:BlockLayoutCell class="blockCellCarousel">
+                    <Carousel id="carouselOverview" loop="true" arrowsPlacement="PageIndicator" backgroundDesign="Transparent" pageIndicatorBackgroundDesign="Transparent">
+                        <HBox class="titleBanner">
+                            <VBox width="80%" alignItems="Start" justifyContent="Center">
+                                <FlexBox alignItems="Start" justifyContent="Start" class="sapUiMediumMargin" direction="Column">
+
+                                    <Title class="titleBannerFontSize" text="Virement Request" />
+
+                                    <Text text="Manage budget transfer requests efficiently by creating, reviewing, tracking, and approving virement requests in one centralized workspace." />
+                                </FlexBox>
+                            </VBox>
+                        </HBox>
+                        <HBox class="titleBanner">
+                            <VBox width="80%" alignItems="Start" justifyContent="Center">
+                                <FlexBox alignItems="Start" justifyContent="Start" class="sapUiMediumMargin" direction="Column">
+                                    <Title class="titleBannerFontSize" text="Key Features" />
+                                    <Text text="Create new virement requests, maintain request details, upload supporting attachments, review request history, and monitor the latest request status." />
+                                </FlexBox>
+                            </VBox>
+                        </HBox>
+                        <HBox class="titleBanner">
+                            <VBox width="80%" alignItems="Start" justifyContent="Center">
+                                <FlexBox alignItems="Start" justifyContent="Start" class="sapUiMediumMargin" direction="Column">
+                                    <Title class="titleBannerFontSize" text="How It Works" />
+                                    <Text text="Start by creating a virement request, complete the required information, attach supporting documents if needed, submit the request, and track its progress through the approval process." />
+                                </FlexBox>
+                            </VBox>
+                        </HBox>
+                        <HBox class="titleBanner">
+                            <VBox width="80%" alignItems="Start" justifyContent="Center">
+                                <FlexBox alignItems="Start" justifyContent="Start" class="sapUiMediumMargin" direction="Column">
+                                    <Title class="titleBannerFontSize" text="Benefits" />
+                                    <Text text="Improve request visibility, reduce manual follow-ups, support approval tracking, and keep budget transfer activities organized and transparent." />
+                                </FlexBox>
+                            </VBox>
+                        </HBox>
+                    </Carousel>
+                </l:BlockLayoutCell>
+            </l:BlockLayoutRow>
+            <l:BlockLayoutRow class="sapUiSmallMargin">
+                <l:BlockLayoutCell title="Recent Activity" class="detailsCellImageBackground cellRadius sapUiSmallMarginEnd">
+                    <f:Card class="sapUiTinyMarginTop">
+                        <f:header>
+                            <card:Header title="Virement Requests" subtitle="Recently updated requests" />
+                        </f:header>
+                        <f:content>
+                            <List id="recentRequestsList" class="sapUiSmallMarginBottom" showSeparators="None" items="{/RecentRequests}">
+                                <!-- <CustomListItem>
+                                    <HBox alignItems="Center" justifyContent="SpaceBetween">
+                                        <VBox class="sapUiSmallMarginBegin sapUiSmallMarginTopBottom">
+                                            <Title level="H6" text="{requestType}" />
+                                            <Text text="Request No. {requestNumber}" />
+                                        </VBox>
+                                        <ObjectStatus class="sapUiSmallMarginTop sapUiTinyMarginEnd" text="{status}" state="{
+                                                path: 'status',
+                                                formatter: '.formatter.statusState'
+                                            }" />
+                                    </HBox>
+                                </CustomListItem> -->
+                                <ObjectListItem title="{requestType}">
+                                    <firstStatus>
+                                        <ObjectStatus text="{status}" state="{
+											path: 'status',
+											formatter: '.formatter.statusState'
+										}" />
+                                    </firstStatus>
+                                    <ObjectAttribute text="{requestNumber}" />
+                                </ObjectListItem>
+                            </List>
+                        </f:content>
+                    </f:Card>
+                </l:BlockLayoutCell>
+                <l:BlockLayoutCell title="Request Overview" class="detailsCellImageBackground blockCellContentNoBackground cellRadius">
+                    <GenericTile class="sapUiTinyMarginBeginEnd sapUiTinyMarginTop" header="Open Requests" frameType="OneByHalf" press=".onOpenRequestsPress">
+                        <TileContent>
+                            <NumericContent value="20" icon="sap-icon://request" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBeginEnd sapUiTinyMarginTop" header="Pending Approvals" frameType="OneByHalf" press=".onPendingApprovalsPress">
+                        <TileContent>
+                            <NumericContent value="10" valueColor="Critical" icon="sap-icon://approvals" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBeginEnd sapUiTinyMarginTop" header="Draft Requests" frameType="OneByHalf" press=".onDraftRequestsPress">
+                        <TileContent>
+                            <NumericContent value="2" valueColor="Neutral" icon="sap-icon://documents" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBeginEnd sapUiTinyMarginTop" header="Returned Requests" frameType="OneByHalf" press=".onReturnedRequestsPress">
+                        <TileContent>
+                            <NumericContent value="4" valueColor="Error" icon="sap-icon://message-warning" />
+                        </TileContent>
+                    </GenericTile>
+                </l:BlockLayoutCell>
+            </l:BlockLayoutRow>
+        </l:BlockLayout>
+    </Page>
+</mvc:View>
