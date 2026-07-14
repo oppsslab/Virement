@@ -76,10 +76,19 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         {
             grant: [
                 'approveRequest',
-                'rejectRequest'
+                'rejectRequest',
+                'postToS4'
             ],
             to   : 'REQUEST_APPROVE',
             where: 'status_code = 2 and approvedBy = $user'
+        },
+
+        {
+            grant: [
+                'postToS4'
+            ],
+            to   : 'REQUEST_APPROVE',
+            where: 'status_code = 2'
         }
     ])
     @odata.draft.enabled
@@ -101,6 +110,9 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
                                  @title: 'Reason'
                                  comment: String)    returns Requests;
 
+            @requires: ['REQUEST_APPROVE']
+            action postToS4()                        returns S4PostingResult;
+
             action uploadItems(content: LargeString) returns Requests;
 
             action downloadItemsTemplate()           returns TemplateFile;
@@ -117,23 +129,31 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         mimeType : String;
     }
 
-    action postToS4(requestId: UUID, // ID of the Request to post
-                    testMode: String // optional: 'X' = simulate, '' = actual post
-    ) returns {
-        success  : Boolean; // true if no errors
-        messages : array of {
-            type    : String; // E, W, I, S, A
-            id      : String;
-            number  : String;
-            message : String;
-        };
-        errors   : array of {
-            type    : String;
-            id      : String;
-            number  : String;
-            message : String;
-        };
-    };
+    type S4Message {
+        type      : String(1);
+        id        : String(20);
+        number    : String(10);
+        message   : String(500);
+        messageV1 : String(100);
+        messageV2 : String(100);
+        messageV3 : String(100);
+        messageV4 : String(100);
+        parameter : String(100);
+        row       : String(10);
+        field     : String(100);
+    }
+
+    type S4PostingResult {
+        success        : Boolean;
+        simulated      : Boolean;
+        requestId      : UUID;
+        documentNumber : String(20);
+        statusCode     : Integer;
+        postingDate    : Date;
+        postingPeriod  : Integer;
+        messages       : many S4Message;
+        errors         : many S4Message;
+    }
 
     @readonly
     @cds.persistence.skip

@@ -221,7 +221,12 @@ annotate service.Requests with @(
                     false
                 ]}
             ]}}
-        }
+        },
+        {
+            $Type : 'UI.DataFieldForAction',
+            Action : 'ZSVC_PPS_VIREMENT.postToS4',
+            Label : 'Post to S4',
+        },
     ]
 );
 

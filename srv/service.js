@@ -70,7 +70,7 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
       await requests_Before_Update_Logic(request);
     });
 
-    this.on("postToS4", async (request) => {
+    this.on("postToS4", "Requests", async (request) => {
       return post_To_S4_Logic(request);
     });
 

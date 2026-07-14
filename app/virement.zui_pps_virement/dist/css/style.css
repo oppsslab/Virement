@@ -1,10 +1,22 @@
+/* =========================================
+   OBJECT PAGE - REMOVE HEADER TOOLBAR
+   ========================================= */
+
 .removeHeaderBar .sapMTB {
   height: 0rem !important;
 }
 
+/* =========================================
+   OBJECT PAGE - SECTION HEADER SPACING
+   ========================================= */
+
 .objectPageSectionHeader {
   margin-top: 0rem !important;
 }
+
+/* =========================================
+   BUTTON - STANDARD HEIGHT
+   ========================================= */
 
 .buttonHeight .sapMBtnInner {
   height: 2.5rem;
@@ -12,23 +24,48 @@
   padding: 1rem !important;
 }
 
+/* =========================================
+   DYNAMIC PAGE - TOP PADDING
+   ========================================= */
+
 .dynamicPagePadding {
   padding-top: 3rem !important;
 }
+
+/* =========================================
+   DYNAMIC PAGE - HEADER SPACING
+   ========================================= */
 
 .dynamicPageHeader {
   padding-bottom: 2rem !important;
 }
 
+/* =========================================
+   DYNAMIC PAGE - HEADER TEXT
+   ========================================= */
+
 .dynamicPageText .sapMTitle {
-  color: white;
+  color: #ffffff;
   font-size: 2rem;
 }
 
-.dynamicPageText .sapFDynamicPageTitleMain>.sapFDynamicPageTitleMainInner .sapFDynamicPageTitleMainHeading .sapFDynamicPageTitleMainHeadingInner .sapMTitle:not(.sapUICompVarMngmtTitle) {
-  font-size: 3rem;
+/* =========================================
+   DYNAMIC PAGE - MAIN TITLE
+   ========================================= */
+
+.dynamicPageText
+  .sapFDynamicPageTitleMain
+  > .sapFDynamicPageTitleMainInner
+  .sapFDynamicPageTitleMainHeading
+  .sapFDynamicPageTitleMainHeadingInner
+  .sapMTitle:not(.sapUICompVarMngmtTitle) {
   color: #d4a939 !important;
+  font-size: 3rem;
 }
+
+/* =========================================
+   DYNAMIC PAGE - CUSTOM BACKGROUND
+   ========================================= */
 
 .epfCustomBackground {
   --indigo-light: #5459bd;
@@ -37,46 +74,46 @@
 
   position: relative;
   overflow: hidden;
-
-  /* Fallback */
   background-color: var(--indigo-deep);
 
   background-image:
-    /* Soft highlight across the top */
-    radial-gradient(1200px 220px at 50% 0%,
+    radial-gradient(
+      1200px 220px at 50% 0%,
       rgba(124, 132, 235, 0.28) 0%,
-      rgba(124, 132, 235, 0.10) 45%,
-      transparent 75%),
-
-    /* Subtle gold glow behind the buttons */
-    radial-gradient(500px 220px at 12% 100%,
+      rgba(124, 132, 235, 0.1) 45%,
+      transparent 75%
+    ),
+    radial-gradient(
+      500px 220px at 12% 100%,
       rgba(212, 169, 57, 0.16) 0%,
       rgba(212, 169, 57, 0.06) 45%,
-      transparent 75%),
-
-    /* Main vertical gradient */
-    linear-gradient(180deg,
+      transparent 75%
+    ),
+    linear-gradient(
+      180deg,
       var(--indigo-light) 0%,
       var(--indigo-mid) 45%,
-      var(--indigo-deep) 100%);
+      var(--indigo-deep) 100%
+    );
 
   background-repeat: no-repeat;
   background-size: 100% 100%;
 }
 
 /* =========================================
-   DEFAULT STATE
+   GOLD BUTTON - DEFAULT STATE
    ========================================= */
+
 .goldButton span.sapMBtnInner.sapMBtnEmphasized {
   background-color: #d4a939 !important;
-  background-image: linear-gradient(135deg,
-      #d4a939 0%,
-      #b88a1e 100%) !important;
-
+  background-image: linear-gradient(
+    135deg,
+    #d4a939 0%,
+    #b88a1e 100%
+  ) !important;
   border: 1px solid #b88a1e !important;
   color: #1e1b4b !important;
   box-shadow: 0 6px 16px rgba(212, 169, 57, 0.35);
-
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease,
@@ -85,24 +122,27 @@
 }
 
 /* =========================================
-   BUTTON TEXT AND ICON
+   GOLD BUTTON - TEXT AND ICON
    ========================================= */
+
 .goldButton .sapMBtnContent,
 .goldButton .sapMBtnIcon {
   color: #1e1b4b !important;
 }
 
 /* =========================================
-   HOVER STATE
+   GOLD BUTTON - HOVER STATE
    ========================================= */
+
 .goldButton:hover span.sapMBtnInner.sapMBtnEmphasized {
   background-color: #e3bd55 !important;
-  background-image: linear-gradient(135deg,
-      #e3bd55 0%,
-      #c99a26 100%) !important;
-
+  background-image: linear-gradient(
+    135deg,
+    #e3bd55 0%,
+    #c99a26 100%
+  ) !important;
   border-color: #c99a26 !important;
-  box-shadow: 0 8px 20px rgba(212, 169, 57, 0.50);
+  box-shadow: 0 8px 20px rgba(212, 169, 57, 0.5);
   transform: translateY(-1px);
 }
 
@@ -114,16 +154,15 @@
 /* =========================================
    TRANSLUCENT BUTTON - DEFAULT STATE
    ========================================= */
+
 .translucentButton span.sapMBtnInner.sapMBtnEmphasized {
   background-color: rgba(255, 255, 255, 0.08) !important;
   background-image: none !important;
-
   border: 1px solid rgba(255, 255, 255, 0.28) !important;
   color: #ffffff !important;
   box-shadow:
-    0 8px 24px rgba(10, 15, 70, 0.20),
+    0 8px 24px rgba(10, 15, 70, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
-
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
@@ -132,18 +171,25 @@
 }
 
 /* =========================================
-   HOVER STATE
+   TRANSLUCENT BUTTON - TEXT AND ICON
    ========================================= */
+
+.translucentButton .sapMBtnContent,
+.translucentButton .sapMBtnIcon {
+  color: #ffffff !important;
+}
+
+/* =========================================
+   TRANSLUCENT BUTTON - HOVER STATE
+   ========================================= */
+
 .translucentButton:hover span.sapMBtnInner.sapMBtnEmphasized {
   background-color: rgba(255, 255, 255, 0.14) !important;
   background-image: none !important;
-
   border-color: rgba(255, 255, 255, 0.45) !important;
-
   box-shadow:
     0 10px 28px rgba(10, 15, 70, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-
   transform: translateY(-1px);
 }
 
@@ -152,12 +198,111 @@
   color: #ffffff !important;
 }
 
+/* =========================================
+   ACTION TILE - SIZE AND BACKGROUND
+   ========================================= */
+
 .actionTile.sapMGT {
   width: 18rem !important;
   height: 9rem !important;
-  background-color: white !important;
+  background-color: #ffffff !important;
 }
+
+/* =========================================
+   ACTION TILE - CONTENT HEIGHT
+   ========================================= */
 
 .actionTile .sapMGTContent {
   height: 4rem !important;
+}
+
+/* =========================================
+   ICON TAB BAR - INACTIVE TEXT
+   ========================================= */
+
+.headerIconTabBar .sapMITBText {
+  color: #d8daf2 !important;
+  font-weight: 500;
+}
+
+/* =========================================
+   ICON TAB BAR - ACTIVE TEXT
+   ========================================= */
+
+.headerIconTabBar .sapMITBSelected .sapMITBText {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+/* =========================================
+   ICON TAB BAR - HOVER HIGHLIGHT
+   ========================================= */
+
+.headerIconTabBar .sapMITBFilter:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 0.35rem;
+}
+
+.headerIconTabBar .sapMITBFilter:hover .sapMITBText {
+  color: #ffffff !important;
+}
+
+/* =========================================
+   ICON TAB BAR - ACTIVE INDICATOR
+   ========================================= */
+
+.headerIconTabBar .sapMITBSelected .sapMITBContentArrow::after {
+  background-color: #d4a939 !important;
+  border-color: #d4a939 !important;
+}
+
+/* =========================================
+   ICON TAB BAR - REMOVE BLUE FOCUS BORDER
+   ========================================= */
+
+.headerIconTabBar .sapMITBText::after {
+  border: none !important;
+}
+
+/* =========================================
+   ICON TAB BAR - REMOVE INNER FOCUS BORDER
+   ========================================= */
+
+.headerIconTabBar .sapMITBFilter:focus .sapMITBText,
+.headerIconTabBar .sapMITBFilter:focus-visible .sapMITBText,
+.headerIconTabBar .sapMITBFilter:focus-within .sapMITBText {
+  color: #ffffff !important;
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* =========================================
+   ICON TAB BAR - TRANSLUCENT FOCUS STATE
+   ========================================= */
+
+.headerIconTabBar .sapMITBFilter:focus,
+.headerIconTabBar .sapMITBFilter:focus-visible,
+.headerIconTabBar .sapMITBFilter:focus-within {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  border-radius: 0.35rem;
+}
+
+/* =========================================
+   ICON TAB BAR - DISABLED TEXT
+   ========================================= */
+
+.headerIconTabBar .sapMITBDisabled .sapMITBText {
+  color: rgba(216, 218, 242, 0.45) !important;
+}
+
+/* =========================================
+   ICON TAB BAR - Child
+   ========================================= */
+.headerIconTabBar .sapMITBFilter:first-child {
+  padding-left: 1rem !important;
+}
+
+.headerIconTabBar .sapMITBFilter:last-child {
+  padding-right: 1rem !important;
 }

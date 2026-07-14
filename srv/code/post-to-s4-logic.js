@@ -1,30 +1,34 @@
+"use strict";
+
 const cds = require("@sap/cds");
 const { getDestination } = require("@sap-cloud-sdk/connectivity");
 const { executeHttpRequest } = require("@sap-cloud-sdk/http-client");
 const xml2js = require("xml2js");
 
 const LOG = cds.log("post-to-s4-logic");
-
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 const DESTINATION_NAME = "CPI";
 const RFC_ENDPOINT = "/http/ZFM_FI_FMBB_UPLOAD";
 const TIMEOUT_MS = 30000;
-const USE_HARDCODED_PAYLOAD = true;
 
-const xmlParser = new xml2js.Parser({
-  explicitArray: false,
-  mergeAttrs: true,
+// Replace this with the actual RequestStatus key for a successfully posted request.
+const POSTED_STATUS_CODE = 3;
+
+// Manual posting mode: "X" = simulation, "" = actual posting.
+const S4_TEST_MODE = "X";
+
+const PROCESS_TYPES = Object.freeze({
+  S: "SUPL",
+  R: "RETN",
+  T: "TRAN",
 });
 
-const PROCESS_TYPES = {
-  ENTRY: "ENTR",
-  SUPPLY: "SUPL",
-  RETURN: "RETN",
-  TRANSFER: "TRAN",
-  COVER: "COVR",
-};
+const BUDGET_TYPES = Object.freeze({
+  P: "PROJECT",
+  N: "NONPROJ",
+});
 
-const DEFAULT_HEADER_VALUES = {
+const DEFAULTS = Object.freeze({
   FM_AREA: "1000",
   VERSION: "0",
   BUDGET_CATEGORY: "9F",
@@ -33,329 +37,177 @@ const DEFAULT_HEADER_VALUES = {
   RECEIVER_BUDGET_TYPE: "RECV",
   SENDER_PERIOD: "000",
   RECEIVER_PERIOD: "000",
-  SUPPLY_TYPE: "NONPROJ",
-  TEST_MODE: "X",
-};
+});
 
-/**
- * Hardcoded test payload for testing the CPI/S4 integration.
- * Corrected to pass S/4 validations.
- */
-function getHardcodedTestData() {
-  return {
-    request: {
-      ID: "00000000-0000-0000-0000-000000000001",
-      requestNumber: "REQ-2026-00001",
-      requestType: {
-        code: "TRAN",
-        name: "Transfer",
-      },
-      budgetType: {
-        code: "NONPROJECT",
-        name: "Non-Project",
-      },
-      status: {
-        code: 1,
-        name: "Draft",
-      },
-      fiscalYear: 2026,
-      submissionDate: new Date("2026-06-23"),
-      requestor: "P000123",
-      requestorCostCentre: "CC0001",
-      totalAmount: 5000.0,
-      approverComment: "Test budget transfer via API",
-      reason: "Budget reallocation for Q2 operations",
-    },
-    items: [
-      {
-        ID: "00000000-0000-0000-0000-000000000101",
-        request_ID: "00000000-0000-0000-0000-000000000001",
-        srNo: "1",
-        costCentre: "100001",
-        glAccount: "410100",
-        material: "MAT001",
-        wbs: "WBS0001",
-        assetStatus: {
-          code: "ACTIVE",
-          name: "Active",
-        },
-        type: {
-          code: "ASSET",
-          name: "Asset",
-        },
-        amount: 2500.0,
-        description: "Office Equipment Budget",
-      },
-      {
-        ID: "00000000-0000-0000-0000-000000000102",
-        request_ID: "00000000-0000-0000-0000-000000000001",
-        srNo: "2",
-        costCentre: "100002",
-        glAccount: "410200",
-        material: "MAT002",
-        wbs: "WBS0002",
-        assetStatus: {
-          code: "ACTIVE",
-          name: "Active",
-        },
-        type: {
-          code: "ASSET",
-          name: "Asset",
-        },
-        amount: 2500.0,
-        description: "IT Infrastructure Budget",
-      },
-    ],
-  };
+const xmlParser = new xml2js.Parser({ explicitArray: false, mergeAttrs: true });
+
+function associationCode(entity, name) {
+  return String(
+    entity?.[name]?.code ?? entity?.[`${name}_code`] ?? entity?.[name] ?? "",
+  ).trim();
 }
 
-async function getCpiDestination() {
-  LOG.info("Retrieving destination:", DESTINATION_NAME);
+function processType(requestData) {
+  const code = associationCode(requestData, "requestType").toUpperCase();
+  const value = PROCESS_TYPES[code];
 
-  const destination = await getDestination({
-    destinationName: DESTINATION_NAME,
-  });
-
-  if (!destination) {
-    throw new Error(`Destination '${DESTINATION_NAME}' not found.`);
-  }
-
-  const originalProperties = destination.originalProperties;
-  if (!originalProperties) {
-    throw new Error(
-      `Destination '${destination.name}' has no originalProperties.`,
+  if (!value) {
+    const error = new Error(
+      `Unsupported request type code '${code || "blank"}'.`,
     );
+    error.statusCode = 400;
+    error.userMessage =
+      "Only Supplement, Return, and Transfer requests can be posted to S/4.";
+    throw error;
   }
 
-  const destinationConfiguration = originalProperties.destinationConfiguration;
-  const url = destinationConfiguration?.URL;
+  return value;
+}
 
-  if (!url) {
-    throw new Error(`Destination '${destination.name}' has no URL configured.`);
+function supplyType(requestData) {
+  const code = associationCode(requestData, "budgetType").toUpperCase();
+  const value = BUDGET_TYPES[code];
+
+  if (!value) {
+    const error = new Error(
+      `Unsupported budget type code '${code || "blank"}'.`,
+    );
+    error.statusCode = 400;
+    error.userMessage =
+      "Please select either Project or Non-Project before posting to S/4.";
+    throw error;
   }
 
-  LOG.info("Destination retrieved successfully:", {
-    name: destination.name,
-    url,
-  });
+  return value;
+}
 
-  return { destination, url };
+function sapDate(value) {
+  if (!value) return new Date().toISOString().slice(0, 10);
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`Invalid posting date '${value}'.`);
+  return date.toISOString().slice(0, 10);
 }
 
 async function fetchRequestWithItems(requestId, tx) {
-  const request = await tx.run(
-    SELECT.one
-      .from(`${SERVICE_NAMESPACE}.Requests`, (q) =>
-        q.columns(
-          (c) => c`*`,
-          (c) => c.requestType`.*`,
-          (c) => c.budgetType`.*`,
-          (c) => c.status`.*`,
-        ),
-      )
-      .where({ ID: requestId }),
+  // Avoid columns("requestType.*") because some CAP versions cannot compile it.
+  // The generated foreign keys requestType_code, budgetType_code, status_code,
+  // assetStatus_code, and type_code are sufficient for this mapping.
+  const requestData = await tx.run(
+    SELECT.one.from(`${SERVICE_NAMESPACE}.Requests`).where({ ID: requestId }),
   );
 
-  if (!request) {
-    throw new Error(`Request with ID '${requestId}' not found.`);
+  if (!requestData) {
+    const error = new Error(`Request '${requestId}' was not found.`);
+    error.statusCode = 404;
+    error.userMessage =
+      "The selected request could not be found. Please refresh the page and try again.";
+    throw error;
   }
 
   const items = await tx.run(
-    SELECT.from(`${SERVICE_NAMESPACE}.RequestItems`, (q) =>
-      q.columns(
-        (c) => c`*`,
-        (c) => c.assetStatus`.*`,
-        (c) => c.type`.*`,
-      ),
-    ).where({ request_ID: requestId }),
+    SELECT.from(`${SERVICE_NAMESPACE}.RequestItems`)
+      .where({ request_ID: requestId })
+      .orderBy("srNo"),
   );
 
-  LOG.info("Fetched request and items:", {
+  LOG.info("Request retrieved from database", {
     requestId,
-    requestNumber: request.requestNumber,
-    itemCount: items?.length || 0,
+    requestNumber: requestData.requestNumber,
+    requestType: requestData.requestType_code,
+    budgetType: requestData.budgetType_code,
+    itemCount: items?.length ?? 0,
   });
 
-  return { request, items };
+  return { requestData, items: items ?? [] };
 }
 
-function mapRequestItemToLineItem(item, request) {
-  const sign = request.requestType?.code === "TRAN" ? "+" : "+";
-
-  return {
-    sign,
-    fundctr: item.costCentre || "",
-    cmmtitm: item.wbs || item.glAccount || "",
-    matkl: item.material ? item.material.substring(0, 6) : "",
-    distkey: "0",
-    quantity: 1,
-    price: item.amount || 0,
-    zstat: item.assetStatus?.code || "",
-    zdesc: item.description || "",
-    refno: item.srNo || "",
-  };
-}
-
-function buildLineItem(lineItem) {
-  // If MATKL is empty, use first 6 chars of CMMTITM
-  let matkl = lineItem.matkl || "";
-  if (!matkl && lineItem.cmmtitm) {
-    matkl = lineItem.cmmtitm.substring(0, 6);
+function itemSign(item, type) {
+  if (["+", "-"].includes(item.sign)) return item.sign;
+  const direction = String(item.direction ?? item.lineType ?? "").toUpperCase();
+  if (["SENDER", "OUT", "TRANSFER_OUT"].includes(direction)) return "-";
+  if (["RECEIVER", "IN", "TRANSFER_IN"].includes(direction)) return "+";
+  if (type === "TRAN") {
+    LOG.warn("Transfer line has no direction; SIGN defaults to '+'", { itemId: item.ID });
   }
-
-  return {
-    SIGN: lineItem.sign || "+",
-    FUNDCTR: lineItem.fundctr || "",
-    CMMTITM: lineItem.cmmtitm || "",
-    MATKL: matkl,
-    DISTKEY: lineItem.distkey || "0",
-    QUANTITY: String(lineItem.quantity || 0),
-    PRICE: String(lineItem.price || 0),
-    ZSTAT: lineItem.zstat || "",
-    ZDESC: lineItem.zdesc || "",
-    REFNO: lineItem.refno || "",
-  };
+  return "+";
 }
 
-function formatDateForSap(date) {
-  if (!date) {
-    return new Date().toISOString().split("T")[0];
-  }
-  if (typeof date === "string") {
-    return date;
-  }
-  return date.toISOString().split("T")[0];
-}
+function buildPayload(requestData, items, currentUser) {
+  const type = processType(requestData);
+  const budgetMode = supplyType(requestData);
+  const year = String(requestData.fiscalYear ?? new Date().getFullYear());
 
-function mapRequestToHeaderParams(request) {
-  const requestTypeCode = request.requestType?.code || "ENTR";
+  const lineItems = items.map((item) => {
+    const gl = String(item.glAccount ?? item.gl ?? item.commitmentItem ?? "").trim();
+    const wbs = String(item.wbs ?? item.wbsElement ?? "").trim();
+    const material = String(item.material ?? item.materialGroup ?? "").trim();
+    const commitmentItem = budgetMode === "PROJECT" ? wbs || gl : gl;
 
-  return {
-    processType: PROCESS_TYPES[requestTypeCode] || PROCESS_TYPES.ENTRY,
-    documentDate: formatDateForSap(request.submissionDate || new Date()),
-    fiscalYear:
-      request.fiscalYear?.toString() || String(new Date().getFullYear()),
-    senderFiscalYear:
-      request.fiscalYear?.toString() || String(new Date().getFullYear()),
-    receiverFiscalYear:
-      request.fiscalYear?.toString() || String(new Date().getFullYear()),
-    requestorId: request.requestor || "AUTO",
-    headerText: `Request ${request.requestNumber}`,
-  };
-}
-
-function buildS4Payload(request, items, overrides = {}) {
-  const headerParams = mapRequestToHeaderParams(request);
-  const lineItems = items.map((item) =>
-    mapRequestItemToLineItem(item, request),
-  );
-
-  // Determine supply type based on budget type
-  let supplyType = DEFAULT_HEADER_VALUES.SUPPLY_TYPE;
-  if (request.budgetType?.code === "PROJECT") {
-    supplyType = "PROJ";
-  } else if (request.budgetType?.code === "NONPROJECT") {
-    supplyType = "NONPROJ";
-  }
-
-  const payload = {
-    IV_FM_AREA: DEFAULT_HEADER_VALUES.FM_AREA,
-    IV_PROC: overrides.processType || headerParams.processType,
-    IV_VERS: DEFAULT_HEADER_VALUES.VERSION,
-    IV_BUDC: DEFAULT_HEADER_VALUES.BUDGET_CATEGORY,
-    IV_DOCT: DEFAULT_HEADER_VALUES.DOC_TYPE,
-    IV_DATE: overrides.documentDate || headerParams.documentDate,
-    IV_FYEAR: overrides.fiscalYear || headerParams.fiscalYear,
-    IV_SFYEAR: overrides.senderFiscalYear || headerParams.senderFiscalYear,
-    IV_RFYEAR: overrides.receiverFiscalYear || headerParams.receiverFiscalYear,
-    IV_SBUDT: DEFAULT_HEADER_VALUES.SENDER_BUDGET_TYPE,
-    IV_RBUDT: DEFAULT_HEADER_VALUES.RECEIVER_BUDGET_TYPE,
-    IV_SPERIO: DEFAULT_HEADER_VALUES.SENDER_PERIOD,
-    IV_RPERIO: DEFAULT_HEADER_VALUES.RECEIVER_PERIOD,
-    IV_RESP: overrides.requestorId || headerParams.requestorId,
-    IV_HDR_TEXT: overrides.headerText || headerParams.headerText,
-    IV_SUPL_TYPE: supplyType,
-    IV_TEST: overrides.testMode ?? DEFAULT_HEADER_VALUES.TEST_MODE,
-    IT_ITEM: lineItems.map((item) => buildLineItem(item)),
-  };
-
-  return payload;
-}
-
-/**
- * Parses XML RFC response and extracts ET_RETURN array
- * @param {string} xmlResponse - XML response string
- * @returns {Promise<Array>} Array of return messages
- */
-async function parseXmlResponse(xmlResponse) {
-  try {
-    LOG.info("Parsing XML response");
-
-    const parsed = await xmlParser.parseStringPromise(xmlResponse);
-
-    // Navigate the XML structure
-    const response =
-      parsed["rfc:ZFM_FI_FMBB_UPLOAD.Response"] ||
-      parsed["ZFM_FI_FMBB_UPLOAD.Response"];
-
-    if (!response) {
-      LOG.warn("No response structure found in XML");
-      return [];
-    }
-
-    let etReturn = response.ET_RETURN;
-
-    // Handle single item (converted to object instead of array)
-    if (etReturn && !Array.isArray(etReturn)) {
-      etReturn = [etReturn];
-    }
-
-    LOG.info("ET_RETURN parsed:", JSON.stringify(etReturn, null, 2));
-
-    return etReturn || [];
-  } catch (error) {
-    LOG.error("Error parsing XML response:", error.message);
-    return [];
-  }
-}
-
-/**
- * Parses RFC response and extracts error/success messages
- */
-function parseS4Response(returnMessages) {
-  const result = {
-    hasErrors: false,
-    messages: [],
-    errors: [],
-  };
-
-  if (!Array.isArray(returnMessages)) {
-    return result;
-  }
-
-  for (const msg of returnMessages) {
-    const entry = {
-      type: msg.TYPE || "",
-      id: msg.ID || "",
-      number: msg.NUMBER || "",
-      message: msg.MESSAGE || "",
+    return {
+      SIGN: itemSign(item, type),
+      FUNDCTR: String(item.costCentre ?? item.costCenter ?? item.fundCenter ?? "").trim(),
+      CMMTITM: commitmentItem,
+      MATKL: budgetMode === "NONPROJ" ? commitmentItem.slice(0, 6) : material.slice(0, 6),
+      DISTKEY: "0",
+      QUANTITY: "1",
+      PRICE: String(item.amount ?? 0),
+      ZSTAT: associationCode(item, "assetStatus"),
+      ZDESC: String(item.description ?? ""),
+      REFNO: String(item.refNo ?? item.referenceNumber ?? item.srNo ?? ""),
     };
+  });
 
-    result.messages.push(entry);
-
-    // TYPE 'E' = Error, 'W' = Warning, 'I' = Info, 'S' = Success, 'A' = Abort
-    if (entry.type === "E" || entry.type === "A") {
-      result.hasErrors = true;
-      result.errors.push(entry);
-    }
-  }
-
-  return result;
+  return {
+    IV_FM_AREA: DEFAULTS.FM_AREA,
+    IV_PROC: type,
+    IV_VERS: DEFAULTS.VERSION,
+    IV_BUDC: DEFAULTS.BUDGET_CATEGORY,
+    IV_DOCT: DEFAULTS.DOC_TYPE,
+    IV_DATE: sapDate(requestData.documentDate ?? requestData.submissionDate),
+    IV_FYEAR: year,
+    IV_SFYEAR: year,
+    IV_RFYEAR: year,
+    IV_SBUDT: DEFAULTS.SENDER_BUDGET_TYPE,
+    IV_RBUDT: DEFAULTS.RECEIVER_BUDGET_TYPE,
+    IV_SPERIO: DEFAULTS.SENDER_PERIOD,
+    IV_RPERIO: DEFAULTS.RECEIVER_PERIOD,
+    IV_TEST: S4_TEST_MODE === "X" ? "X" : "",
+    IV_RESP: String(
+      requestData.budgetOfficer ?? requestData.budgetOfficerId ??
+      requestData.approvedBy ?? currentUser ?? requestData.requestor ?? "",
+    ),
+    IV_HDR_TEXT: String(requestData.reason ?? ""),
+    IV_SUPL_TYPE: budgetMode,
+    IT_ITEM: lineItems,
+  };
 }
 
-function escapeXml(str) {
-  if (!str) return "";
-  return str
+function validatePayload(payload) {
+  const errors = [];
+  if (!payload.IV_RESP) errors.push("Budget Officer is missing.");
+  if (!payload.IT_ITEM.length) errors.push("At least one line item is required.");
+
+  payload.IT_ITEM.forEach((item, index) => {
+    const line = index + 1;
+    if (!item.CMMTITM) errors.push(`Line ${line}: GL account or WBS is missing.`);
+    if (payload.IV_SUPL_TYPE === "NONPROJ" && !item.FUNDCTR) {
+      errors.push(`Line ${line}: Cost Center is missing.`);
+    }
+    if (!Number.isFinite(Number(item.PRICE))) errors.push(`Line ${line}: Amount is invalid.`);
+  });
+
+  if (errors.length) {
+    const error = new Error(`S/4 payload validation failed: ${errors.join(" ")}`);
+    error.statusCode = 400;
+    error.userMessage =
+      "The request contains missing or invalid posting information. " +
+      "Please review the request header and line items.";
+    throw error;
+  }
+}
+
+function escapeXml(value) {
+  return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -363,212 +215,255 @@ function escapeXml(str) {
     .replace(/'/g, "&apos;");
 }
 
-function buildRfcXmlPayload(payload) {
-  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  xml += '<n0:ZFM_FI_FMBB_UPLOAD xmlns:n0="urn:sap-com:document:sap:rfc:functions">\n';
-
-  // Add scalar parameters
-  xml += `  <IV_FM_AREA>${payload.IV_FM_AREA}</IV_FM_AREA>\n`;
-  xml += `  <IV_PROC>${payload.IV_PROC}</IV_PROC>\n`;
-  xml += `  <IV_VERS>${payload.IV_VERS}</IV_VERS>\n`;
-  xml += `  <IV_BUDC>${payload.IV_BUDC}</IV_BUDC>\n`;
-  xml += `  <IV_DOCT>${payload.IV_DOCT}</IV_DOCT>\n`;
-  xml += `  <IV_DATE>${payload.IV_DATE}</IV_DATE>\n`;
-  xml += `  <IV_FYEAR>${payload.IV_FYEAR}</IV_FYEAR>\n`;
-  xml += `  <IV_SFYEAR>${payload.IV_SFYEAR}</IV_SFYEAR>\n`;
-  xml += `  <IV_SBUDT>${payload.IV_SBUDT}</IV_SBUDT>\n`;
-  xml += `  <IV_SPERIO>${payload.IV_SPERIO}</IV_SPERIO>\n`;
-  xml += `  <IV_RFYEAR>${payload.IV_RFYEAR}</IV_RFYEAR>\n`;
-  xml += `  <IV_RBUDT>${payload.IV_RBUDT}</IV_RBUDT>\n`;
-  xml += `  <IV_RPERIO>${payload.IV_RPERIO}</IV_RPERIO>\n`;
-  xml += `  <IV_RESP>${escapeXml(payload.IV_RESP)}</IV_RESP>\n`;
-  xml += `  <IV_HDR_TEXT>${escapeXml(payload.IV_HDR_TEXT)}</IV_HDR_TEXT>\n`;
-  xml += `  <IV_SUPL_TYPE>${payload.IV_SUPL_TYPE}</IV_SUPL_TYPE>\n`;
-  xml += `  <IV_TEST>${payload.IV_TEST}</IV_TEST>\n`;
-
-  // Add table parameter IT_ITEM
-  xml += "  <IT_ITEM>\n";
-  for (const item of payload.IT_ITEM) {
-    xml += "    <item>\n";
-    xml += `      <SIGN>${item.SIGN}</SIGN>\n`;
-    xml += `      <FUNDCTR>${item.FUNDCTR}</FUNDCTR>\n`;
-    xml += `      <CMMTITM>${item.CMMTITM}</CMMTITM>\n`;
-    xml += `      <MATKL>${item.MATKL}</MATKL>\n`;
-    xml += `      <DISTKEY>${item.DISTKEY}</DISTKEY>\n`;
-    xml += `      <QUANTITY>${item.QUANTITY}</QUANTITY>\n`;
-    xml += `      <PRICE>${item.PRICE}</PRICE>\n`;
-    xml += `      <ZSTAT>${item.ZSTAT}</ZSTAT>\n`;
-    xml += `      <ZDESC>${escapeXml(item.ZDESC)}</ZDESC>\n`;
-    xml += `      <REFNO>${item.REFNO}</REFNO>\n`;
-    xml += "    </item>\n";
-  }
-  xml += "  </IT_ITEM>\n";
-
-  xml += "</n0:ZFM_FI_FMBB_UPLOAD>";
-
-  return xml;
-}
-
-async function postDocumentToCpi(cpiDest, payload) {
-  const xmlPayload = buildRfcXmlPayload(payload);
-  const payloadSize = Buffer.byteLength(xmlPayload, "utf8");
-  const recordCount = payload.IT_ITEM?.length || 0;
-  const fullUrl = `${cpiDest.url}${RFC_ENDPOINT}`;
-
-  LOG.info({
-    msg: "POST to CPI/S4 started",
-    destinationName: DESTINATION_NAME,
-    baseUrl: cpiDest.url,
-    rfcEndpoint: RFC_ENDPOINT,
-    fullUrl,
-    payloadSizeBytes: payloadSize,
-    recordCount,
+function buildXml(payload) {
+  const headers = [
+    "IV_FM_AREA", "IV_PROC", "IV_VERS", "IV_BUDC", "IV_DOCT", "IV_DATE",
+    "IV_FYEAR", "IV_SFYEAR", "IV_SBUDT", "IV_SPERIO", "IV_RFYEAR",
+    "IV_RBUDT", "IV_RPERIO", "IV_RESP", "IV_HDR_TEXT", "IV_SUPL_TYPE", "IV_TEST",
+  ];
+  const itemFields = [
+    "SIGN", "FUNDCTR", "CMMTITM", "MATKL", "DISTKEY", "QUANTITY",
+    "PRICE", "ZSTAT", "ZDESC", "REFNO",
+  ];
+  const lines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<n0:ZFM_FI_FMBB_UPLOAD xmlns:n0="urn:sap-com:document:sap:rfc:functions">',
+  ];
+  headers.forEach((field) => lines.push(`  <${field}>${escapeXml(payload[field])}</${field}>`));
+  lines.push("  <IT_ITEM>");
+  payload.IT_ITEM.forEach((item) => {
+    lines.push("    <item>");
+    itemFields.forEach((field) => lines.push(`      <${field}>${escapeXml(item[field])}</${field}>`));
+    lines.push("    </item>");
   });
-
-  LOG.info(`XML Payload:\n${xmlPayload}`);
-
-  try {
-    const response = await executeHttpRequest(cpiDest.destination, {
-      method: "POST",
-      url: fullUrl,
-      headers: {
-        "Content-Type": "application/xml",
-        Accept: "application/xml",
-      },
-      data: xmlPayload,
-      timeout: TIMEOUT_MS,
-    });
-
-    let responseData = response?.data;
-
-    LOG.info({
-      msg: "POST to CPI/S4 completed successfully",
-      status: response.status,
-      statusText: response.statusText,
-      responseSize: Buffer.byteLength(
-        JSON.stringify(responseData),
-        "utf8",
-      ),
-    });
-
-    // If response is a string (XML), keep it as is
-    if (typeof responseData === "string") {
-      LOG.info(`XML Response received: ${responseData}`);
-      return responseData;
-    }
-
-    LOG.info(`Response: ${JSON.stringify(responseData, null, 2)}`);
-    return responseData;
-  } catch (error) {
-    LOG.error({
-      msg: "Failed to post document to CPI/S4",
-      error: error.message,
-      code: error.code,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      responseData: JSON.stringify(error.response?.data, null, 2),
-    });
-
-    throw error;
-  }
+  lines.push("  </IT_ITEM>", "</n0:ZFM_FI_FMBB_UPLOAD>");
+  return lines.join("\n");
 }
 
-/**
- * Posts a Request (with its items) to S/4 via CPI.
- * Fetches data from the database (or uses hardcoded test data if enabled),
- * builds the payload, calls CPI, and parses the response.
- *
- * @param {cds.Request} request - CAP request context
- * @returns {Promise<Object>} { success, messages, errors }
- */
-module.exports = async function (request) {
-  LOG.info("postToS4 action started");
+async function postToCpi(payload) {
+  const destination = await getDestination({ destinationName: DESTINATION_NAME });
+  if (!destination) throw new Error(`Destination '${DESTINATION_NAME}' was not found.`);
+
+  const baseUrl = destination.originalProperties?.destinationConfiguration?.URL || destination.url;
+  if (!baseUrl) throw new Error(`Destination '${DESTINATION_NAME}' has no URL configured.`);
+
+  const response = await executeHttpRequest(destination, {
+    method: "POST",
+    url: `${String(baseUrl).replace(/\/$/, "")}${RFC_ENDPOINT}`,
+    headers: { "Content-Type": "application/xml", Accept: "application/xml" },
+    data: buildXml(payload),
+    timeout: TIMEOUT_MS,
+  });
+  return response?.data;
+}
+
+async function parseResponse(rawResponse) {
+  let response = rawResponse;
+  if (typeof rawResponse === "string") {
+    const parsed = await xmlParser.parseStringPromise(rawResponse);
+    response =
+      parsed["rfc:ZFM_FI_FMBB_UPLOAD.Response"] ||
+      parsed["n0:ZFM_FI_FMBB_UPLOAD.Response"] ||
+      parsed["ZFM_FI_FMBB_UPLOAD.Response"] ||
+      Object.values(parsed)[0];
+  }
+
+  const rawMessages = response?.ET_RETURN?.item ?? response?.ET_RETURN ?? [];
+  const values = Array.isArray(rawMessages) ? rawMessages : [rawMessages];
+  const messages = values.filter(Boolean).map((msg) => ({
+    type: String(msg.TYPE ?? ""),
+    id: String(msg.ID ?? ""),
+    number: String(msg.NUMBER ?? ""),
+    message: String(msg.MESSAGE ?? ""),
+    messageV1: String(msg.MESSAGE_V1 ?? ""),
+    messageV2: String(msg.MESSAGE_V2 ?? ""),
+    messageV3: String(msg.MESSAGE_V3 ?? ""),
+    messageV4: String(msg.MESSAGE_V4 ?? ""),
+    parameter: String(msg.PARAMETER ?? ""),
+    row: String(msg.ROW ?? ""),
+    field: String(msg.FIELD ?? ""),
+  }));
+
+  return {
+    messages,
+    errors: messages.filter((msg) => ["E", "A"].includes(msg.type.toUpperCase())),
+    explicitDocumentNumber: String(
+      response?.EV_DOC_NUMBER ?? response?.EV_DOCNUMBER ?? response?.EV_BELNR ?? "",
+    ).trim(),
+  };
+}
+
+function documentNumber(result) {
+  if (result.explicitDocumentNumber) return result.explicitDocumentNumber.slice(0, 20);
+  for (const msg of result.messages) {
+    if (!["S", "I"].includes(msg.type.toUpperCase())) continue;
+    for (const value of [msg.messageV1, msg.messageV2, msg.messageV3, msg.messageV4]) {
+      if (value.trim()) return value.trim().slice(0, 20);
+    }
+  }
+  return "";
+}
+
+async function updateSuccessfulRequest(tx, requestId, approvedBy, docNumber) {
+  const now = new Date();
+  const changes = {
+    status_code: POSTED_STATUS_CODE,
+    approvedBy: String(approvedBy ?? "").slice(0, 100),
+    docNumber: String(docNumber).slice(0, 20),
+    postingDate: now.toISOString().slice(0, 10),
+    postingPeriod: now.getMonth() + 1,
+  };
+
+  const affected = await tx.run(
+    UPDATE(`${SERVICE_NAMESPACE}.Requests`).set(changes).where({ ID: requestId }),
+  );
+  if (Number(affected) !== 1) {
+    throw new Error(`Request '${requestId}' could not be updated after successful posting.`);
+  }
+  return changes;
+}
+
+function s4BusinessMessage(errors) {
+  const messages = errors.map((entry) => entry.message).filter(Boolean);
+  return messages.length
+    ? messages.slice(0, 3).join(" ").slice(0, 1000)
+    : "S/4 rejected the posting request. Please review the request and try again.";
+}
+
+function businessError(error) {
+  if (error.userMessage) {
+    return { status: error.statusCode || 400, message: error.userMessage };
+  }
+
+  const text = String(error.message || "");
+  const lower = text.toLowerCase();
+  if (text.includes("already posted")) {
+    return { status: 409, message: "This request has already been posted to S/4." };
+  }
+  if (error.code === "ETIMEDOUT" || error.code === "ECONNABORTED" || lower.includes("timeout")) {
+    return {
+      status: 504,
+      message: "S/4 did not respond in time. Please check the request status before trying again.",
+    };
+  }
+  if (text.includes("no document number")) {
+    return {
+      status: 502,
+      message:
+        "S/4 processed the request but did not return a document number. " +
+        "Please do not repost it and contact support.",
+    };
+  }
+  if (text.includes("CDS compilation failed") || text.includes("Mismatched")) {
+    return {
+      status: 500,
+      message: "The request could not be retrieved due to a system issue. Please contact support.",
+    };
+  }
+  if (text.includes("Destination") || error.response?.status) {
+    return {
+      status: 503,
+      message: "The posting service is temporarily unavailable. Please try again later.",
+    };
+  }
+  return {
+    status: 500,
+    message: "An unexpected error occurred while posting to S/4. Please try again or contact support.",
+  };
+}
+
+// Bound action declaration: this.on("postToS4", "Requests", post_To_S4_Logic)
+module.exports = async function post_To_S4_Logic(request) {
+  const requestId = request.params?.[0]?.ID;
+  let payload;
 
   try {
-    const params = request.data;
-
-    LOG.info("Action params:", JSON.stringify(params || {}));
-    LOG.info("Using hardcoded payload:", USE_HARDCODED_PAYLOAD);
-
-    // 1. Validate input
-    if (!params || !params.requestId) {
-      LOG.warn("Validation failed: requestId is required.");
-      return request.error(400, "Request ID is required.");
+    if (!requestId) {
+      return request.reject(400, "The selected request could not be identified.");
     }
 
-    LOG.info("Step 1: Input validation passed");
+    const tx = cds.tx(request);
+    const { requestData, items } = await fetchRequestWithItems(requestId, tx);
 
-    // 2. Fetch Request and Items
-    let requestData, items;
-
-    if (USE_HARDCODED_PAYLOAD) {
-      LOG.info("Step 2: Using hardcoded test payload");
-      const testData = getHardcodedTestData();
-      requestData = testData.request;
-      items = testData.items;
-    } else {
-      LOG.info("Step 2: Fetching from database");
-      const tx = cds.tx(request);
-      const result = await fetchRequestWithItems(params.requestId, tx);
-      requestData = result.request;
-      items = result.items;
+    if (requestData.docNumber) {
+      const error = new Error("Request was already posted.");
+      error.statusCode = 409;
+      error.userMessage =
+        `This request has already been posted under S/4 document '${requestData.docNumber}'.`;
+      throw error;
+    }
+    if (!items.length) {
+      const error = new Error("Request has no line items.");
+      error.statusCode = 400;
+      error.userMessage = "The request cannot be posted because it has no line items.";
+      throw error;
     }
 
-    if (!items || items.length === 0) {
-      LOG.warn("No items found for request:", params.requestId);
-      return request.error(400, "Request has no items to post.");
+    payload = buildPayload(requestData, items, request.user?.id);
+    validatePayload(payload);
+    const result = await parseResponse(await postToCpi(payload));
+
+    if (result.errors.length) {
+      const s4ErrorMessage = s4BusinessMessage(result.errors);
+      const error = new Error(s4ErrorMessage);
+      error.statusCode = 422;
+      error.userMessage = s4ErrorMessage;
+      error.isS4BusinessError = true;
+      throw error;
     }
 
-    LOG.info("Step 2: Items fetched, count:", items.length);
+    if (payload.IV_TEST === "X") {
+      return {
+        success: true,
+        simulated: true,
+        requestId,
+        documentNumber: "",
+        statusCode: null,
+        postingDate: null,
+        postingPeriod: null,
+        messages: result.messages,
+        errors: [],
+      };
+    }
 
-    // 3. Build S/4 RFC payload
-    const overrides = {
-      testMode: params.testMode ?? DEFAULT_HEADER_VALUES.TEST_MODE,
-    };
-    const s4Payload = buildS4Payload(requestData, items, overrides);
+    const docNumber = documentNumber(result);
+    if (!docNumber) throw new Error("S/4 reported success but no document number was returned.");
 
-    LOG.info(
-      "Step 3: Payload built with",
-      s4Payload.IT_ITEM.length,
-      "line items",
+    const updated = await updateSuccessfulRequest(
+      tx,
+      requestId,
+      request.user?.id,
+      docNumber,
     );
 
-    // 4. Get CPI destination
-    const cpiDest = await getCpiDestination();
-    LOG.info("Step 4: CPI destination retrieved");
-
-    // 5. POST to CPI
-    const s4Response = await postDocumentToCpi(cpiDest, s4Payload);
-    LOG.info("Step 5: CPI/S4 call completed");
-
-    // 6. Parse the XML RFC response
-    LOG.info("Step 6: Parsing XML response");
-    const etReturn = await parseXmlResponse(s4Response);
-
-    LOG.info("Step 6: Parsed ET_RETURN items:", JSON.stringify(etReturn));
-
-    const parsedResponse = parseS4Response(etReturn);
-
-    LOG.info("Step 6: RFC response parsed", {
-      hasErrors: parsedResponse.hasErrors,
-      messageCount: parsedResponse.messages.length,
-      errorCount: parsedResponse.errors.length,
-    });
-
-    // 7. Return result
-    const result = {
-      success: !parsedResponse.hasErrors,
-      messages: parsedResponse.messages,
-      errors: parsedResponse.errors,
+    return {
+      success: true,
+      simulated: false,
+      requestId,
+      documentNumber: docNumber,
+      statusCode: updated.status_code,
+      postingDate: updated.postingDate,
+      postingPeriod: updated.postingPeriod,
+      messages: result.messages,
+      errors: [],
     };
-
-    LOG.info("postToS4 action completed successfully");
-    return result;
   } catch (error) {
-    LOG.error("Error in postToS4:", error.message);
-    return request.error(
-      500,
-      `Failed to post document to S/4. Error: ${error.message}`,
-    );
+    const safe = businessError(error);
+
+    const errorLog = {
+      message: "Error while posting request to S/4",
+      user: request.user?.id,
+      errorMessage: error.message,
+      stack: error.stack,
+    };
+
+    // Include the generated S/4 payload only when payload creation succeeded.
+    if (payload) {
+      errorLog.payload = payload;
+    }
+
+    LOG.error(errorLog);
+
+    return request.reject(safe.status, safe.message);
   }
 };
