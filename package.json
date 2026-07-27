@@ -31,9 +31,13 @@
   "private": true,
   "cds": {
     "requires": {
-      "[production]": {
-        "db": "hana",
-        "auth": "xsuaa"
+      "[production]": {   
+        "db": {
+          "kind": "hana"
+        },
+        "auth": {
+          "kind": "xsuaa"
+        }
       },
       "[development]": {
         "auth": {

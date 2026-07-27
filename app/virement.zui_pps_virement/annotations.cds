@@ -7,9 +7,9 @@ using from '../../db/schema';
 // =============================================================================
 
 annotate service.Requests with {
-    requestNumber       @(title: '{i18n>RequestNumber}');
+    requestNumber        @(title: '{i18n>RequestNumber}');
 
-    requestType         @(
+    requestType          @(
         title                          : '{i18n>RequestType}',
         Common.Text                    : requestType.descr,
         Common.Text.@UI.TextArrangement: #TextOnly,
@@ -27,7 +27,7 @@ annotate service.Requests with {
         Common.FieldControl            : #Mandatory
     );
 
-    budgetType          @(
+    budgetType           @(
         title                          : '{i18n>BudgetType}',
         Common.Text                    : budgetType.descr,
         Common.Text.@UI.TextArrangement: #TextOnly,
@@ -44,7 +44,7 @@ annotate service.Requests with {
         }
     );
 
-    status              @(
+    status               @(
         title                          : '{i18n>Status}',
         Common.Text                    : status.descr,
         Common.Text.@UI.TextArrangement: #TextOnly,
@@ -61,25 +61,34 @@ annotate service.Requests with {
         }
     );
 
-    fiscalYear          @(title: '{i18n>FiscalYear}');
-    submissionPeriod    @(title: '{i18n>SubmissionPeriod}');
-    submissionDate      @(title: '{i18n>SubmissionDate}');
-    requestor           @(
+    fiscalYear           @(title: '{i18n>FiscalYear}');
+    submissionPeriod     @(title: '{i18n>SubmissionPeriod}');
+    submissionDate       @(title: '{i18n>SubmissionDate}');
+    requestor            @(
         title              : '{i18n>Requestor}',
         Common.FieldControl: #ReadOnly
     );
-    requestorCostCentre @(title: '{i18n>RequestorCostCentre}');
-    approvedBy          @(title: '{i18n>ApprovedBy}');
-    supplementAmount    @(title: '{i18n>SupplementAmount}');
-    returnAmount        @(title: '{i18n>ReturnAmount}');
-    transferInAmount    @(title: '{i18n>TransferInAmount}');
-    transferOutAmount   @(title: '{i18n>TransferOutAmount}');
-    aging               @(title: '{i18n>Aging}');
-    docNumber           @(title: '{i18n>DocNumber}');
-    postingDate         @(title: '{i18n>PostingDate}');
-    postingPeriod       @(title: '{i18n>PostingPeriod}');
-    reason              @(title: '{i18n>Reason}');
-    requestLink         @UI.Hidden;
+    pendingApprover      @(
+        title              : '{i18n>PendingApprover}',
+        Common.FieldControl: #ReadOnly
+    );
+    approvedBy           @(
+        title              : '{i18n>ApprovedBy}',
+        Common.FieldControl: #ReadOnly
+    );
+    supplementAmount     @(title: '{i18n>SupplementAmount}');
+    returnAmount         @(title: '{i18n>ReturnAmount}');
+    transferInAmount     @(title: '{i18n>TransferInAmount}');
+    transferOutAmount    @(title: '{i18n>TransferOutAmount}');
+    aging                @(title: '{i18n>Aging}');
+    supplementDocNumber  @(title: '{i18n>SupplementDocNumber}');
+    returnDocNumber      @(title: '{i18n>ReturnDocNumber}');
+    transferInDocNumber  @(title: '{i18n>TransferInDocNumber}');
+    transferOutDocNumber @(title: '{i18n>TransferOutDocNumber}');
+    postingDate          @(title: '{i18n>PostingDate}');
+    postingPeriod        @(title: '{i18n>PostingPeriod}');
+    reason               @(title: '{i18n>Reason}');
+    requestLink          @UI.Hidden;
 };
 
 
@@ -120,7 +129,7 @@ annotate service.Requests with @(
             },
             {
                 $Type: 'UI.DataField',
-                Value: requestorCostCentre
+                Value: pendingApprover
             },
             {
                 $Type: 'UI.DataField',
@@ -128,35 +137,7 @@ annotate service.Requests with @(
             },
             {
                 $Type: 'UI.DataField',
-                Value: supplementAmount
-            },
-            {
-                $Type: 'UI.DataField',
-                Value: returnAmount
-            },
-            {
-                $Type: 'UI.DataField',
-                Value: transferInAmount
-            },
-            {
-                $Type: 'UI.DataField',
-                Value: transferOutAmount
-            },
-            {
-                $Type: 'UI.DataField',
                 Value: aging
-            },
-            {
-                $Type: 'UI.DataField',
-                Value: docNumber
-            },
-            {
-                $Type: 'UI.DataField',
-                Value: postingDate
-            },
-            {
-                $Type: 'UI.DataField',
-                Value: postingPeriod
             },
             {
                 $Type: 'UI.DataField',
@@ -182,9 +163,29 @@ annotate service.Requests with @(
             Label        : '{i18n>Calculate}',
             ![@UI.Hidden]: IsActiveEntity
         },
+        // {
+        //     $Type        : 'UI.DataFieldForAction',
+        //     Action       : 'service.approveRequest',
+        //     Label        : '{i18n>Approve}',
+        //     Criticality  : #Positive,
+        //     ![@UI.Hidden]: {$edmJson: {$Or: [
+        //         {$Ne: [
+        //             {$Path: 'status_code'},
+        //             2
+        //         ]},
+        //         {$Eq: [
+        //             {$Path: 'hideApprovalBtn'},
+        //             true
+        //         ]},
+        //         {$Eq: [
+        //             {$Path: 'IsActiveEntity'},
+        //             false
+        //         ]}
+        //     ]}}
+        // },
         {
             $Type        : 'UI.DataFieldForAction',
-            Action       : 'service.approveRequest',
+            Action       : 'ZSVC_PPS_VIREMENT.postToS4',
             Label        : '{i18n>Approve}',
             Criticality  : #Positive,
             ![@UI.Hidden]: {$edmJson: {$Or: [
@@ -193,8 +194,8 @@ annotate service.Requests with @(
                     2
                 ]},
                 {$Eq: [
-                    {$Path: 'hideApprovalBtn'},
-                    true
+                    {$Path: 'isPendingApprover'},
+                    false
                 ]},
                 {$Eq: [
                     {$Path: 'IsActiveEntity'},
@@ -213,8 +214,8 @@ annotate service.Requests with @(
                     2
                 ]},
                 {$Eq: [
-                    {$Path: 'hideApprovalBtn'},
-                    true
+                    {$Path: 'isPendingApprover'},
+                    false
                 ]},
                 {$Eq: [
                     {$Path: 'IsActiveEntity'},
@@ -222,12 +223,17 @@ annotate service.Requests with @(
                 ]}
             ]}}
         },
-        {
-            $Type : 'UI.DataFieldForAction',
-            Action : 'ZSVC_PPS_VIREMENT.postToS4',
-            Label : 'Post to S4',
-        },
-    ]
+    ],
+    UI.UpdateHidden   : {$edmJson: {$And: [
+        {$Ne: [
+            {$Path: 'status_code'},
+            2
+        ]},
+        {$Ne: [
+            {$Path: 'status_code'},
+            0
+        ]},
+    ]}}
 );
 
 
@@ -651,6 +657,62 @@ annotate service.Requests with @(
             {
                 $Type: 'UI.DataField',
                 Value: reason
+            },
+            {
+                $Type        : 'UI.DataField',
+                Value        : supplementDocNumber,
+                ![@UI.Hidden]: {$edmJson: {$Or: [
+                    {$Ne: [
+                        {$Path: 'status_code'},
+                        3
+                    ]},
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'S'
+                    ]}
+                ]}}
+            },
+            {
+                $Type        : 'UI.DataField',
+                Value        : returnDocNumber,
+                ![@UI.Hidden]: {$edmJson: {$Or: [
+                    {$Ne: [
+                        {$Path: 'status_code'},
+                        3
+                    ]},
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'R'
+                    ]}
+                ]}}
+            },
+            {
+                $Type        : 'UI.DataField',
+                Value        : transferInDocNumber,
+                ![@UI.Hidden]: {$edmJson: {$Or: [
+                    {$Ne: [
+                        {$Path: 'status_code'},
+                        3
+                    ]},
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'T'
+                    ]}
+                ]}}
+            },
+            {
+                $Type        : 'UI.DataField',
+                Value        : transferOutDocNumber,
+                ![@UI.Hidden]: {$edmJson: {$Or: [
+                    {$Ne: [
+                        {$Path: 'status_code'},
+                        3
+                    ]},
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'T'
+                    ]}
+                ]}}
             }
         ]
     }
@@ -673,6 +735,16 @@ annotate service.Requests actions {
 annotate service.Requests with @Common.SideEffects #RefreshItemsAfterItemChange: {
     SourceEntities: [RequestItems],
     TargetEntities: [RequestItems]
+};
+
+annotate service.Requests actions {
+    postToS4 @(Common.SideEffects: {TargetProperties: [
+        'in/status_code',
+        'in/supplementDocNumber',
+        'in/returnDocNumber',
+        'in/transferInDocNumber',
+        'in/transferOutDocNumber'
+    ]})
 };
 
 

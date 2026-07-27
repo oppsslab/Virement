@@ -1,226 +1,157 @@
+"use strict";
+
 const cds = require("@sap/cds");
-const { ROLES } = require("./utils/roles");
 
 const LOG = cds.log("requests-after-read-logic");
 
-// =============================================================================
-//  ROLE CONSTANTS
-// =============================================================================
+const DATABASE_ENTITY = "ZDB_PPS_VIREMENT.Requests";
 
 const ROLE_JKEW = "MASS_UPLOAD_ALL";
+
 const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
 
-// =============================================================================
-//  HELPERS
-// =============================================================================
-
-/**
- * Checks whether the current CAP user has a specific role.
- *
- * Supports:
- * - user.is("ROLE")
- * - user.roles as array
- * - user.roles as object, for example { ROLE: true }
- *
- * @param {object} user - request.user
- * @param {string} roleName - Role name to check
- * @returns {boolean}
- */
 function hasRole(user, roleName) {
-  if (!user || !roleName) {
-    return false;
-  }
-
-  const normalizedRoleName = String(roleName).trim().toUpperCase();
-
-  /*
-   * Preferred CAP-style role check.
-   */
-  if (typeof user.is === "function" && user.is(normalizedRoleName)) {
-    return true;
-  }
-
-  /*
-   * Fallback: roles as array.
-   */
-  if (Array.isArray(user.roles)) {
-    return user.roles.some(function (role) {
-      return String(role || "").trim().toUpperCase() === normalizedRoleName;
-    });
-  }
-
-  /*
-   * Fallback: roles as object.
-   * Example:
-   * {
-   *   MASS_UPLOAD_ALL: true,
-   *   MASS_UPLOAD_TRANSFER: true
-   * }
-   */
-  if (user.roles && typeof user.roles === "object") {
-    return Object.keys(user.roles).some(function (role) {
-      return (
-        String(role || "").trim().toUpperCase() === normalizedRoleName &&
-        user.roles[role] === true
-      );
-    });
-  }
-
-  return false;
-}
-
-/**
- * Determines virtual UI role flags.
- *
- * These are used by annotations for conditional visibility:
- * - isJKEW
- * - isFunctional
- *
- * @param {object} user - request.user
- * @returns {{ isJKEW: boolean, isFunctional: boolean }}
- */
-function getUserRoleFlags(user) {
-  return {
-    isJKEW: hasRole(user, ROLE_JKEW),
-    isFunctional: hasRole(user, ROLE_FUNCTIONAL),
-  };
-}
-
-/**
- * Determines whether the given user is allowed to approve a request.
- *
- * Rules, ALL must be true:
- *   1. User holds the REQUEST_APPROVE role.
- *   2. User is NOT the creator/requestor.
- *
- * @param {object} user - request.user
- * @param {object} row - a single Request record
- * @returns {boolean}
- */
-function canUserApprove(user, row) {
-  if (!user || !row) {
-    return false;
-  }
-
-  const hasApproveRole = user.is(ROLES.REQUEST_APPROVE) === true;
-
-  if (!hasApproveRole) {
-    return false;
-  }
-
-  const userId = user.id;
-
-  /*
-   * Block self-approval:
-   * User must not be the requestor or creator.
-   */
-  const isRequestor = !!row.requestor && row.requestor === userId;
-  const isCreator = !!row.createdBy && row.createdBy === userId;
-
-  if (isRequestor || isCreator) {
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Applies virtual UI fields to one Requests row.
- *
- * @param {object} row - Request row
- * @param {object} user - request.user
- * @param {{ isJKEW: boolean, isFunctional: boolean }} roleFlags
- */
-function applyVirtualFields(row, user, roleFlags) {
-  if (!row) {
-    return;
-  }
-
-  /*
-   * Approval button visibility.
-   */
-  const allowedToApprove = canUserApprove(user, row);
-  row.hideApprovalBtn = !allowedToApprove;
-
-  /*
-   * Amount visibility role flags.
-   *
-   * These fields are virtual and not persisted, so they must be calculated
-   * on every READ for both active and draft requests.
-   */
-  row.isJKEW = roleFlags.isJKEW;
-  row.isFunctional = roleFlags.isFunctional;
-
-  LOG.info(
-    `Request ${row.ID || row.requestNumber || "?"}: ` +
-      `requestType=${row.requestType_code}, ` +
-      `requestor=${row.requestor}, createdBy=${row.createdBy}, ` +
-      `allowedToApprove=${allowedToApprove}, ` +
-      `hideApprovalBtn=${row.hideApprovalBtn}, ` +
-      `isJKEW=${row.isJKEW}, ` +
-      `isFunctional=${row.isFunctional}`
+  return Boolean(
+    user && roleName && typeof user.is === "function" && user.is(roleName),
   );
 }
 
-// =============================================================================
-//  MAIN HANDLER
-//
-//  @After(event = { "READ" }, entity = "ZSVC_PPS_VIREMENT.Requests")
-//  @After(event = { "READ" }, entity = "ZSVC_PPS_VIREMENT.Requests.drafts")
-//
-//  Computes virtual fields:
-//  - hideApprovalBtn
-//  - isJKEW
-//  - isFunctional
-//
-//  Important:
-//  These fields are virtual, so they are not persisted.
-//  They must be populated during READ for both draft and active records.
-// =============================================================================
+function normalizeUserId(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
 
-/**
- * @param {(Object|Object[])} results - READ result or result array
- * @param {cds.Request} request - CAP request context
- */
-module.exports = async function (results, request) {
-  LOG.info("--- AFTER READ Requests started ---");
+async function enrichApprovalData(rows, request) {
+  const rowsToLoad = rows.filter(
+    (row) =>
+      row?.ID &&
+      (row.pendingApprover === undefined ||
+        row.status_code === undefined ||
+        row.requestNumber === undefined),
+  );
+
+  if (!rowsToLoad.length) {
+    return;
+  }
+
+  const ids = rowsToLoad.map((row) => row.ID);
+
+  const databaseRows = await cds.db.run(
+    SELECT.from(DATABASE_ENTITY)
+      .columns(
+        "ID",
+        "requestNumber",
+        "pendingApprover",
+        "status_code",
+        "requestor",
+        "createdBy",
+      )
+      .where({
+        ID: {
+          in: ids,
+        },
+      }),
+  );
+
+  const databaseRowsById = new Map(databaseRows.map((row) => [row.ID, row]));
+
+  for (const row of rowsToLoad) {
+    const databaseRow = databaseRowsById.get(row.ID);
+
+    if (!databaseRow) {
+      continue;
+    }
+
+    row.requestNumber ??= databaseRow.requestNumber;
+
+    row.pendingApprover ??= databaseRow.pendingApprover;
+
+    row.status_code ??= databaseRow.status_code;
+
+    row.requestor ??= databaseRow.requestor;
+
+    row.createdBy ??= databaseRow.createdBy;
+  }
+}
+
+function applyVirtualFields(row, user, roleFlags) {
+  const currentUser = normalizeUserId(user?.id);
+
+  const pendingApprover = normalizeUserId(row.pendingApprover);
+
+  row.isPendingApprover =
+    currentUser !== "" &&
+    pendingApprover !== "" &&
+    currentUser === pendingApprover;
+
+  row.isJKEW = roleFlags.isJKEW;
+
+  row.isFunctional = roleFlags.isFunctional;
+
+  LOG.info("Calculated request UI flags", {
+    requestId: row.ID,
+
+    requestNumber: row.requestNumber,
+
+    currentUser: user?.id,
+
+    pendingApprover: row.pendingApprover,
+
+    statusCode: row.status_code,
+
+    isActiveEntity: row.IsActiveEntity,
+
+    isPendingApprover: row.isPendingApprover,
+
+    isJKEW: row.isJKEW,
+
+    isFunctional: row.isFunctional,
+  });
+}
+
+module.exports = async function requestsAfterRead(results, request) {
+  const rows = (Array.isArray(results) ? results : [results]).filter(
+    (row) => row && row.ID,
+  );
+
+  if (!rows.length) {
+    return;
+  }
 
   try {
     const user = request.user;
 
-    const hasApproveRole = user?.is(ROLES.REQUEST_APPROVE) === true;
-    const roleFlags = getUserRoleFlags(user);
+    const roleFlags = {
+      isJKEW: hasRole(user, ROLE_JKEW),
 
-    LOG.info("Target:", request.target?.name);
-    LOG.info("User:", user?.id);
-    LOG.info("User roles:", JSON.stringify(user?.roles || {}));
-    LOG.info("Has REQUEST_APPROVE role:", hasApproveRole);
-    LOG.info("Calculated isJKEW:", roleFlags.isJKEW);
-    LOG.info("Calculated isFunctional:", roleFlags.isFunctional);
+      isFunctional: hasRole(user, ROLE_FUNCTIONAL),
+    };
 
-    const list = Array.isArray(results) ? results : [results];
+    /*
+     * Load properties omitted by the UI $select.
+     */
+    await enrichApprovalData(rows, request);
 
-    for (const row of list) {
+    for (const row of rows) {
       applyVirtualFields(row, user, roleFlags);
     }
-
-    LOG.info("--- AFTER READ Requests ended successfully ---");
   } catch (error) {
+    LOG.error("Error computing request UI fields", {
+      message: error.message,
+
+      stack: error.stack,
+    });
+
     /*
-     * Secure/default fallback:
-     * - Hide approval buttons.
-     * - Disable role-based amount visibility.
+     * Secure fallback.
      */
-    LOG.error("Error computing virtual fields:", error);
+    for (const row of rows) {
+      row.isPendingApprover = false;
 
-    const list = Array.isArray(results) ? results : [results];
+      row.isJKEW = false;
 
-    for (const row of list) {
-      if (row) {
-        row.hideApprovalBtn = true;
-        row.isJKEW = false;
-        row.isFunctional = false;
-      }
+      row.isFunctional = false;
     }
   }
 };

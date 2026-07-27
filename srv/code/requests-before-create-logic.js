@@ -505,6 +505,7 @@ function validateSubmission(
  * @param {cds.Request} request
  */
 module.exports = async function (request) {
+  console.log(request)
   LOG.info("--- BEFORE CREATE Requests started ---");
 
   try {
@@ -624,6 +625,9 @@ module.exports = async function (request) {
 
       request.data.requestNumber = generatedRequestNumber;
       LOG.info("Generated requestNumber:", generatedRequestNumber);
+
+      // TEMPORARY!! SHOULD COME FROM APPROVAL WORKFLOW
+      request.data.pendingApprover = request.user.id;
     } else {
       LOG.info(
         "requestNumber already exists. Skipping generation:",

@@ -11,34 +11,37 @@ type FiscalYear        : String(4) @assert.format: '^[0-9]{4}$';
 
 entity Requests : cuid, managed {
     @assert.unique
-    requestNumber       : String(10)                 @readonly;
-    requestType         : Association to RequestType @Core.Immutable;
-    budgetType          : Association to BudgetType default 'N';
-    transferCategory    : String(1);
-    status              : Association to RequestStatus default 0;
-    fiscalYear          : FiscalYear                 @readonly;
-    submissionPeriod    : Integer; // Month of submission date (1-12)
-    submissionDate      : Date;
-    requestor           : String(100)                @readonly;
-    requestorCostCentre : String(20);
-    approvedBy          : String(100); // Last approver (summary)
-    supplementAmount    : Decimal(15, 2) default 0   @readonly;
-    returnAmount        : Decimal(15, 2) default 0   @readonly;
-    transferInAmount    : Decimal(15, 2) default 0   @readonly;
-    transferOutAmount   : Decimal(15, 2) default 0   @readonly;
-    aging               : Integer default 0          @readonly;
-    docNumber           : String(20);
-    postingDate         : Date;
-    postingPeriod       : Integer; // Month posted to IFAMS (1-12)
-    reason              : String(500);
-    approverComment     : String(1000);
-    requestLink         : String(500);
-    RequestItems        : Composition of many RequestItems
-                              on RequestItems.request = $self;
-    RequestApprovers    : Composition of many RequestApprover
-                              on RequestApprovers.request = $self;
-    RequestHistory      : Composition of many RequestHistory
-                              on RequestHistory.request = $self;
+    requestNumber        : String(10)                 @readonly;
+    requestType          : Association to RequestType @Core.Immutable;
+    budgetType           : Association to BudgetType default 'N';
+    transferCategory     : String(1);
+    status               : Association to RequestStatus default 0;
+    fiscalYear           : FiscalYear                 @readonly;
+    submissionPeriod     : Integer; // Month of submission date (1-12)
+    submissionDate       : Date;
+    requestor            : String(100)                @readonly;
+    pendingApprover      : String(100);
+    approvedBy           : String(100); // Last approver (summary)
+    supplementAmount     : Decimal(15, 2) default 0   @readonly;
+    returnAmount         : Decimal(15, 2) default 0   @readonly;
+    transferInAmount     : Decimal(15, 2) default 0   @readonly;
+    transferOutAmount    : Decimal(15, 2) default 0   @readonly;
+    aging                : Integer default 0          @readonly;
+    supplementDocNumber  : String                     @readonly;
+    returnDocNumber      : String                     @readonly;
+    transferInDocNumber  : String                     @readonly;
+    transferOutDocNumber : String                     @readonly;
+    postingDate          : Date;
+    postingPeriod        : Integer; // Month posted to IFAMS (1-12)
+    reason               : String(500);
+    approverComment      : String(1000);
+    requestLink          : String(1000);
+    RequestItems         : Composition of many RequestItems
+                               on RequestItems.request = $self;
+    RequestApprovers     : Composition of many RequestApprover
+                               on RequestApprovers.request = $self;
+    RequestHistory       : Composition of many RequestHistory
+                               on RequestHistory.request = $self;
 }
 
 entity RequestItems : cuid, managed {
@@ -107,10 +110,10 @@ entity RequestStatus : CodeList {
     key code : RequestStatusCode
 };
 
-type AssetStatusCode   : String(1) enum {
-    New = 'N';
-    Addition = 'A';
-    Replacement = 'R';
+type AssetStatusCode   : String(3) enum {
+    New = '001';
+    Addition = '002';
+    Replacement = '003';
 };
 
 entity AssetStatus : CodeList {

@@ -2,10 +2,12 @@ _schema-version: "3.1"
 ID: virement
 version: 1.0.0
 description: A simple CAP project.
+
 parameters:
   deploy_mode: html5-repo
   enable-parallel-deployments: true
   subdomain: epf-ent-cf-ap11-dev
+
 build-parameters:
   before-all:
     - builder: custom
@@ -25,7 +27,12 @@ build-parameters:
     - builder: custom
       commands:
         - npm install
+
 modules:
+  # ============================================================
+  # UI5 APPLICATION
+  # ============================================================
+
   - name: virement-virement.zuippsvirement
     type: html5
     path: app/virement.zui_pps_virement
@@ -42,6 +49,11 @@ modules:
       _artifactName: virementzuippsvirement.zip
       supported-platforms: []
       build-result: dist-zip
+
+  # ============================================================
+  # HANA DATABASE DEPLOYER
+  # ============================================================
+
   - name: virement-db-deployer
     type: hdb
     path: gen/db
@@ -55,6 +67,13 @@ modules:
     requires:
       - name: virement-service-uaa
       - name: virement-service-db
+
+  # ============================================================
+  # CAP BACKEND SERVICE
+  # Incoming authentication is handled through XSUAA.
+  # IAS remains bound for AMS initialization and authorization.
+  # ============================================================
+
   - name: virement-srv
     type: nodejs
     path: gen/srv
@@ -76,7 +95,7 @@ modules:
     requires:
       - name: virement-service-uaa
       - name: virement-service-db
-      - name: shared-destination
+      - name: virement-service-destination
       - name: virement-service-metadata
       - name: shared-connectivity
       - name: shared-logs
@@ -91,6 +110,13 @@ modules:
       - virement-ams-policies-deployer
     properties:
       AMS_DCL_ROOT: ams/dcl
+
+  # ============================================================
+  # SUBACCOUNT DESTINATION CONTENT DEPLOYER
+  # The backend destinations use XSUAA OAuth2UserTokenExchange.
+  # Do not use the identity service as TokenServiceInstanceName.
+  # ============================================================
+
   - name: virement-aux-destinations
     type: com.sap.application.content
     parameters:
@@ -98,23 +124,32 @@ modules:
         subaccount:
           existing_destinations_policy: update
           destinations:
-            - Authentication: OAuth2UserTokenExchange
-              Name: virement-service-uaa
+            # XSUAA service destination
+            - Name: virement-service-uaa
+              Authentication: OAuth2UserTokenExchange
               ServiceInstanceName: virement-uaa
               ServiceKeyName: virement-uaa-key
               sap.cloud.service: lcap.virement
-            - Authentication: OAuth2UserTokenExchange
-              Name: virement-app-srv
+
+            # General CAP backend destination
+            - Name: virement-app-srv
+              Authentication: OAuth2UserTokenExchange
               TokenServiceInstanceName: virement-uaa
               TokenServiceKeyName: virement-uaa-key
               URL: ~{srv-api/srv-url}
+              HTML5.DynamicDestination: true
               sap.cloud.service: lcap.virement
+
+            # HTML5 Applications Repository destination
+            # Authentication is derived from the referenced service key.
             - Name: virement-service-html5-apps-repo-host
               ServiceInstanceName: virement-html5-apps-repo-host
               ServiceKeyName: virement-html5-apps-repo-host-key
               sap.cloud.service: lcap.virement
-            - Authentication: OAuth2UserTokenExchange
-              Name: virement-ZSVC_PPS_VIREMENT
+
+            # CAP OData service destination
+            - Name: virement-ZSVC_PPS_VIREMENT
+              Authentication: OAuth2UserTokenExchange
               TokenServiceInstanceName: virement-uaa
               TokenServiceKeyName: virement-uaa-key
               URL: ~{srv-api/srv-url}/service/ZSVC_PPS_VIREMENT
@@ -122,7 +157,7 @@ modules:
               sap.applicationdevelopment.actions.enabled: false
               sap.build.usage: CAP
               sap.processautomation.enabled: false
-              HTML5.DynamicDestination: false
+              HTML5.DynamicDestination: true
               WebIDEEnabled: false
               MobileEnabled: false
               AppgyverEnabled: false
@@ -138,9 +173,14 @@ modules:
         parameters:
           service-key:
             name: virement-html5-apps-repo-host-key
-      - name: shared-destination
+      - name: virement-service-destination
         parameters:
           content-target: true
+
+  # ============================================================
+  # LAUNCHPAD HTML5 APPLICATION
+  # ============================================================
+
   - name: virement-launchpad
     type: html5
     path: build/launchpad
@@ -155,6 +195,11 @@ modules:
       _artifactName: launchpad.zip
       supported-platforms: []
       build-result: ../../build/dist
+
+  # ============================================================
+  # HTML5 CONTENT DEPLOYER
+  # ============================================================
+
   - name: virement-aux-ui-deployer
     type: com.sap.application.content
     path: build/ui-deployer
@@ -173,6 +218,11 @@ modules:
       - name: virement-service-html5-apps-repo-host
         parameters:
           content-target: true
+
+  # ============================================================
+  # AMS POLICY DEPLOYER
+  # Deploys generated DCL policies using the IAS/AMS binding.
+  # ============================================================
 
   - name: virement-ams-policies-deployer
     type: javascript.nodejs
@@ -193,9 +243,19 @@ modules:
             credential-type: X509_GENERATED
             app-identifier: ams-policy-deployer
             validity: 365
+
+# ==============================================================
+# RESOURCES
+# ==============================================================
+
 resources:
-  - type: org.cloudfoundry.managed-service
-    name: virement-service-uaa
+  # ============================================================
+  # XSUAA SERVICE
+  # Used by Work Zone, HTML5 routing, and backend token exchange.
+  # ============================================================
+
+  - name: virement-service-uaa
+    type: org.cloudfoundry.managed-service
     parameters:
       service: xsuaa
       service-plan: application
@@ -215,32 +275,69 @@ resources:
             name: virement-REQUEST_APPROVE-${space}
             role-template-references:
               - $XSAPPNAME.REQUEST_APPROVE
-  - type: org.cloudfoundry.managed-service
-    name: virement-service-db
+
+  # ============================================================
+  # HANA HDI CONTAINER
+  # ============================================================
+
+  - name: virement-service-db
+    type: org.cloudfoundry.managed-service
     parameters:
       service: hana
       service-plan: hdi-shared
       service-name: virement-db
-  - type: org.cloudfoundry.existing-service
-    name: shared-destination
-  - type: org.cloudfoundry.user-provided-service
-    name: virement-service-metadata
+
+  # ============================================================
+  # SHARED DESTINATION SERVICE
+  # Receives the subaccount-level destination content.
+  # ============================================================
+
+  - name: virement-service-destination
+    type: org.cloudfoundry.existing-service
+
+  # ============================================================
+  # METADATA USER-PROVIDED SERVICE
+  # ============================================================
+
+  - name: virement-service-metadata
+    type: org.cloudfoundry.user-provided-service
     parameters:
       service: metadata
       service-plan: standard
       service-name: virement-metadata
       config:
         default-domain: ${default-domain}
-  - type: org.cloudfoundry.existing-service
-    name: shared-connectivity
-  - type: org.cloudfoundry.existing-service
-    name: shared-logs
-  - type: org.cloudfoundry.managed-service
-    name: virement-service-html5-apps-repo-host
+
+  # ============================================================
+  # SHARED CONNECTIVITY SERVICE
+  # ============================================================
+
+  - name: shared-connectivity
+    type: org.cloudfoundry.existing-service
+
+  # ============================================================
+  # SHARED LOGGING SERVICE
+  # ============================================================
+
+  - name: shared-logs
+    type: org.cloudfoundry.existing-service
+
+  # ============================================================
+  # HTML5 APPLICATIONS REPOSITORY
+  # ============================================================
+
+  - name: virement-service-html5-apps-repo-host
+    type: org.cloudfoundry.managed-service
     parameters:
       service: html5-apps-repo
       service-plan: app-host
       service-name: virement-html5-apps-repo-host
+
+  # ============================================================
+  # SAP CLOUD IDENTITY SERVICE WITH AMS ENABLED
+  # Retained for AMS initialization and DCL policy deployment.
+  # ============================================================
+
   - name: virement-ias
     type: org.cloudfoundry.managed-service
     parameters:
@@ -254,12 +351,17 @@ resources:
         display-name: virement
         oauth2-configuration:
           token-policy:
-            access-token-format: "jwt"
+            access-token-format: jwt
           redirect-uris:
             - https://${subdomain}.launchpad.${default-domain}/login/*
             - https://${subdomain}.${default-domain}/login/*
         authorization:
           enabled: true
         xsuaa-cross-consumption: true
-  - type: org.cloudfoundry.existing-service
-    name: virement-dms
+
+  # ============================================================
+  # DOCUMENT MANAGEMENT SERVICE
+  # ============================================================
+
+  - name: virement-dms
+    type: org.cloudfoundry.existing-service

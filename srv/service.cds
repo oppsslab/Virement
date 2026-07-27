@@ -24,7 +24,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         {
             grant: 'READ',
             to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and approvedBy = $user'
+            where: 'status_code = 2 and pendingApprover = $user'
         },
 
         /*
@@ -46,23 +46,11 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         {
             grant: 'UPDATE',
             to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and approvedBy = $user'
-        },
-
-        /*
-         * Optional:
-         * Users can delete their own requests only.
-         * Remove this if delete should not be allowed.
-         */
-        {
-            grant: 'DELETE',
-            where: 'createdBy = $user'
+            where: 'status_code = 2 and pendingApprover = $user'
         },
 
         /*
          * Generic request actions.
-         * If these should be available to users who can access the request,
-         * keep them without createdBy restriction.
          */
         {grant: [
             'calculateValues',
@@ -80,24 +68,16 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
                 'postToS4'
             ],
             to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and approvedBy = $user'
+            where: 'status_code = 2 and pendingApprover = $user'
         },
-
-        {
-            grant: [
-                'postToS4'
-            ],
-            to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2'
-        }
     ])
     @odata.draft.enabled
     entity Requests             as
         projection on my.Requests {
             *,
-            virtual hideApprovalBtn : Boolean,
-            virtual isJKEW          : Boolean,
-            virtual isFunctional    : Boolean
+            virtual isPendingApprover : Boolean default false,
+            virtual isJKEW            : Boolean,
+            virtual isFunctional      : Boolean
         }
         actions {
             action calculateValues()                 returns Requests;
