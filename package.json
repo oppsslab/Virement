@@ -4,7 +4,8 @@
   "dependencies": {
     "@cap-js/hana": "^2",
     "@cap-js/sdm": "^1.10.0",
-    "@sap-cloud-sdk/http-client": "^4.7.0",
+    "@sap-cloud-sdk/connectivity": "^4.8.0",
+    "@sap-cloud-sdk/http-client": "^4.8.0",
     "@sap-cloud-sdk/util": "^4.7.0",
     "@sap/ams": "^3",
     "@sap/cds": "^9",
@@ -31,7 +32,7 @@
   "private": true,
   "cds": {
     "requires": {
-      "[production]": {   
+      "[production]": {
         "db": {
           "kind": "hana"
         },
