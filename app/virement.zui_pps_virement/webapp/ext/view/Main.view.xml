@@ -3,16 +3,18 @@
     xmlns="sap.m"
     xmlns:tnt="sap.tnt" controllerName="virement.zuippsvirement.ext.view.Main" height="90%">
     <tnt:ToolPage id="toolPage">
-        <!-- <tnt:header>
-            <tnt:ToolHeader>
+        <tnt:header>
+            <OverflowToolbar class="epfCustomBackground overflowToolbarHeader" height="3rem">
+                <Image height="3.5rem" src="{LogoImageModel>/CompanyLogo}" visible="{=! ${device>/system/phone}}"/>
+                <!-- <Image height="3.5rem" src="./images/EPF_night.png" visible="{=! ${device>/system/phone}}"/> -->
+                <ToolbarSeparator />
+                <Image height="3.5rem" class="sapUiSmallMarginBegin" src="{LogoImageModel>/AppLogo}" visible="{=! ${device>/system/phone}}"/>
+                <!-- <Image height="3.5rem" class="sapUiSmallMarginBegin" src="./images/IFAMSVirement_night.png" visible="{=! ${device>/system/phone}}"/> -->
+                <ToolbarSeparator />
+                <Title text="{i18n>appTitle}" wrapping="false" class="appTitle"/>
                 <ToolbarSpacer />
-                <VBox alignItems="Center">
-                    <Title level="H1" text="{i18n>appTitle}" wrapping="false" class="sapUiTinyMarginTop"/>
-                    <Text text="{i18n>appDescription}" wrapping="false" />
-                </VBox>
-                <ToolbarSpacer />
-            </tnt:ToolHeader>
-        </tnt:header> -->
+            </OverflowToolbar>
+        </tnt:header>
         <tnt:subHeader>
             <tnt:ToolHeader class="epfCustomBackground">
                 <IconTabHeader id="ithMenu" selectedKey="{MenuModel>/selectedKey}" items="{MenuModel>/navigation}" select=".onItemSelect" mode="Inline" backgroundDesign="Transparent" class="headerIconTabBar">

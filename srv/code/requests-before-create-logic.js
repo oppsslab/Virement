@@ -8,14 +8,17 @@ const { getLocalDateParts } = require("./utils/date-utils");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
-const {
-  determinePendingApprover,
-} = require("./utils/pending-approver-decision");
-
 const LOG = cds.log("requests-before-create-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
+
 const SEMANTIC_OBJECT_ACTION = "virementzuippsvirement-display";
+
+/*
+ * sap-ui-app-id-hint required by the Fiori Launchpad to resolve
+ * the correct app when opening the deep link.
+ */
+const SAP_UI_APP_ID_HINT = "saas_approuter_virement.zuippsvirement";
 
 const MAX_SEQUENCE = 999999;
 
@@ -24,6 +27,25 @@ const MAX_SEQUENCE = 999999;
  */
 const ROLE_JKEW = "MASS_UPLOAD_ALL";
 const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
+
+/*
+ * Request type code for Supplement requests.
+ * WBS validation for Project budget type only applies to this type.
+ */
+const REQUEST_TYPE_SUPPLEMENT = "S";
+
+/*
+ * Budget type code that represents "Project" budget requests.
+ * WBS is mandatory on all Request Items when this budget type is used
+ * on a Supplement (S) request.
+ */
+const BUDGET_TYPE_PROJECT = "P";
+
+/*
+ * Number of leading characters that must match between
+ * Material and GL Account. Applies to all request types.
+ */
+const MATERIAL_GL_MATCH_LENGTH = 6;
 
 /* ------------------------------------------------------------------ *
  * Role helpers
@@ -127,23 +149,37 @@ function getAppBaseUrl(request) {
   const referer = headers.referer || headers.referrer;
 
   if (referer) {
-    const base = referer.split("#")[0].replace(/\/$/, "");
+    const base = String(referer).split("#")[0].replace(/\/$/, "");
 
     LOG.info("Base URL derived from Referer:", base);
 
     return base;
   }
 
-  const forwardedProto =
-    headers["x-forwarded-proto"] ||
-    headers["x-forwarded-protocol"] ||
-    request.http?.req?.protocol ||
-    "https";
+  const forwardedProtoHeader =
+    headers["x-forwarded-proto"] || headers["x-forwarded-protocol"];
 
-  const forwardedHost =
+  /*
+   * x-forwarded-proto can contain multiple values when
+   * multiple proxies are involved.
+   */
+  const forwardedProto = String(
+    forwardedProtoHeader || request.http?.req?.protocol || "https",
+  )
+    .split(",")[0]
+    .trim();
+
+  const forwardedHostHeader =
     headers["x-forwarded-host"] ||
     headers.host ||
     request.http?.req?.headers?.host;
+
+  /*
+   * x-forwarded-host can also contain multiple values.
+   */
+  const forwardedHost = forwardedHostHeader
+    ? String(forwardedHostHeader).split(",")[0].trim()
+    : "";
 
   if (forwardedHost) {
     const base = `${forwardedProto}://${forwardedHost}`.replace(/\/$/, "");
@@ -156,7 +192,7 @@ function getAppBaseUrl(request) {
   const origin = headers.origin;
 
   if (origin) {
-    const base = origin.replace(/\/$/, "");
+    const base = String(origin).replace(/\/$/, "");
 
     LOG.info("Base URL derived from Origin:", base);
 
@@ -171,6 +207,12 @@ function getAppBaseUrl(request) {
 /**
  * Generates the UI deep link for the created request.
  *
+ * Produces a link in the form:
+ *
+ *   {appBaseUrl}#{semanticObjectAction}
+ *     ?sap-ui-app-id-hint={appIdHint}
+ *     &/Requests(ID={requestId},IsActiveEntity=true)
+ *
  * @param {cds.Request} request
  * @param {string} requestId
  * @returns {string}
@@ -180,10 +222,11 @@ function generateRequestLink(request, requestId) {
 
   const requestHash =
     `#${SEMANTIC_OBJECT_ACTION}` +
-    `&/Requests(` +
+    `?sap-ui-app-id-hint=${SAP_UI_APP_ID_HINT}` +
+    "&/Requests(" +
     `ID=${requestId},` +
-    `IsActiveEntity=true` +
-    `)`;
+    "IsActiveEntity=true" +
+    ")";
 
   if (!appBaseUrl) {
     LOG.warn("App base URL unavailable. " + "Storing hash-only request link.");
@@ -212,6 +255,12 @@ function calculateAgingDays(lastActionDate, currentDate = new Date()) {
 
   const last = new Date(lastActionDate);
   const current = new Date(currentDate);
+
+  if (Number.isNaN(last.getTime()) || Number.isNaN(current.getTime())) {
+    LOG.warn("Invalid date encountered while calculating aging.");
+
+    return 0;
+  }
 
   last.setHours(0, 0, 0, 0);
   current.setHours(0, 0, 0, 0);
@@ -257,7 +306,173 @@ async function calculateAging({ tx, RequestHistory, requestId }) {
 }
 
 /* ------------------------------------------------------------------ *
- * Transfer category / request number helpers
+ * Request items helpers
+ * ------------------------------------------------------------------ */
+
+/**
+ * Fetches the RequestItems associated with the request.
+ *
+ * Checks both:
+ * - request.data.RequestItems (deep-insert payload)
+ * - existing persisted RequestItems for the requestId
+ *   (covers draft-pattern flows where items were already saved)
+ *
+ * @param {object} options
+ * @param {object} options.tx
+ * @param {object} options.RequestItems
+ * @param {cds.Request} options.request
+ * @param {string} options.requestId
+ * @returns {Promise<object[]>}
+ */
+async function fetchRequestItems({ tx, RequestItems, request, requestId }) {
+  const payloadItems = request.data.RequestItems;
+
+  if (Array.isArray(payloadItems) && payloadItems.length > 0) {
+    LOG.info(
+      "RequestItems found in deep-insert payload. Count:",
+      payloadItems.length,
+    );
+
+    return payloadItems;
+  }
+
+  if (!RequestItems || !requestId) {
+    LOG.warn(
+      "Cannot fetch persisted RequestItems. " +
+        "RequestItems entity or requestId is missing.",
+    );
+
+    return [];
+  }
+
+  const persistedItems = await tx.run(
+    SELECT.from(RequestItems)
+      .columns("ID", "wbs", "material", "glAccount")
+      .where({
+        request_ID: requestId,
+      }),
+  );
+
+  LOG.info(
+    "Persisted RequestItems fetched. Count:",
+    (persistedItems || []).length,
+  );
+
+  return persistedItems || [];
+}
+
+/**
+ * Validates that WBS is filled on every request item when the
+ * request type is Supplement (S) and the budget type is
+ * "Project" (P).
+ *
+ * @param {cds.Request} request
+ * @param {object} options
+ * @param {object[]} options.items
+ * @param {string} options.requestTypeCode
+ * @param {string} options.budgetTypeCode
+ * @returns {boolean}
+ */
+function validateWbsForProjectBudget(
+  request,
+  { items, requestTypeCode, budgetTypeCode },
+) {
+  const type = String(requestTypeCode || "")
+    .trim()
+    .toUpperCase();
+
+  const budgetType = String(budgetTypeCode || "")
+    .trim()
+    .toUpperCase();
+
+  if (type !== REQUEST_TYPE_SUPPLEMENT || budgetType !== BUDGET_TYPE_PROJECT) {
+    return true;
+  }
+
+  const itemsMissingWbs = (items || []).filter(function (item) {
+    return !String(item.wbs || "").trim();
+  });
+
+  if (itemsMissingWbs.length > 0) {
+    const missingItemIds = itemsMissingWbs
+      .map(function (item, index) {
+        return item.ID || `#${index + 1}`;
+      })
+      .join(", ");
+
+    LOG.error(
+      "WBS is required for Supplement requests with Project budget " +
+        "type. Missing on items:",
+      missingItemIds,
+    );
+
+    request.error(
+      400,
+      "WBS is required for all Request Items when Request Type is " +
+        "Supplement and Budget Type is Project.",
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validates that the first digits of Material match the first
+ * digits of GL Account on every request item. Applies to all
+ * request types.
+ *
+ * @param {cds.Request} request
+ * @param {object} options
+ * @param {object[]} options.items
+ * @returns {boolean}
+ */
+function validateMaterialGlAlignment(request, { items }) {
+  const mismatchedItems = (items || []).filter(function (item) {
+    const material = String(item.material || "").trim();
+
+    const glAccount = String(item.glAccount || "").trim();
+
+    if (!material || !glAccount) {
+      return false;
+    }
+
+    const materialPrefix = material.substring(0, MATERIAL_GL_MATCH_LENGTH);
+
+    const glAccountPrefix = glAccount.substring(0, MATERIAL_GL_MATCH_LENGTH);
+
+    return materialPrefix !== glAccountPrefix;
+  });
+
+  if (mismatchedItems.length > 0) {
+    const mismatchedItemIds = mismatchedItems
+      .map(function (item, index) {
+        return item.ID || `#${index + 1}`;
+      })
+      .join(", ");
+
+    LOG.error(
+      "Material and GL Account first " +
+        `${MATERIAL_GL_MATCH_LENGTH} digits do not match on items:`,
+      mismatchedItemIds,
+    );
+
+    request.error(
+      400,
+      "The first " +
+        `${MATERIAL_GL_MATCH_LENGTH} digits of Material must match ` +
+        "the GL Account on all Request Items.",
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+/* ------------------------------------------------------------------ *
+ * Transfer category and request-number helpers
  * ------------------------------------------------------------------ */
 
 /**
@@ -392,7 +607,7 @@ function determineRequestNumberPrefixCode(
     }
 
     LOG.error(
-      "Invalid transferCategory " + "for Transfer request:",
+      "Invalid transferCategory for Transfer request:",
       transferCategory,
     );
 
@@ -405,7 +620,7 @@ function determineRequestNumberPrefixCode(
   }
 
   LOG.error(
-    "Unsupported requestType_code " + "for request number:",
+    "Unsupported requestType_code for request number:",
     requestTypeCode,
   );
 
@@ -484,7 +699,7 @@ async function generateRequestNumber({
 
     if (sequenceNumber === null) {
       LOG.warn(
-        "Skipping requestNumber " + "with invalid sequence:",
+        "Skipping requestNumber with invalid sequence:",
         row.requestNumber,
       );
 
@@ -510,7 +725,7 @@ async function generateRequestNumber({
     return null;
   }
 
-  while (true) {
+  while (nextSequence <= MAX_SEQUENCE) {
     const sequenceText = String(nextSequence).padStart(6, "0");
 
     const generatedRequestNumber = `${requestNumberPrefix}${sequenceText}`;
@@ -528,24 +743,21 @@ async function generateRequestNumber({
     }
 
     LOG.warn(
-      "Duplicate requestNumber found, " + "incrementing:",
+      "Duplicate requestNumber found, incrementing:",
       generatedRequestNumber,
     );
 
-    nextSequence++;
-
-    if (nextSequence > MAX_SEQUENCE) {
-      LOG.error("Maximum sequence exceeded " + "while checking duplicates.");
-
-      request.error(
-        400,
-        "Maximum request number sequence " +
-          `exceeded for ${requestNumberPrefix}.`,
-      );
-
-      return null;
-    }
+    nextSequence += 1;
   }
+
+  LOG.error("Maximum sequence exceeded while checking duplicates.");
+
+  request.error(
+    400,
+    "Maximum request number sequence " + `exceeded for ${requestNumberPrefix}.`,
+  );
+
+  return null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -571,10 +783,7 @@ function validateSubmission(
   if (!requestId) {
     LOG.error("Request ID is missing.");
 
-    request.error(
-      400,
-      "Request ID is required before " + "creating the request.",
-    );
+    request.error(400, "Request ID is required before creating the request.");
 
     return false;
   }
@@ -582,10 +791,7 @@ function validateSubmission(
   if (!requestTypeCode) {
     LOG.error("requestType_code is missing.");
 
-    request.error(
-      400,
-      "Request Type is required before " + "creating the request.",
-    );
+    request.error(400, "Request Type is required before creating the request.");
 
     return false;
   }
@@ -593,10 +799,7 @@ function validateSubmission(
   if (!fiscalYear) {
     LOG.error("fiscalYear is missing.");
 
-    request.error(
-      400,
-      "Fiscal Year is required before " + "creating the request.",
-    );
+    request.error(400, "Fiscal Year is required before creating the request.");
 
     return false;
   }
@@ -608,6 +811,14 @@ function validateSubmission(
   const budgetType = String(budgetTypeCode || "")
     .trim()
     .toUpperCase();
+
+  if (!["R", "S", "T"].includes(type)) {
+    LOG.error("Unsupported request type:", type);
+
+    request.error(400, "Request Type must be R, S, or T.");
+
+    return false;
+  }
 
   if (type === "T") {
     if (!["J", "F", "P", "N"].includes(transferCategory)) {
@@ -629,10 +840,7 @@ function validateSubmission(
       ["P", "N"].includes(transferCategory) &&
       !["P", "N"].includes(budgetType)
     ) {
-      LOG.error(
-        "budgetType_code is invalid " + "for normal Transfer:",
-        budgetType,
-      );
+      LOG.error("budgetType_code is invalid for normal Transfer:", budgetType);
 
       request.error(
         400,
@@ -647,43 +855,21 @@ function validateSubmission(
 }
 
 /* ------------------------------------------------------------------ *
- * Pending approver helper
+ * Optional entity-field helper
  * ------------------------------------------------------------------ */
 
 /**
- * Calls the SAP Build Process Automation decision and stores the
- * returned pending approver in the request data.
+ * Returns true when the target entity contains the specified field.
+ *
+ * This allows the handler to populate workflow tracking fields only
+ * when those fields exist in the CDS model.
  *
  * @param {cds.Request} request
- * @param {string} requestTypeCode
- * @returns {Promise<boolean>}
+ * @param {string} fieldName
+ * @returns {boolean}
  */
-async function setPendingApprover(request, requestTypeCode) {
-  LOG.info("Determining pending approver " + "using approval decision.");
-
-  const pendingApprover = await determinePendingApprover({
-    requestTypeCode,
-  });
-
-  if (!pendingApprover) {
-    LOG.error("Approval decision returned " + "an empty pending approver.");
-
-    request.error(
-      422,
-      "No pending approver was returned " + "by the approval decision.",
-    );
-
-    return false;
-  }
-
-  request.data.pendingApprover = pendingApprover;
-
-  LOG.info(
-    "Pending approver determined " + "by approval decision:",
-    request.data.pendingApprover,
-  );
-
-  return true;
+function targetHasElement(request, fieldName) {
+  return Boolean(request.target?.elements?.[fieldName]);
 }
 
 /* ------------------------------------------------------------------ *
@@ -696,24 +882,33 @@ async function setPendingApprover(request, requestTypeCode) {
  *   entity = "ZSVC_PPS_VIREMENT.Requests"
  * )
  *
- * Performs calculations before the request is created:
- * - Sets status to Pending Approval
- * - Sets submission date and period
+ * Prepares the request before it is created:
+ *
  * - Determines and persists transferCategory
+ * - Validates that at least one RequestItem exists
+ * - Validates WBS is filled on all items when Request Type is
+ *   Supplement (S) and Budget Type is Project (P)
+ * - Validates Material and GL Account alignment on all items
+ *   (all request types)
+ * - Sets status to Pending Approval
+ * - Clears any client-supplied pendingApprover
+ * - Initializes workflow tracking fields
+ * - Sets submission date and period
  * - Calculates all amount fields
  * - Calculates aging
  * - Generates the request number
- * - Calls the approval decision
- * - Sets the pending approver
  * - Generates the UI request link
  *
- * Request number prefix rules:
- * - RequestType R -> R
- * - RequestType S -> S
- * - RequestType T + transferCategory J -> J
- * - RequestType T + transferCategory F -> F
- * - RequestType T + transferCategory P -> P
- * - RequestType T + transferCategory N -> N
+ * This handler does not:
+ *
+ * - Call the SAP Build Process Automation Decision API
+ * - Determine the pending approver
+ * - Start the SAP Build Process Automation workflow
+ *
+ * The workflow must be started after the database transaction
+ * succeeds. The workflow will retrieve the saved request from CAP,
+ * execute the decision, update pendingApprover, and create the
+ * approval task.
  *
  * @param {cds.Request} request
  */
@@ -721,15 +916,15 @@ module.exports = async function (request) {
   LOG.info("--- BEFORE CREATE Requests started ---");
 
   try {
+    request.data = request.data || {};
+
     LOG.info("Event:", request.event);
 
     LOG.info("Target:", request.target?.name);
 
-    LOG.info("Incoming request.data:", JSON.stringify(request.data || {}));
+    LOG.info("Incoming request.data:", JSON.stringify(request.data));
 
     LOG.info("Request params:", JSON.stringify(request.params || []));
-
-    request.data = request.data || {};
 
     const tx = cds.tx(request);
 
@@ -747,6 +942,9 @@ module.exports = async function (request) {
       return;
     }
 
+    /*
+     * Read the values required for request preparation.
+     */
     const requestId = request.data.ID;
 
     const requestTypeCode = request.data.requestType_code;
@@ -755,11 +953,19 @@ module.exports = async function (request) {
 
     const fiscalYear = request.data.fiscalYear;
 
+    const normalizedRequestType = String(requestTypeCode || "")
+      .trim()
+      .toUpperCase();
+
+    /*
+     * Determine role flags for transfer classification.
+     */
     const roleFlags = getUserRoleFlags(request.user);
 
     /*
-     * Persisted transfer classification.
-     * This only applies to Transfer requests.
+     * Determine the persisted transfer classification.
+     *
+     * For request types R and S, this returns null.
      */
     const transferCategory = determineTransferCategory(
       request,
@@ -768,11 +974,12 @@ module.exports = async function (request) {
       roleFlags,
     );
 
-    const normalizedRequestType = String(requestTypeCode || "")
-      .trim()
-      .toUpperCase();
-
+    /*
+     * For Transfer requests, a valid category is required.
+     */
     if (normalizedRequestType === "T" && !transferCategory) {
+      LOG.error("Transfer category could not be determined.");
+
       return;
     }
 
@@ -790,27 +997,121 @@ module.exports = async function (request) {
 
     LOG.info("transferCategory:", request.data.transferCategory);
 
-    if (
-      !validateSubmission(request, {
-        requestId,
-        requestTypeCode,
-        budgetTypeCode,
-        fiscalYear,
-        transferCategory,
-      })
-    ) {
+    /*
+     * Validate the request before performing calculations.
+     */
+    const isValid = validateSubmission(request, {
+      requestId,
+      requestTypeCode,
+      budgetTypeCode,
+      fiscalYear,
+      transferCategory,
+    });
+
+    if (!isValid) {
+      LOG.error("Request failed submission validation.");
+
       return;
     }
 
     /*
-     * 1. Set submitted status to Pending Approval.
+     * Fetch the RequestItems once and reuse them for the
+     * "at least one item" check and the item-level business
+     * rule validations below.
+     */
+    const requestItems = await fetchRequestItems({
+      tx,
+      RequestItems,
+      request,
+      requestId,
+    });
+
+    if (!requestItems.length) {
+      LOG.error(
+        "Request cannot be submitted without at least one request item.",
+      );
+
+      request.error(
+        400,
+        "At least one Request Item is required before submitting the request.",
+      );
+
+      return;
+    }
+
+    /*
+     * Validate WBS is filled on all items when Request Type is
+     * Supplement (S) and Budget Type is Project (P).
+     */
+    const isWbsValid = validateWbsForProjectBudget(request, {
+      items: requestItems,
+      requestTypeCode,
+      budgetTypeCode,
+    });
+
+    if (!isWbsValid) {
+      LOG.error(
+        "Request failed WBS validation for Supplement / " +
+          "Project budget type.",
+      );
+
+      return;
+    }
+
+    /*
+     * Validate Material and GL Account alignment on all items.
+     * Applies to all request types.
+     */
+    const isMaterialGlValid = validateMaterialGlAlignment(request, {
+      items: requestItems,
+    });
+
+    if (!isMaterialGlValid) {
+      LOG.error("Request failed Material / GL Account alignment validation.");
+
+      return;
+    }
+
+    /*
+     * 1. Set request status to Pending Approval.
      */
     request.data.status_code = REQUEST_STATUS.PENDING_APPROVAL;
 
     LOG.info("Set status_code to Pending Approval:", request.data.status_code);
 
     /*
-     * 2. Set submission date and period.
+     * 2. Do not accept pendingApprover from the client.
+     *
+     * The workflow decision is the authoritative source for
+     * the assigned approver. The workflow will update this
+     * field after executing the decision.
+     */
+    request.data.pendingApprover = null;
+
+    LOG.info(
+      "Cleared pendingApprover. " + "The workflow will determine the approver.",
+    );
+
+    /*
+     * 3. Initialize optional workflow tracking fields.
+     *
+     * These fields are only assigned when they exist in the
+     * Requests CDS entity.
+     */
+    if (targetHasElement(request, "workflowStatus")) {
+      request.data.workflowStatus = "NOT_STARTED";
+    }
+
+    if (targetHasElement(request, "workflowInstanceId")) {
+      request.data.workflowInstanceId = null;
+    }
+
+    if (targetHasElement(request, "workflowError")) {
+      request.data.workflowError = null;
+    }
+
+    /*
+     * 4. Set submission date and period.
      */
     const dateParts = getLocalDateParts(new Date());
 
@@ -823,7 +1124,7 @@ module.exports = async function (request) {
     LOG.info("Set submissionPeriod:", request.data.submissionPeriod);
 
     /*
-     * 3. Calculate all amount fields.
+     * 5. Calculate all amount fields.
      */
     const amounts = await calculateAmountsByType({
       tx,
@@ -843,7 +1144,7 @@ module.exports = async function (request) {
     LOG.info("Calculated amounts:", JSON.stringify(amounts));
 
     /*
-     * 4. Calculate aging.
+     * 6. Calculate aging.
      */
     request.data.aging = await calculateAging({
       tx,
@@ -854,7 +1155,7 @@ module.exports = async function (request) {
     LOG.info("Calculated aging:", request.data.aging);
 
     /*
-     * 5. Generate the request number when it is not
+     * 7. Generate the request number when it is not
      * already provided.
      */
     if (!request.data.requestNumber) {
@@ -868,6 +1169,8 @@ module.exports = async function (request) {
       });
 
       if (!generatedRequestNumber) {
+        LOG.error("Request number could not be generated.");
+
         return;
       }
 
@@ -882,26 +1185,25 @@ module.exports = async function (request) {
     }
 
     /*
-     * 6. Determine the pending approver.
+     * 8. Generate the full UI deep link.
      *
-     * This is intentionally outside the request-number
-     * generation block. The approver must also be determined
-     * when a request number was already supplied.
-     */
-    const approverWasSet = await setPendingApprover(request, requestTypeCode);
-
-    if (!approverWasSet) {
-      return;
-    }
-
-    /*
-     * 7. Generate the full UI deep link.
+     * The link is saved with the request. The workflow retrieves
+     * it from the CAP service by using the request ID.
      */
     request.data.requestLink = generateRequestLink(request, requestId);
 
     LOG.info("Generated requestLink:", request.data.requestLink);
 
-    LOG.info("Final request.data:", JSON.stringify(request.data || {}));
+    /*
+     * Do not start the workflow here.
+     *
+     * The Before CREATE handler runs before the database operation
+     * is completed. Starting the workflow here could allow the
+     * workflow to execute before the request is committed and
+     * available through the CAP service.
+     */
+
+    LOG.info("Final request.data:", JSON.stringify(request.data));
 
     LOG.info("--- BEFORE CREATE Requests ended successfully ---");
   } catch (error) {
@@ -910,7 +1212,7 @@ module.exports = async function (request) {
     const isExpectedError = Boolean(error.statusCode || error.status);
 
     LOG.error(
-      "Error during submit calculations.",
+      "Error during request preparation.",
       JSON.stringify({
         statusCode,
         message: error.message,
@@ -924,7 +1226,7 @@ module.exports = async function (request) {
       statusCode,
       isExpectedError
         ? error.message
-        : "An unexpected error occurred " + "while submitting the request.",
+        : "An unexpected error occurred " + "while preparing the request.",
     );
   }
 };

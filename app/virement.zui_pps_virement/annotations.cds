@@ -428,15 +428,9 @@ annotate service.Requests with @(
             ID           : 'SupplementRequestItems',
             Label        : '{i18n>RequestDetails}',
             Target       : 'RequestItems/@UI.PresentationVariant#SupplementItems',
-            ![@UI.Hidden]: {$edmJson: {$Or: [
-                {$Ne: [
-                    {$Path: 'requestType_code'},
-                    'S'
-                ]},
-                {$Eq: [
-                    {$Path: 'status_code'},
-                    0
-                ]}
+            ![@UI.Hidden]: {$edmJson: {$Ne: [
+                {$Path: 'requestType_code'},
+                'S'
             ]}}
         },
         {
@@ -757,9 +751,18 @@ annotate service.RequestItems with {
         title              : '{i18n>SRNo}',
         Common.FieldControl: #ReadOnly
     );
-    costCentre        @(title: '{i18n>CostCentre}');
-    glAccount         @(title: '{i18n>GL}');
-    material          @(title: '{i18n>Material}');
+    costCentre        @(
+        title              : '{i18n>CostCentre}',
+        Common.FieldControl: #Mandatory
+    );
+    glAccount         @(
+        title              : '{i18n>GL}',
+        Common.FieldControl: #Mandatory
+    );
+    material          @(
+        title              : '{i18n>Material}',
+        Common.FieldControl: #Mandatory
+    );
     wbs               @(title: '{i18n>WBS}');
     assetStatus       @(
         title                          : '{i18n>AssetStatus}',

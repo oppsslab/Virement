@@ -1,6 +1,6 @@
 sap.ui.define(
-  ["sap/fe/core/rootView/NavContainer.controller"],
-  function (PageController) {
+  ["sap/fe/core/rootView/NavContainer.controller", "sap/ui/model/json/JSONModel"],
+  function (PageController, JSONModel) {
     "use strict";
 
     return PageController.extend("virement.zuippsvirement.ext.view.Main", {
@@ -11,6 +11,18 @@ sap.ui.define(
        */
       onInit: function () {
         PageController.prototype.onInit.apply(this, arguments);
+
+        const appId = this.getAppComponent().getManifestEntry("/sap.app/id");
+
+        const appPath = appId.replaceAll(".", "/");
+        const appModulePath = jQuery.sap.getModulePath(appPath);
+
+        const oImageModel = new JSONModel({
+            CompanyLogo: `${appModulePath}/images/EPF_night.png`,
+            AppLogo: `${appModulePath}/images/IFAMSVirement_night.png`,
+        });
+
+        this.getView().setModel(oImageModel, "LogoImageModel");
 
         this._oRouter = this.getOwnerComponent().getRouter();
 

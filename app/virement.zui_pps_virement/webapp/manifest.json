@@ -5,7 +5,7 @@
     "type": "application",
     "i18n": "i18n/i18n.properties",
     "applicationVersion": {
-      "version": "0.0.71"
+      "version": "0.0.79"
     },
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
@@ -34,7 +34,8 @@
           "signature": {
             "parameters": {},
             "additionalParameters": "allowed"
-          }
+          },
+          "icon": "sap-icon://request"
         }
       }
     }
