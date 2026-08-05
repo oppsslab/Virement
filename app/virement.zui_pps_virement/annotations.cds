@@ -68,10 +68,6 @@ annotate service.Requests with {
         title              : '{i18n>Requestor}',
         Common.FieldControl: #ReadOnly
     );
-    pendingApprover      @(
-        title              : '{i18n>PendingApprover}',
-        Common.FieldControl: #ReadOnly
-    );
     approvedBy           @(
         title              : '{i18n>ApprovedBy}',
         Common.FieldControl: #ReadOnly
@@ -129,10 +125,6 @@ annotate service.Requests with @(
             },
             {
                 $Type: 'UI.DataField',
-                Value: pendingApprover
-            },
-            {
-                $Type: 'UI.DataField',
                 Value: approvedBy
             },
             {
@@ -163,29 +155,9 @@ annotate service.Requests with @(
             Label        : '{i18n>Calculate}',
             ![@UI.Hidden]: IsActiveEntity
         },
-        // {
-        //     $Type        : 'UI.DataFieldForAction',
-        //     Action       : 'service.approveRequest',
-        //     Label        : '{i18n>Approve}',
-        //     Criticality  : #Positive,
-        //     ![@UI.Hidden]: {$edmJson: {$Or: [
-        //         {$Ne: [
-        //             {$Path: 'status_code'},
-        //             2
-        //         ]},
-        //         {$Eq: [
-        //             {$Path: 'hideApprovalBtn'},
-        //             true
-        //         ]},
-        //         {$Eq: [
-        //             {$Path: 'IsActiveEntity'},
-        //             false
-        //         ]}
-        //     ]}}
-        // },
         {
             $Type        : 'UI.DataFieldForAction',
-            Action       : 'ZSVC_PPS_VIREMENT.postToS4',
+            Action       : 'service.approveRequest',
             Label        : '{i18n>Approve}',
             Criticality  : #Positive,
             ![@UI.Hidden]: {$edmJson: {$Or: [
@@ -203,6 +175,26 @@ annotate service.Requests with @(
                 ]}
             ]}}
         },
+        // {
+        //     $Type        : 'UI.DataFieldForAction',
+        //     Action       : 'ZSVC_PPS_VIREMENT.postToS4',
+        //     Label        : '{i18n>Approve}',
+        //     Criticality  : #Positive,
+        //     ![@UI.Hidden]: {$edmJson: {$Or: [
+        //         {$Ne: [
+        //             {$Path: 'status_code'},
+        //             2
+        //         ]},
+        //         {$Eq: [
+        //             {$Path: 'isPendingApprover'},
+        //             false
+        //         ]},
+        //         {$Eq: [
+        //             {$Path: 'IsActiveEntity'},
+        //             false
+        //         ]}
+        //     ]}}
+        // },
         {
             $Type        : 'UI.DataFieldForAction',
             Action       : 'service.rejectRequest',
@@ -586,10 +578,16 @@ annotate service.Requests with @(
             Target: 'RequestAttachments/@UI.LineItem'
         },
         {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'RequestApprovers',
+            Label : '{i18n>Approvers}',
+            Target: 'RequestApprovers/@UI.LineItem#Approvers'
+        },
+        {
             $Type        : 'UI.ReferenceFacet',
             Label        : '{i18n>History}',
             ID           : 'History',
-            Target       : 'RequestHistory/@UI.LineItem#History',
+            Target       : 'RequestHistory/@UI.PresentationVariant#History',
             ![@UI.Hidden]: {$edmJson: {$Eq: [
                 {$Path: 'status_code'},
                 0
@@ -732,13 +730,19 @@ annotate service.Requests with @Common.SideEffects #RefreshItemsAfterItemChange:
 };
 
 annotate service.Requests actions {
-    postToS4 @(Common.SideEffects: {TargetProperties: [
-        'in/status_code',
-        'in/supplementDocNumber',
-        'in/returnDocNumber',
-        'in/transferInDocNumber',
-        'in/transferOutDocNumber'
-    ]})
+    approveRequest @(Common.SideEffects: {
+        TargetProperties: [
+            'in/status_code',
+            'in/supplementDocNumber',
+            'in/returnDocNumber',
+            'in/transferInDocNumber',
+            'in/transferOutDocNumber'
+        ],
+        TargetEntities  : [
+            RequestApprovers,
+            RequestHistory
+        ]
+    })
 };
 
 
@@ -1196,7 +1200,14 @@ annotate service.RequestHistory with @(
     Capabilities.SearchRestrictions: {Searchable: false},
     Capabilities.UpdateRestrictions: {Updatable: false},
     UI.CreateHidden,
-    UI.DeleteHidden
+    UI.DeleteHidden,
+    UI.PresentationVariant #History: {
+        SortOrder     : [{
+            Property  : 'createdAt',
+            Descending: true
+        }],
+        Visualizations: ['@UI.LineItem#History']
+    }
 );
 
 
@@ -1205,3 +1216,41 @@ annotate service.RequestHistory with @(
 // =============================================================================
 
 annotate service.Requests.RequestAttachments with @(Capabilities.SearchRestrictions: {Searchable: false});
+
+// =============================================================================
+// RequestApprovers - List Report
+// =============================================================================
+
+annotate service.RequestApprovers with @(
+    UI.LineItem #Approvers         : [
+        {
+            $Type: 'UI.DataField',
+            Value: emailAddress,
+            Label: 'Email'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: level,
+            Label: 'Level'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: status.descr,
+            Label: '{i18n>Status}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: actionDate,
+            Label: '{i18n>Date}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: comment,
+            Label: 'Comment'
+        }
+    ],
+    Capabilities.SearchRestrictions: {Searchable: false},
+    Capabilities.UpdateRestrictions: {Updatable: false},
+    UI.CreateHidden,
+    UI.DeleteHidden
+);

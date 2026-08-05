@@ -14,6 +14,21 @@ const WORKFLOW_DEFINITION_ID =
 const WORKFLOW_START_PATH =
   "/workflow/rest/v1/workflow-instances?environmentId=nonprd";
 
+const TASK_INSTANCES_PATH = "/workflow/rest/v1/task-instances";
+
+const TASK_INSTANCE_PATH = (taskId) =>
+  `/workflow/rest/v1/task-instances/${taskId}`;
+
+const ENVIRONMENT_ID = "nonprd";
+
+/*
+ * Task statuses considered "still open / awaiting action" by the
+ * SAP Build Process Automation Task Instance API. Different API
+ * versions have been observed to use either of these values, so
+ * both are checked when filtering for an open task.
+ */
+const OPEN_TASK_STATUSES = ["READY", "OPEN"];
+
 /**
  * Finds a destination property using case-insensitive matching.
  *
@@ -307,26 +322,260 @@ async function startApprovalWorkflow({
     throw error;
   }
 
+  const workflowInstanceId =
+    response.data.id ||
+    response.data.instanceId ||
+    response.data.workflowInstanceId ||
+    null;
+
   LOG.info(
     "Approval workflow start request completed.",
     JSON.stringify({
       requestId,
 
-      workflowInstanceId:
-        response.data.id ||
-        response.data.instanceId ||
-        response.data.workflowInstanceId ||
-        null,
+      workflowInstanceId,
 
       workflowStatus: response.data.status || null,
+
+      /*
+       * Log the full raw response once here. This is safe: it
+       * does not contain the API key or any authentication
+       * material, only workflow instance metadata. This is
+       * useful to confirm the actual field name used for the
+       * instance ID if workflowInstanceId above is ever null.
+       */
+      rawResponse: JSON.stringify(response.data),
     }),
   );
 
+  if (!workflowInstanceId) {
+    LOG.error(
+      "Workflow started but no recognizable instance ID field " +
+        "was found in the response. Checked: id, instanceId, " +
+        "workflowInstanceId.",
+      JSON.stringify({ requestId, rawResponse: response.data }),
+    );
+  }
+
   return response.data;
+}
+
+/**
+ * Queries SAP Build Process Automation for task instances matching
+ * the given workflow instance ID, and returns the first task that
+ * is still open (awaiting a decision).
+ *
+ * This is used so the CAP app's own Approve/Reject buttons can
+ * discover the correct taskId to complete, without needing BPA to
+ * proactively report it back to CAP when the task is first created.
+ *
+ * @param {string} workflowInstanceId
+ * @returns {Promise<object|null>} the raw open task instance
+ *   object, or null if none is found
+ */
+async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
+  if (!workflowInstanceId) {
+    LOG.error("Cannot look up task instances without a workflowInstanceId.");
+
+    return null;
+  }
+
+  const { destination, apiKey } = await getProcessAutomationDestination();
+
+  LOG.info(
+    "Querying task instances for workflow instance.",
+    JSON.stringify({ workflowInstanceId }),
+  );
+
+  let response;
+
+  try {
+    response = await executeHttpRequest(
+      destination,
+      {
+        method: "GET",
+
+        url: TASK_INSTANCES_PATH,
+
+        params: {
+          workflowInstanceId,
+          environmentId: ENVIRONMENT_ID,
+        },
+
+        headers: {
+          Accept: "application/json",
+
+          "irpa-api-key": apiKey,
+        },
+      },
+      { fetchCsrfToken: false },
+    );
+  } catch (error) {
+    const status = error.response?.status || error.statusCode;
+
+    LOG.error(
+      "Task instance query failed.",
+      JSON.stringify({
+        workflowInstanceId,
+        status,
+        message: error.response?.data?.message || error.message,
+        responseData: error.response?.data || null,
+      }),
+    );
+
+    throw error;
+  }
+
+  /*
+   * The response shape may be a plain array, or an object wrapping
+   * the array under a property such as "content" or "value",
+   * depending on the API version. All are checked here.
+   */
+  const rawData = response?.data;
+
+  const taskInstances = Array.isArray(rawData)
+    ? rawData
+    : rawData?.content || rawData?.value || [];
+
+  LOG.info(
+    "Task instances retrieved.",
+    JSON.stringify({
+      workflowInstanceId,
+      count: taskInstances.length,
+      rawResponse: JSON.stringify(rawData),
+    }),
+  );
+
+  const openTask = taskInstances.find(function (task) {
+    const status = String(task?.status || "")
+      .trim()
+      .toUpperCase();
+
+    return OPEN_TASK_STATUSES.includes(status);
+  });
+
+  if (!openTask) {
+    LOG.warn(
+      "No open task instance found for workflow instance.",
+      JSON.stringify({ workflowInstanceId }),
+    );
+
+    return null;
+  }
+
+  LOG.info(
+    "Open task instance found.",
+    JSON.stringify({
+      workflowInstanceId,
+      taskId: openTask.id || openTask.taskId || null,
+      subject: openTask.subject || openTask.name || null,
+      status: openTask.status || null,
+    }),
+  );
+
+  return openTask;
+}
+
+/**
+ * Completes a SAP Build Process Automation task instance, routing
+ * the workflow down the Approve or Reject branch accordingly.
+ *
+ * No business data needs to be passed in the completion context.
+ * "Request Approval Form" is a native Approve/Reject form template
+ * with no support for custom output fields, so it cannot carry
+ * values like the approver's email or a comment back into the
+ * workflow's own data model. All approver-identity handling,
+ * RequestApprovers/Requests status updates, and S/4 posting are
+ * now done directly in CAP (see approve-reject-request.js and
+ * post-to-s4-logic.js) BEFORE this function is ever called. This
+ * call's only remaining purpose is to formally close the task so
+ * the workflow instance advances down the correct branch and does
+ * not hang open indefinitely.
+ *
+ * @param {object} options
+ * @param {string} options.taskId
+ * @param {string} options.decision "APPROVED" or "REJECTED"
+ *   (used only for logging here; the actual branch taken in BPA
+ *   is determined by the task's own Approve/Reject completion,
+ *   not by a value in this payload)
+ * @param {string} [options.comment]
+ * @returns {Promise<object>}
+ */
+async function completeTask({ taskId, decision, comment }) {
+  if (!taskId) {
+    const error = new Error("taskId is required to complete a task.");
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+  const { destination, apiKey } = await getProcessAutomationDestination();
+
+  const payload = {
+    status: "COMPLETED",
+
+    context: {
+      comment: comment || "",
+    },
+  };
+
+  LOG.info(
+    "Completing task instance.",
+    JSON.stringify({ taskId, decision, hasComment: Boolean(comment) }),
+  );
+
+  try {
+    const response = await executeHttpRequest(
+      destination,
+      {
+        method: "PATCH",
+
+        url: TASK_INSTANCE_PATH(taskId),
+
+        headers: {
+          Accept: "application/json",
+
+          "Content-Type": "application/json",
+
+          "irpa-api-key": apiKey,
+        },
+
+        data: payload,
+      },
+      { fetchCsrfToken: false },
+    );
+
+    LOG.info(
+      "Task instance completed successfully.",
+      JSON.stringify({
+        taskId,
+        rawResponse: JSON.stringify(response?.data || {}),
+      }),
+    );
+
+    return response?.data || {};
+  } catch (error) {
+    const status = error.response?.status || error.statusCode;
+
+    LOG.error(
+      "Task instance completion failed.",
+      JSON.stringify({
+        taskId,
+        status,
+        message: error.response?.data?.message || error.message,
+        responseData: error.response?.data || null,
+      }),
+    );
+
+    throw error;
+  }
 }
 
 module.exports = {
   startApprovalWorkflow,
   getProcessAutomationDestination,
   getDestinationProperty,
+  getOpenTaskForWorkflowInstance,
+  completeTask,
 };

@@ -41,7 +41,7 @@ entity Requests : cuid, managed {
     workflowError        : LargeString;
     RequestItems         : Composition of many RequestItems
                                on RequestItems.request = $self;
-    RequestApprovers     : Composition of many RequestApprover
+    RequestApprovers     : Composition of many RequestApprovers
                                on RequestApprovers.request = $self;
     RequestHistory       : Composition of many RequestHistory
                                on RequestHistory.request = $self;
@@ -70,7 +70,7 @@ entity RequestHistory : cuid, managed {
     changes   : String(500);
 }
 
-entity RequestApprover : cuid, managed {
+entity RequestApprovers : cuid, managed {
     request      : Association to Requests;
     emailAddress : String;
     level        : Integer;

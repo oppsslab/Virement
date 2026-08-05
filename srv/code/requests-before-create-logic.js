@@ -140,6 +140,14 @@ function getUserRoleFlags(user) {
 /**
  * Determines the application base URL from the incoming request.
  *
+ * Fiori Launchpad renders apps inside an iframe (ui5appruntime.html),
+ * so the Referer header reflects that iframe's own URL - a long
+ * runtime path with many query parameters (siteId, subaccountId,
+ * saasApprouter, sap-ui-app-id, scenario, sap-theme, etc.) - not the
+ * clean shell URL. This function extracts only the origin and the
+ * siteId parameter from that Referer, then reconstructs the desired
+ * "/site?siteId=..." shape, discarding everything else.
+ *
  * @param {cds.Request} request
  * @returns {string}
  */
@@ -149,20 +157,49 @@ function getAppBaseUrl(request) {
   const referer = headers.referer || headers.referrer;
 
   if (referer) {
-    const base = String(referer).split("#")[0].replace(/\/$/, "");
+    try {
+      const refererUrl = new URL(referer);
 
-    LOG.info("Base URL derived from Referer:", base);
+      const siteId = refererUrl.searchParams.get("siteId");
 
-    return base;
+      if (siteId) {
+        const base = `${refererUrl.origin}/site?siteId=${encodeURIComponent(siteId)}`;
+
+        LOG.info("Base URL derived from Referer (siteId extracted):", base);
+
+        return base;
+      }
+
+      /*
+       * No siteId found in the Referer's query string. Fall back
+       * to the origin only, stripping any path/query/hash, rather
+       * than passing through the full iframe runtime URL.
+       */
+      const base = refererUrl.origin;
+
+      LOG.warn(
+        "Referer did not contain a siteId parameter. " +
+          "Falling back to origin only:",
+        base,
+      );
+
+      return base;
+    } catch (error) {
+      LOG.warn(
+        "Failed to parse Referer as a URL. Falling back to " +
+          "legacy split-on-hash logic.",
+        JSON.stringify({ referer, message: error.message }),
+      );
+
+      const base = String(referer).split("#")[0].replace(/\/$/, "");
+
+      return base;
+    }
   }
 
   const forwardedProtoHeader =
     headers["x-forwarded-proto"] || headers["x-forwarded-protocol"];
 
-  /*
-   * x-forwarded-proto can contain multiple values when
-   * multiple proxies are involved.
-   */
   const forwardedProto = String(
     forwardedProtoHeader || request.http?.req?.protocol || "https",
   )
@@ -174,9 +211,6 @@ function getAppBaseUrl(request) {
     headers.host ||
     request.http?.req?.headers?.host;
 
-  /*
-   * x-forwarded-host can also contain multiple values.
-   */
   const forwardedHost = forwardedHostHeader
     ? String(forwardedHostHeader).split(",")[0].trim()
     : "";
@@ -891,7 +925,6 @@ function targetHasElement(request, fieldName) {
  * - Validates Material and GL Account alignment on all items
  *   (all request types)
  * - Sets status to Pending Approval
- * - Clears any client-supplied pendingApprover
  * - Initializes workflow tracking fields
  * - Sets submission date and period
  * - Calculates all amount fields
@@ -902,13 +935,10 @@ function targetHasElement(request, fieldName) {
  * This handler does not:
  *
  * - Call the SAP Build Process Automation Decision API
- * - Determine the pending approver
+ * - Determine the approver(s)
  * - Start the SAP Build Process Automation workflow
  *
- * The workflow must be started after the database transaction
- * succeeds. The workflow will retrieve the saved request from CAP,
- * execute the decision, update pendingApprover, and create the
- * approval task.
+ * The workflow must be started after the database transaction succeeds.
  *
  * @param {cds.Request} request
  */
@@ -1080,20 +1110,7 @@ module.exports = async function (request) {
     LOG.info("Set status_code to Pending Approval:", request.data.status_code);
 
     /*
-     * 2. Do not accept pendingApprover from the client.
-     *
-     * The workflow decision is the authoritative source for
-     * the assigned approver. The workflow will update this
-     * field after executing the decision.
-     */
-    request.data.pendingApprover = null;
-
-    LOG.info(
-      "Cleared pendingApprover. " + "The workflow will determine the approver.",
-    );
-
-    /*
-     * 3. Initialize optional workflow tracking fields.
+     * 2. Initialize optional workflow tracking fields.
      *
      * These fields are only assigned when they exist in the
      * Requests CDS entity.
@@ -1110,8 +1127,12 @@ module.exports = async function (request) {
       request.data.workflowError = null;
     }
 
+    if (targetHasElement(request, "currentApprovalLevel")) {
+      request.data.currentApprovalLevel = null;
+    }
+
     /*
-     * 4. Set submission date and period.
+     * 3. Set submission date and period.
      */
     const dateParts = getLocalDateParts(new Date());
 
@@ -1124,7 +1145,7 @@ module.exports = async function (request) {
     LOG.info("Set submissionPeriod:", request.data.submissionPeriod);
 
     /*
-     * 5. Calculate all amount fields.
+     * 4. Calculate all amount fields.
      */
     const amounts = await calculateAmountsByType({
       tx,
@@ -1144,7 +1165,7 @@ module.exports = async function (request) {
     LOG.info("Calculated amounts:", JSON.stringify(amounts));
 
     /*
-     * 6. Calculate aging.
+     * 5. Calculate aging.
      */
     request.data.aging = await calculateAging({
       tx,
@@ -1155,7 +1176,7 @@ module.exports = async function (request) {
     LOG.info("Calculated aging:", request.data.aging);
 
     /*
-     * 7. Generate the request number when it is not
+     * 6. Generate the request number when it is not
      * already provided.
      */
     if (!request.data.requestNumber) {
@@ -1185,7 +1206,7 @@ module.exports = async function (request) {
     }
 
     /*
-     * 8. Generate the full UI deep link.
+     * 7. Generate the full UI deep link.
      *
      * The link is saved with the request. The workflow retrieves
      * it from the CAP service by using the request ID.

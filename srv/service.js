@@ -15,10 +15,14 @@ const requests_Drafts_Upload_Items_Logic = require("./code/requests-drafts-uploa
 const requestitems_Drafts_Before_Delete_Logic = require("./code/requestitems-drafts-before-delete-logic");
 const requestitems_Drafts_After_Create_Logic = require("./code/requestitems-drafts-after-create-logic");
 const requests_Before_Update_Logic = require("./code/requests-before-update-logic");
-const post_To_S4_Logic = require("./code/post-to-s4-logic");
 const requests_Drafts_After_Read_Logic = require("./code/requests-drafts-after-read-logic");
 const recent_Requests_Read_Logic = require("./code/recent-requests-read-logic");
 const user_Details_Read_Logic = require("./code/user-details-read-logic");
+const assign_Approvers_Logic = require("./code/assign-approvers-logic");
+const {
+  approveRequest,
+  rejectRequest,
+} = require("./code/approve-reject-request");
 
 class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
   async init() {
@@ -70,10 +74,6 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
       await requests_Before_Update_Logic(request);
     });
 
-    this.on("postToS4", "Requests", async (request) => {
-      return post_To_S4_Logic(request);
-    });
-
     this.after("READ", "Requests.drafts", async (results, request) => {
       await requests_Drafts_After_Read_Logic(results, request);
     });
@@ -84,6 +84,14 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("READ", "UserDetails", async (request) => {
       return await user_Details_Read_Logic(request);
+    });
+
+    this.on("assignApprovers", async (request) => {
+      return assign_Approvers_Logic(request);
+    });
+
+    this.on("approveRequest", "Requests", async (request) => {
+      return approveRequest(request);
     });
 
     return super.init();

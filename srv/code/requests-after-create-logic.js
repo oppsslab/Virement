@@ -6,7 +6,11 @@ const { HISTORY_MESSAGES } = require("./utils/history-messages");
 
 const { startApprovalWorkflow } = require("./utils/workflow-utils");
 
+const { REQUEST_STATUS } = require("./utils/request-status");
+
 const LOG = cds.log("requests-after-create-logic");
+
+const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
 /* ------------------------------------------------------------------ *
  * Helpers
@@ -108,10 +112,24 @@ function getWorkflowErrorStatus(error) {
  * 1. Resolves the created Request.
  * 2. Inserts the SUBMITTED history entry.
  * 3. Starts the SAP Build Process Automation workflow.
- * 4. Throws an error if the workflow cannot be started.
  *
- * Because errors are rethrown, CAP rolls back the current request
- * transaction when workflow startup fails.
+ * IMPORTANT: This handler does NOT retrieve or persist Level 1
+ * approvers. Polling the workflow instance context REST API was
+ * attempted, but SAP Build Process Automation rejected it with:
+ *
+ *   bpm.workflowruntime.rest.user.not.sufficient.privileges
+ *
+ * The API key used to start instances does not carry the
+ * privileges required to read instance context. Reading context
+ * requires a separate, more privileged OAuth2 client that is not
+ * available for this integration.
+ *
+ * Instead, the workflow itself is responsible for calling back
+ * into CAP via the `assignApprovers` action (see
+ * srv/code/handlers/assign-approvers.js) using a Service/Script
+ * Task placed immediately after each decision table in the BPMN
+ * diagram. That task runs inside the workflow engine and does not
+ * require the context-read permission.
  *
  * @param {object|object[]} results
  * @param {cds.Request} request
@@ -219,14 +237,27 @@ module.exports = async function (results, request) {
       }),
     );
 
+    if (workflowInstanceId) {
+      const tx = cds.tx(request);
+
+      const { Requests } = cds.entities(SERVICE_NAMESPACE);
+
+      await tx.run(
+        UPDATE(Requests).set({ workflowInstanceId }).where({ ID: requestId }),
+      );
+    } else {
+      LOG.warn(
+        "No workflowInstanceId returned. " +
+          "Requests.workflowInstanceId will remain unset.",
+        JSON.stringify({ requestId }),
+      );
+    }
+
     /*
-     * No workflow status fields are updated here.
-     *
-     * If the workflow succeeds, the original request keeps the
-     * Pending Approval status set in Before CREATE.
-     *
-     * If the workflow fails, an error is thrown and the entire
-     * database transaction is rolled back.
+     * Level 1 approvers are NOT assigned here. They will arrive
+     * later via the assignApprovers action, called by the
+     * workflow's own Service/Script Task once the Level 1
+     * decision table resolves.
      */
 
     LOG.info("--- AFTER CREATE Requests ended successfully ---");
@@ -251,16 +282,6 @@ module.exports = async function (results, request) {
       }),
     );
 
-    /*
-     * Critical difference from the previous version:
-     *
-     * Do not swallow this error.
-     * Do not register it under request.on("succeeded").
-     * Do not update workflowStatus.
-     *
-     * Throwing causes the CAP request to fail and its active
-     * database transaction to roll back.
-     */
     throw Object.assign(
       new Error(
         "Request was not submitted because the approval " +

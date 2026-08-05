@@ -2,9 +2,13 @@
 
 const cds = require("@sap/cds");
 
+const { REQUEST_STATUS } = require("./utils/request-status");
+
 const LOG = cds.log("requests-after-read-logic");
 
-const DATABASE_ENTITY = "ZDB_PPS_VIREMENT.Requests";
+const REQUESTS_DATABASE_ENTITY = "ZDB_PPS_VIREMENT.Requests";
+
+const REQUEST_APPROVER_DATABASE_ENTITY = "ZDB_PPS_VIREMENT.RequestApprovers";
 
 const ROLE_JKEW = "MASS_UPLOAD_ALL";
 
@@ -22,13 +26,22 @@ function normalizeUserId(value) {
     .toLowerCase();
 }
 
+/**
+ * Loads Request fields omitted by the UI's $select.
+ *
+ * Approver status is tracked per-approver in RequestApprovers, and is
+ * loaded separately by loadPendingApproverEmails below.
+ *
+ * @param {object[]} rows
+ * @param {cds.Request} request
+ */
 async function enrichApprovalData(rows, request) {
   const rowsToLoad = rows.filter(
     (row) =>
       row?.ID &&
-      (row.pendingApprover === undefined ||
-        row.status_code === undefined ||
-        row.requestNumber === undefined),
+      (row.status_code === undefined ||
+        row.requestNumber === undefined ||
+        row.currentApprovalLevel === undefined),
   );
 
   if (!rowsToLoad.length) {
@@ -38,12 +51,12 @@ async function enrichApprovalData(rows, request) {
   const ids = rowsToLoad.map((row) => row.ID);
 
   const databaseRows = await cds.db.run(
-    SELECT.from(DATABASE_ENTITY)
+    SELECT.from(REQUESTS_DATABASE_ENTITY)
       .columns(
         "ID",
         "requestNumber",
-        "pendingApprover",
         "status_code",
+        "currentApprovalLevel",
         "requestor",
         "createdBy",
       )
@@ -65,9 +78,9 @@ async function enrichApprovalData(rows, request) {
 
     row.requestNumber ??= databaseRow.requestNumber;
 
-    row.pendingApprover ??= databaseRow.pendingApprover;
-
     row.status_code ??= databaseRow.status_code;
+
+    row.currentApprovalLevel ??= databaseRow.currentApprovalLevel;
 
     row.requestor ??= databaseRow.requestor;
 
@@ -75,15 +88,49 @@ async function enrichApprovalData(rows, request) {
   }
 }
 
-function applyVirtualFields(row, user, roleFlags) {
-  const currentUser = normalizeUserId(user?.id);
+/**
+ * Loads the set of Request IDs for which the given user currently
+ * has a Pending RequestApprovers row.
+ *
+ * A user may appear as an approver on multiple levels over the
+ * lifetime of a request, but only rows still in Pending Approval
+ * status represent an actionable approval for that user right now.
+ *
+ * @param {string[]} requestIds
+ * @param {string} normalizedCurrentUser
+ * @returns {Promise<Set<string>>}
+ */
+async function loadPendingApproverRequestIds(
+  requestIds,
+  normalizedCurrentUser,
+) {
+  if (!requestIds.length || !normalizedCurrentUser) {
+    return new Set();
+  }
 
-  const pendingApprover = normalizeUserId(row.pendingApprover);
+  const pendingApproverRows = await cds.db.run(
+    SELECT.from(REQUEST_APPROVER_DATABASE_ENTITY)
+      .columns("request_ID", "emailAddress", "status_code")
+      .where({
+        request_ID: {
+          in: requestIds,
+        },
+        status_code: REQUEST_STATUS.PENDING_APPROVAL,
+      }),
+  );
 
-  row.isPendingApprover =
-    currentUser !== "" &&
-    pendingApprover !== "" &&
-    currentUser === pendingApprover;
+  const matchingRequestIds = pendingApproverRows
+    .filter(
+      (approverRow) =>
+        normalizeUserId(approverRow.emailAddress) === normalizedCurrentUser,
+    )
+    .map((approverRow) => approverRow.request_ID);
+
+  return new Set(matchingRequestIds);
+}
+
+function applyVirtualFields(row, user, roleFlags, pendingApproverRequestIds) {
+  row.isPendingApprover = pendingApproverRequestIds.has(row.ID);
 
   row.isJKEW = roleFlags.isJKEW;
 
@@ -96,9 +143,9 @@ function applyVirtualFields(row, user, roleFlags) {
 
     currentUser: user?.id,
 
-    pendingApprover: row.pendingApprover,
-
     statusCode: row.status_code,
+
+    currentApprovalLevel: row.currentApprovalLevel,
 
     isActiveEntity: row.IsActiveEntity,
 
@@ -133,8 +180,21 @@ module.exports = async function requestsAfterRead(results, request) {
      */
     await enrichApprovalData(rows, request);
 
+    /*
+     * Determine which of these requests the current user is a
+     * pending approver for, based on RequestApprovers rows.
+     */
+    const normalizedCurrentUser = normalizeUserId(user?.id);
+
+    const requestIds = rows.map((row) => row.ID);
+
+    const pendingApproverRequestIds = await loadPendingApproverRequestIds(
+      requestIds,
+      normalizedCurrentUser,
+    );
+
     for (const row of rows) {
-      applyVirtualFields(row, user, roleFlags);
+      applyVirtualFields(row, user, roleFlags, pendingApproverRequestIds);
     }
   } catch (error) {
     LOG.error("Error computing request UI fields", {

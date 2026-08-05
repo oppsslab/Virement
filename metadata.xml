@@ -1,0 +1,1696 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
+  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Capabilities.V1.xml">
+    <edmx:Include Alias="Capabilities" Namespace="Org.OData.Capabilities.V1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/Common.xml">
+    <edmx:Include Alias="Common" Namespace="com.sap.vocabularies.Common.v1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml">
+    <edmx:Include Alias="Core" Namespace="Org.OData.Core.V1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/HTML5.xml">
+    <edmx:Include Alias="HTML5" Namespace="com.sap.vocabularies.HTML5.v1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/UI.xml">
+    <edmx:Include Alias="UI" Namespace="com.sap.vocabularies.UI.v1"/>
+  </edmx:Reference>
+  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Validation.V1.xml">
+    <edmx:Include Alias="Validation" Namespace="Org.OData.Validation.V1"/>
+  </edmx:Reference>
+  <edmx:DataServices>
+    <Schema Namespace="ZSVC_PPS_VIREMENT" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <Annotation Term="Core.Links">
+        <Collection>
+          <Record>
+            <PropertyValue Property="rel" String="author"/>
+            <PropertyValue Property="href" String="https://cap.cloud.sap"/>
+          </Record>
+        </Collection>
+      </Annotation>
+      <EntityContainer Name="EntityContainer">
+        <EntitySet Name="Requests" EntityType="ZSVC_PPS_VIREMENT.Requests">
+          <NavigationPropertyBinding Path="requestType" Target="RequestType"/>
+          <NavigationPropertyBinding Path="budgetType" Target="BudgetType"/>
+          <NavigationPropertyBinding Path="status" Target="RequestStatus"/>
+          <NavigationPropertyBinding Path="RequestItems" Target="RequestItems"/>
+          <NavigationPropertyBinding Path="RequestApprovers" Target="RequestApprovers"/>
+          <NavigationPropertyBinding Path="RequestHistory" Target="RequestHistory"/>
+          <NavigationPropertyBinding Path="RequestAttachments" Target="Requests_RequestAttachments"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="Requests"/>
+        </EntitySet>
+        <EntitySet Name="RequestItems" EntityType="ZSVC_PPS_VIREMENT.RequestItems">
+          <NavigationPropertyBinding Path="request" Target="Requests"/>
+          <NavigationPropertyBinding Path="assetStatus" Target="AssetStatus"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="RequestItems"/>
+        </EntitySet>
+        <EntitySet Name="RequestHistory" EntityType="ZSVC_PPS_VIREMENT.RequestHistory">
+          <NavigationPropertyBinding Path="request" Target="Requests"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="RequestHistory"/>
+        </EntitySet>
+        <EntitySet Name="RequestApprovers" EntityType="ZSVC_PPS_VIREMENT.RequestApprovers">
+          <NavigationPropertyBinding Path="request" Target="Requests"/>
+          <NavigationPropertyBinding Path="status" Target="RequestStatus"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="RequestApprovers"/>
+        </EntitySet>
+        <EntitySet Name="RecentRequests" EntityType="ZSVC_PPS_VIREMENT.RecentRequests"/>
+        <EntitySet Name="PendingApprovalCount" EntityType="ZSVC_PPS_VIREMENT.PendingApprovalCount"/>
+        <EntitySet Name="UserDetails" EntityType="ZSVC_PPS_VIREMENT.UserDetails"/>
+        <EntitySet Name="RequestType" EntityType="ZSVC_PPS_VIREMENT.RequestType">
+          <NavigationPropertyBinding Path="texts" Target="RequestType_texts"/>
+          <NavigationPropertyBinding Path="localized" Target="RequestType_texts"/>
+        </EntitySet>
+        <EntitySet Name="BudgetType" EntityType="ZSVC_PPS_VIREMENT.BudgetType">
+          <NavigationPropertyBinding Path="texts" Target="BudgetType_texts"/>
+          <NavigationPropertyBinding Path="localized" Target="BudgetType_texts"/>
+        </EntitySet>
+        <EntitySet Name="RequestStatus" EntityType="ZSVC_PPS_VIREMENT.RequestStatus">
+          <NavigationPropertyBinding Path="texts" Target="RequestStatus_texts"/>
+          <NavigationPropertyBinding Path="localized" Target="RequestStatus_texts"/>
+        </EntitySet>
+        <EntitySet Name="AssetStatus" EntityType="ZSVC_PPS_VIREMENT.AssetStatus">
+          <NavigationPropertyBinding Path="texts" Target="AssetStatus_texts"/>
+          <NavigationPropertyBinding Path="localized" Target="AssetStatus_texts"/>
+        </EntitySet>
+        <EntitySet Name="ScanStates" EntityType="ZSVC_PPS_VIREMENT.ScanStates">
+          <NavigationPropertyBinding Path="texts" Target="ScanStates_texts"/>
+          <NavigationPropertyBinding Path="localized" Target="ScanStates_texts"/>
+        </EntitySet>
+        <EntitySet Name="Requests_RequestAttachments" EntityType="ZSVC_PPS_VIREMENT.Requests_RequestAttachments">
+          <NavigationPropertyBinding Path="up_" Target="Requests"/>
+          <NavigationPropertyBinding Path="statusNav" Target="ScanStates"/>
+          <NavigationPropertyBinding Path="SiblingEntity" Target="Requests_RequestAttachments"/>
+        </EntitySet>
+        <EntitySet Name="RequestType_texts" EntityType="ZSVC_PPS_VIREMENT.RequestType_texts"/>
+        <EntitySet Name="BudgetType_texts" EntityType="ZSVC_PPS_VIREMENT.BudgetType_texts"/>
+        <EntitySet Name="RequestStatus_texts" EntityType="ZSVC_PPS_VIREMENT.RequestStatus_texts"/>
+        <EntitySet Name="AssetStatus_texts" EntityType="ZSVC_PPS_VIREMENT.AssetStatus_texts"/>
+        <EntitySet Name="ScanStates_texts" EntityType="ZSVC_PPS_VIREMENT.ScanStates_texts"/>
+        <ActionImport Name="assignApprovers" Action="ZSVC_PPS_VIREMENT.assignApprovers"/>
+      </EntityContainer>
+      <EntityType Name="Requests">
+        <Key>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="requestNumber" Type="Edm.String" MaxLength="10"/>
+        <NavigationProperty Name="requestType" Type="ZSVC_PPS_VIREMENT.RequestType">
+          <ReferentialConstraint Property="requestType_code" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="requestType_code" Type="Edm.String" MaxLength="1"/>
+        <NavigationProperty Name="budgetType" Type="ZSVC_PPS_VIREMENT.BudgetType">
+          <ReferentialConstraint Property="budgetType_code" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="budgetType_code" Type="Edm.String" MaxLength="1" DefaultValue="N"/>
+        <Property Name="transferCategory" Type="Edm.String" MaxLength="1"/>
+        <NavigationProperty Name="status" Type="ZSVC_PPS_VIREMENT.RequestStatus">
+          <ReferentialConstraint Property="status_code" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="status_code" Type="Edm.Int32" DefaultValue="0"/>
+        <Property Name="currentApprovalLevel" Type="Edm.Int32"/>
+        <Property Name="fiscalYear" Type="Edm.String" MaxLength="4"/>
+        <Property Name="submissionPeriod" Type="Edm.Int32"/>
+        <Property Name="submissionDate" Type="Edm.Date"/>
+        <Property Name="requestor" Type="Edm.String"/>
+        <Property Name="approvedBy" Type="Edm.String"/>
+        <Property Name="supplementAmount" Type="Edm.Decimal" Precision="15" Scale="2" DefaultValue="0"/>
+        <Property Name="returnAmount" Type="Edm.Decimal" Precision="15" Scale="2" DefaultValue="0"/>
+        <Property Name="transferInAmount" Type="Edm.Decimal" Precision="15" Scale="2" DefaultValue="0"/>
+        <Property Name="transferOutAmount" Type="Edm.Decimal" Precision="15" Scale="2" DefaultValue="0"/>
+        <Property Name="aging" Type="Edm.Int32" DefaultValue="0"/>
+        <Property Name="supplementDocNumber" Type="Edm.String"/>
+        <Property Name="returnDocNumber" Type="Edm.String"/>
+        <Property Name="transferInDocNumber" Type="Edm.String"/>
+        <Property Name="transferOutDocNumber" Type="Edm.String"/>
+        <Property Name="postingDate" Type="Edm.Date"/>
+        <Property Name="postingPeriod" Type="Edm.Int32"/>
+        <Property Name="reason" Type="Edm.String" MaxLength="500"/>
+        <Property Name="approverComment" Type="Edm.String" MaxLength="500"/>
+        <Property Name="requestLink" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="workflowInstanceId" Type="Edm.String"/>
+        <Property Name="workflowStatus" Type="Edm.String"/>
+        <Property Name="workflowError" Type="Edm.String"/>
+        <NavigationProperty Name="RequestItems" Type="Collection(ZSVC_PPS_VIREMENT.RequestItems)" Partner="request">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="RequestApprovers" Type="Collection(ZSVC_PPS_VIREMENT.RequestApprovers)" Partner="request">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="RequestHistory" Type="Collection(ZSVC_PPS_VIREMENT.RequestHistory)" Partner="request">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="RequestAttachments" Type="Collection(ZSVC_PPS_VIREMENT.Requests_RequestAttachments)" Partner="up_">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <Property Name="isPendingApprover" Type="Edm.Boolean" DefaultValue="false"/>
+        <Property Name="isJKEW" Type="Edm.Boolean"/>
+        <Property Name="isFunctional" Type="Edm.Boolean"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="ZSVC_PPS_VIREMENT.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <Property Name="DraftMessages" Type="Collection(ZSVC_PPS_VIREMENT.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="RequestItems">
+        <Key>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <NavigationProperty Name="request" Type="ZSVC_PPS_VIREMENT.Requests" Partner="RequestItems">
+          <ReferentialConstraint Property="request_ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="request_ID" Type="Edm.Guid"/>
+        <Property Name="srNo" Type="Edm.String" MaxLength="3"/>
+        <Property Name="costCentre" Type="Edm.String" MaxLength="10"/>
+        <Property Name="glAccount" Type="Edm.String"/>
+        <Property Name="material" Type="Edm.String"/>
+        <Property Name="wbs" Type="Edm.String"/>
+        <NavigationProperty Name="assetStatus" Type="ZSVC_PPS_VIREMENT.AssetStatus">
+          <ReferentialConstraint Property="assetStatus_code" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="assetStatus_code" Type="Edm.String" MaxLength="3"/>
+        <Property Name="supplementAmount" Type="Edm.Decimal" Precision="15" Scale="2" DefaultValue="0"/>
+        <Property Name="returnAmount" Type="Edm.Decimal" Precision="15" Scale="2" DefaultValue="0"/>
+        <Property Name="transferInAmount" Type="Edm.Decimal" Precision="15" Scale="2" DefaultValue="0"/>
+        <Property Name="transferOutAmount" Type="Edm.Decimal" Precision="15" Scale="2" DefaultValue="0"/>
+        <Property Name="description" Type="Edm.String" MaxLength="500"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="ZSVC_PPS_VIREMENT.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="ZSVC_PPS_VIREMENT.RequestItems"/>
+        <Property Name="DraftMessages" Type="Collection(ZSVC_PPS_VIREMENT.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="RequestHistory">
+        <Key>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <NavigationProperty Name="request" Type="ZSVC_PPS_VIREMENT.Requests" Partner="RequestHistory">
+          <ReferentialConstraint Property="request_ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="request_ID" Type="Edm.Guid"/>
+        <Property Name="date" Type="Edm.Date"/>
+        <Property Name="time" Type="Edm.TimeOfDay"/>
+        <Property Name="changedBy" Type="Edm.String"/>
+        <Property Name="changes" Type="Edm.String" MaxLength="500"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="ZSVC_PPS_VIREMENT.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="ZSVC_PPS_VIREMENT.RequestHistory"/>
+        <Property Name="DraftMessages" Type="Collection(ZSVC_PPS_VIREMENT.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="RequestApprovers">
+        <Key>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <NavigationProperty Name="request" Type="ZSVC_PPS_VIREMENT.Requests" Partner="RequestApprovers">
+          <ReferentialConstraint Property="request_ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="request_ID" Type="Edm.Guid"/>
+        <Property Name="emailAddress" Type="Edm.String"/>
+        <Property Name="level" Type="Edm.Int32"/>
+        <NavigationProperty Name="status" Type="ZSVC_PPS_VIREMENT.RequestStatus">
+          <ReferentialConstraint Property="status_code" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="status_code" Type="Edm.Int32" DefaultValue="2"/>
+        <Property Name="taskId" Type="Edm.String"/>
+        <Property Name="actionDate" Type="Edm.DateTimeOffset"/>
+        <Property Name="comment" Type="Edm.String" MaxLength="500"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="ZSVC_PPS_VIREMENT.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="ZSVC_PPS_VIREMENT.RequestApprovers"/>
+        <Property Name="DraftMessages" Type="Collection(ZSVC_PPS_VIREMENT.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="RecentRequests">
+        <Key>
+          <PropertyRef Name="ID"/>
+        </Key>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="requestNumber" Type="Edm.String"/>
+        <Property Name="requestType" Type="Edm.String"/>
+        <Property Name="status" Type="Edm.String"/>
+      </EntityType>
+      <EntityType Name="PendingApprovalCount">
+        <Key>
+          <PropertyRef Name="pendingCount"/>
+        </Key>
+        <Property Name="pendingCount" Type="Edm.Int32" Nullable="false"/>
+      </EntityType>
+      <EntityType Name="UserDetails">
+        <Key>
+          <PropertyRef Name="emailAddress"/>
+        </Key>
+        <Property Name="emailAddress" Type="Edm.String" MaxLength="255" Nullable="false"/>
+        <Property Name="fullName" Type="Edm.String" MaxLength="200"/>
+      </EntityType>
+      <EntityType Name="RequestType">
+        <Key>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="1" Nullable="false"/>
+        <NavigationProperty Name="texts" Type="Collection(ZSVC_PPS_VIREMENT.RequestType_texts)">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="localized" Type="ZSVC_PPS_VIREMENT.RequestType_texts">
+          <ReferentialConstraint Property="code" ReferencedProperty="code"/>
+        </NavigationProperty>
+      </EntityType>
+      <EntityType Name="BudgetType">
+        <Key>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="1" Nullable="false"/>
+        <NavigationProperty Name="texts" Type="Collection(ZSVC_PPS_VIREMENT.BudgetType_texts)">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="localized" Type="ZSVC_PPS_VIREMENT.BudgetType_texts">
+          <ReferentialConstraint Property="code" ReferencedProperty="code"/>
+        </NavigationProperty>
+      </EntityType>
+      <EntityType Name="RequestStatus">
+        <Key>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.Int32" Nullable="false"/>
+        <NavigationProperty Name="texts" Type="Collection(ZSVC_PPS_VIREMENT.RequestStatus_texts)">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="localized" Type="ZSVC_PPS_VIREMENT.RequestStatus_texts">
+          <ReferentialConstraint Property="code" ReferencedProperty="code"/>
+        </NavigationProperty>
+      </EntityType>
+      <EntityType Name="AssetStatus">
+        <Key>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="3" Nullable="false"/>
+        <NavigationProperty Name="texts" Type="Collection(ZSVC_PPS_VIREMENT.AssetStatus_texts)">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="localized" Type="ZSVC_PPS_VIREMENT.AssetStatus_texts">
+          <ReferentialConstraint Property="code" ReferencedProperty="code"/>
+        </NavigationProperty>
+      </EntityType>
+      <EntityType Name="ScanStates">
+        <Key>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="name" Type="Edm.String" MaxLength="64"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="32" Nullable="false"/>
+        <Property Name="criticality" Type="Edm.Int32"/>
+        <NavigationProperty Name="texts" Type="Collection(ZSVC_PPS_VIREMENT.ScanStates_texts)">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="localized" Type="ZSVC_PPS_VIREMENT.ScanStates_texts">
+          <ReferentialConstraint Property="code" ReferencedProperty="code"/>
+        </NavigationProperty>
+      </EntityType>
+      <EntityType Name="DraftAdministrativeData">
+        <Key>
+          <PropertyRef Name="DraftUUID"/>
+        </Key>
+        <Property Name="DraftUUID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="CreationDateTime" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="CreatedByUser" Type="Edm.String" MaxLength="256"/>
+        <Property Name="DraftIsCreatedByMe" Type="Edm.Boolean"/>
+        <Property Name="LastChangeDateTime" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="LastChangedByUser" Type="Edm.String" MaxLength="256"/>
+        <Property Name="InProcessByUser" Type="Edm.String" MaxLength="256"/>
+        <Property Name="DraftIsProcessedByMe" Type="Edm.Boolean"/>
+      </EntityType>
+      <EntityType Name="Requests_RequestAttachments">
+        <Key>
+          <PropertyRef Name="up__ID"/>
+          <PropertyRef Name="ID"/>
+          <PropertyRef Name="IsActiveEntity"/>
+        </Key>
+        <NavigationProperty Name="up_" Type="ZSVC_PPS_VIREMENT.Requests" Nullable="false" Partner="RequestAttachments">
+          <ReferentialConstraint Property="up__ID" ReferencedProperty="ID"/>
+        </NavigationProperty>
+        <Property Name="up__ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="ID" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="createdAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="createdBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="modifiedAt" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="modifiedBy" Type="Edm.String" MaxLength="255"/>
+        <Property Name="url" Type="Edm.String"/>
+        <Property Name="content" Type="Edm.Stream"/>
+        <Property Name="mimeType" Type="Edm.String" DefaultValue="application/octet-stream"/>
+        <Property Name="filename" Type="Edm.String"/>
+        <Property Name="hash" Type="Edm.String"/>
+        <Property Name="status" Type="Edm.String" DefaultValue="Unscanned"/>
+        <NavigationProperty Name="statusNav" Type="ZSVC_PPS_VIREMENT.ScanStates">
+          <ReferentialConstraint Property="status" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="lastScan" Type="Edm.DateTimeOffset" Precision="7"/>
+        <Property Name="note" Type="Edm.String"/>
+        <Property Name="folderId" Type="Edm.String"/>
+        <Property Name="repositoryId" Type="Edm.String"/>
+        <Property Name="linkUrl" Type="Edm.String"/>
+        <Property Name="type" Type="Edm.String" DefaultValue="sap-icon://document"/>
+        <Property Name="IsActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="true"/>
+        <Property Name="HasActiveEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <Property Name="HasDraftEntity" Type="Edm.Boolean" Nullable="false" DefaultValue="false"/>
+        <NavigationProperty Name="DraftAdministrativeData" Type="ZSVC_PPS_VIREMENT.DraftAdministrativeData" ContainsTarget="true"/>
+        <NavigationProperty Name="SiblingEntity" Type="ZSVC_PPS_VIREMENT.Requests_RequestAttachments"/>
+        <Property Name="DraftMessages" Type="Collection(ZSVC_PPS_VIREMENT.DRAFT_DraftAdministrativeData_DraftMessage)" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="RequestType_texts">
+        <Key>
+          <PropertyRef Name="locale"/>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="locale" Type="Edm.String" MaxLength="14" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="1" Nullable="false"/>
+      </EntityType>
+      <EntityType Name="BudgetType_texts">
+        <Key>
+          <PropertyRef Name="locale"/>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="locale" Type="Edm.String" MaxLength="14" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="1" Nullable="false"/>
+      </EntityType>
+      <EntityType Name="RequestStatus_texts">
+        <Key>
+          <PropertyRef Name="locale"/>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="locale" Type="Edm.String" MaxLength="14" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.Int32" Nullable="false"/>
+      </EntityType>
+      <EntityType Name="AssetStatus_texts">
+        <Key>
+          <PropertyRef Name="locale"/>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="locale" Type="Edm.String" MaxLength="14" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="3" Nullable="false"/>
+      </EntityType>
+      <EntityType Name="ScanStates_texts">
+        <Key>
+          <PropertyRef Name="locale"/>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="locale" Type="Edm.String" MaxLength="14" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" MaxLength="64"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="32" Nullable="false"/>
+      </EntityType>
+      <ComplexType Name="TemplateFile">
+        <Property Name="fileName" Type="Edm.String"/>
+        <Property Name="content" Type="Edm.String"/>
+        <Property Name="mimeType" Type="Edm.String"/>
+      </ComplexType>
+      <ComplexType Name="S4Message">
+        <Property Name="type" Type="Edm.String" MaxLength="1"/>
+        <Property Name="id" Type="Edm.String" MaxLength="20"/>
+        <Property Name="number" Type="Edm.String" MaxLength="10"/>
+        <Property Name="message" Type="Edm.String" MaxLength="500"/>
+        <Property Name="messageV1" Type="Edm.String" MaxLength="100"/>
+        <Property Name="messageV2" Type="Edm.String" MaxLength="100"/>
+        <Property Name="messageV3" Type="Edm.String" MaxLength="100"/>
+        <Property Name="messageV4" Type="Edm.String" MaxLength="100"/>
+        <Property Name="parameter" Type="Edm.String" MaxLength="100"/>
+        <Property Name="row" Type="Edm.String" MaxLength="10"/>
+        <Property Name="field" Type="Edm.String" MaxLength="100"/>
+      </ComplexType>
+      <ComplexType Name="S4PostingResult">
+        <Property Name="success" Type="Edm.Boolean"/>
+        <Property Name="simulated" Type="Edm.Boolean"/>
+        <Property Name="requestId" Type="Edm.Guid"/>
+        <Property Name="documentNumber" Type="Edm.String" MaxLength="20"/>
+        <Property Name="statusCode" Type="Edm.Int32"/>
+        <Property Name="postingDate" Type="Edm.Date"/>
+        <Property Name="postingPeriod" Type="Edm.Int32"/>
+        <Property Name="messages" Type="Collection(ZSVC_PPS_VIREMENT.S4Message)" Nullable="true"/>
+        <Property Name="errors" Type="Collection(ZSVC_PPS_VIREMENT.S4Message)" Nullable="true"/>
+      </ComplexType>
+      <ComplexType Name="DRAFT_DraftAdministrativeData_DraftMessage">
+        <Property Name="code" Type="Edm.String"/>
+        <Property Name="message" Type="Edm.String"/>
+        <Property Name="target" Type="Edm.String"/>
+        <Property Name="additionalTargets" Type="Collection(Edm.String)" Nullable="true"/>
+        <Property Name="transition" Type="Edm.Boolean"/>
+        <Property Name="numericSeverity" Type="Edm.Byte"/>
+        <Property Name="longtextUrl" Type="Edm.String"/>
+      </ComplexType>
+      <ComplexType Name="ap_ZSVC_PPS_VIREMENT_assignApprovers_approvers">
+        <Property Name="Email" Type="Edm.String"/>
+      </ComplexType>
+      <Action Name="calculateValues" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.Requests"/>
+      </Action>
+      <Action Name="approveRequest" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.Requests"/>
+      </Action>
+      <Action Name="rejectRequest" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <Parameter Name="comment" Type="Edm.String"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.Requests"/>
+      </Action>
+      <Action Name="uploadItems" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <Parameter Name="content" Type="Edm.String"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.Requests"/>
+      </Action>
+      <Action Name="downloadItemsTemplate" IsBound="true">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.TemplateFile"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.Requests"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.RequestItems"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.RequestItems"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.RequestHistory"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.RequestHistory"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.RequestApprovers"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.RequestApprovers"/>
+      </Action>
+      <Action Name="draftPrepare" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests_RequestAttachments"/>
+        <Parameter Name="SideEffectsQualifier" Type="Edm.String"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.Requests_RequestAttachments"/>
+      </Action>
+      <Action Name="draftActivate" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.Requests"/>
+      </Action>
+      <Action Name="draftEdit" IsBound="true" EntitySetPath="in">
+        <Parameter Name="in" Type="ZSVC_PPS_VIREMENT.Requests"/>
+        <Parameter Name="PreserveChanges" Type="Edm.Boolean"/>
+        <ReturnType Type="ZSVC_PPS_VIREMENT.Requests"/>
+      </Action>
+      <Action Name="assignApprovers" IsBound="false">
+        <Parameter Name="requestId" Type="Edm.Guid"/>
+        <Parameter Name="level" Type="Edm.String"/>
+        <Parameter Name="approvers" Type="Collection(ZSVC_PPS_VIREMENT.ap_ZSVC_PPS_VIREMENT_assignApprovers_approvers)" Nullable="true"/>
+        <ReturnType Type="Edm.Boolean"/>
+      </Action>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer">
+        <Annotation Term="Common.AddressViaNavigationPath" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests">
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer/Requests">
+        <Annotation Term="Common.DraftRoot">
+          <Record Type="Common.DraftRootType">
+            <PropertyValue Property="ActivationAction" String="ZSVC_PPS_VIREMENT.draftActivate"/>
+            <PropertyValue Property="EditAction" String="ZSVC_PPS_VIREMENT.draftEdit"/>
+            <PropertyValue Property="PreparationAction" String="ZSVC_PPS_VIREMENT.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/requestNumber">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/requestType_code">
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Common.ValueList">
+          <Record Type="Common.ValueListType">
+            <PropertyValue Property="Label" String="RequestType"/>
+            <PropertyValue Property="CollectionPath" String="RequestType"/>
+            <PropertyValue Property="Parameters">
+              <Collection>
+                <Record Type="Common.ValueListParameterInOut">
+                  <PropertyValue Property="LocalDataProperty" PropertyPath="requestType_code"/>
+                  <PropertyValue Property="ValueListProperty" String="code"/>
+                </Record>
+                <Record Type="Common.ValueListParameterDisplayOnly">
+                  <PropertyValue Property="ValueListProperty" String="name"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/budgetType_code">
+        <Annotation Term="Common.ValueList">
+          <Record Type="Common.ValueListType">
+            <PropertyValue Property="Label" String="BudgetType"/>
+            <PropertyValue Property="CollectionPath" String="BudgetType"/>
+            <PropertyValue Property="Parameters">
+              <Collection>
+                <Record Type="Common.ValueListParameterInOut">
+                  <PropertyValue Property="LocalDataProperty" PropertyPath="budgetType_code"/>
+                  <PropertyValue Property="ValueListProperty" String="code"/>
+                </Record>
+                <Record Type="Common.ValueListParameterDisplayOnly">
+                  <PropertyValue Property="ValueListProperty" String="name"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/status_code">
+        <Annotation Term="Common.ValueList">
+          <Record Type="Common.ValueListType">
+            <PropertyValue Property="Label" String="RequestStatus"/>
+            <PropertyValue Property="CollectionPath" String="RequestStatus"/>
+            <PropertyValue Property="Parameters">
+              <Collection>
+                <Record Type="Common.ValueListParameterInOut">
+                  <PropertyValue Property="LocalDataProperty" PropertyPath="status_code"/>
+                  <PropertyValue Property="ValueListProperty" String="code"/>
+                </Record>
+                <Record Type="Common.ValueListParameterDisplayOnly">
+                  <PropertyValue Property="ValueListProperty" String="name"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/fiscalYear">
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Validation.Pattern" String="^[0-9]{4}$"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/requestor">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/supplementAmount">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/returnAmount">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/transferInAmount">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/transferOutAmount">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/aging">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/supplementDocNumber">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/returnDocNumber">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/transferInDocNumber">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/transferOutDocNumber">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/RequestAttachments">
+        <Annotation Term="Validation.MaxItems" Int="5"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/isPendingApprover">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/isJKEW">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/isFunctional">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.rejectRequest(ZSVC_PPS_VIREMENT.Requests)/comment">
+        <Annotation Term="Common.Label" String="Reason"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems">
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer/RequestItems">
+        <Annotation Term="Common.DraftNode">
+          <Record Type="Common.DraftNodeType">
+            <PropertyValue Property="PreparationAction" String="ZSVC_PPS_VIREMENT.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/assetStatus_code">
+        <Annotation Term="Common.ValueList">
+          <Record Type="Common.ValueListType">
+            <PropertyValue Property="Label" String="AssetStatus"/>
+            <PropertyValue Property="CollectionPath" String="AssetStatus"/>
+            <PropertyValue Property="Parameters">
+              <Collection>
+                <Record Type="Common.ValueListParameterInOut">
+                  <PropertyValue Property="LocalDataProperty" PropertyPath="assetStatus_code"/>
+                  <PropertyValue Property="ValueListProperty" String="code"/>
+                </Record>
+                <Record Type="Common.ValueListParameterDisplayOnly">
+                  <PropertyValue Property="ValueListProperty" String="name"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestItems/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory">
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer/RequestHistory">
+        <Annotation Term="Common.DraftNode">
+          <Record Type="Common.DraftNodeType">
+            <PropertyValue Property="PreparationAction" String="ZSVC_PPS_VIREMENT.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.DeleteRestrictions">
+          <Record Type="Capabilities.DeleteRestrictionsType">
+            <PropertyValue Property="Deletable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.InsertRestrictions">
+          <Record Type="Capabilities.InsertRestrictionsType">
+            <PropertyValue Property="Insertable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.UpdateRestrictions">
+          <Record Type="Capabilities.UpdateRestrictionsType">
+            <PropertyValue Property="Updatable" Bool="false"/>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestHistory/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers">
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer/RequestApprovers">
+        <Annotation Term="Common.DraftNode">
+          <Record Type="Common.DraftNodeType">
+            <PropertyValue Property="PreparationAction" String="ZSVC_PPS_VIREMENT.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.DeleteRestrictions">
+          <Record Type="Capabilities.DeleteRestrictionsType">
+            <PropertyValue Property="Deletable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.InsertRestrictions">
+          <Record Type="Capabilities.InsertRestrictionsType">
+            <PropertyValue Property="Insertable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.UpdateRestrictions">
+          <Record Type="Capabilities.UpdateRestrictionsType">
+            <PropertyValue Property="Updatable" Bool="false"/>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/status_code">
+        <Annotation Term="Common.ValueList">
+          <Record Type="Common.ValueListType">
+            <PropertyValue Property="Label" String="RequestStatus"/>
+            <PropertyValue Property="CollectionPath" String="RequestStatus"/>
+            <PropertyValue Property="Parameters">
+              <Collection>
+                <Record Type="Common.ValueListParameterInOut">
+                  <PropertyValue Property="LocalDataProperty" PropertyPath="status_code"/>
+                  <PropertyValue Property="ValueListProperty" String="code"/>
+                </Record>
+                <Record Type="Common.ValueListParameterDisplayOnly">
+                  <PropertyValue Property="ValueListProperty" String="name"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestApprovers/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer/RecentRequests">
+        <Annotation Term="Capabilities.DeleteRestrictions">
+          <Record Type="Capabilities.DeleteRestrictionsType">
+            <PropertyValue Property="Deletable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.InsertRestrictions">
+          <Record Type="Capabilities.InsertRestrictionsType">
+            <PropertyValue Property="Insertable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.UpdateRestrictions">
+          <Record Type="Capabilities.UpdateRestrictionsType">
+            <PropertyValue Property="Updatable" Bool="false"/>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RecentRequests/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer/PendingApprovalCount">
+        <Annotation Term="Capabilities.DeleteRestrictions">
+          <Record Type="Capabilities.DeleteRestrictionsType">
+            <PropertyValue Property="Deletable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.InsertRestrictions">
+          <Record Type="Capabilities.InsertRestrictionsType">
+            <PropertyValue Property="Insertable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.UpdateRestrictions">
+          <Record Type="Capabilities.UpdateRestrictionsType">
+            <PropertyValue Property="Updatable" Bool="false"/>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.PendingApprovalCount/pendingCount">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer/UserDetails">
+        <Annotation Term="Capabilities.DeleteRestrictions">
+          <Record Type="Capabilities.DeleteRestrictionsType">
+            <PropertyValue Property="Deletable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.InsertRestrictions">
+          <Record Type="Capabilities.InsertRestrictionsType">
+            <PropertyValue Property="Insertable" Bool="false"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.UpdateRestrictions">
+          <Record Type="Capabilities.UpdateRestrictionsType">
+            <PropertyValue Property="Updatable" Bool="false"/>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestType">
+        <Annotation Term="UI.Identification">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="name"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestType/name">
+        <Annotation Term="Common.Label" String="{i18n>Name}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestType/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestType/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="SUPPL"/>
+              <PropertyValue Property="Value" String="S"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="RETN"/>
+              <PropertyValue Property="Value" String="R"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="TRAN"/>
+              <PropertyValue Property="Value" String="T"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.BudgetType">
+        <Annotation Term="UI.Identification">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="name"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.BudgetType/name">
+        <Annotation Term="Common.Label" String="{i18n>Name}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.BudgetType/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.BudgetType/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="PROJECT"/>
+              <PropertyValue Property="Value" String="P"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="NONPROJ"/>
+              <PropertyValue Property="Value" String="N"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestStatus">
+        <Annotation Term="UI.Identification">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="name"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestStatus/name">
+        <Annotation Term="Common.Label" String="{i18n>Name}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestStatus/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestStatus/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Draft"/>
+              <PropertyValue Property="Value" Int="0"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Rejected"/>
+              <PropertyValue Property="Value" Int="1"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="PendingApproval"/>
+              <PropertyValue Property="Value" Int="2"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Completed"/>
+              <PropertyValue Property="Value" Int="3"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.AssetStatus">
+        <Annotation Term="UI.Identification">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="name"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.AssetStatus/name">
+        <Annotation Term="Common.Label" String="{i18n>Name}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.AssetStatus/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.AssetStatus/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="New"/>
+              <PropertyValue Property="Value" String="001"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Addition"/>
+              <PropertyValue Property="Value" String="002"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Replacement"/>
+              <PropertyValue Property="Value" String="003"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates">
+        <Annotation Term="UI.Identification">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="name"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates/name">
+        <Annotation Term="Common.Label" String="{i18n>ScanStatus}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates/code">
+        <Annotation Term="Common.Text" Path="name">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Unscanned"/>
+              <PropertyValue Property="Value" String="Unscanned"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Scanning"/>
+              <PropertyValue Property="Value" String="Scanning"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Infected"/>
+              <PropertyValue Property="Value" String="Infected"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Clean"/>
+              <PropertyValue Property="Value" String="Clean"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Failed"/>
+              <PropertyValue Property="Value" String="Failed"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates/criticality">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData">
+        <Annotation Term="Common.Label" String="{i18n>Draft_DraftAdministrativeData}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData/DraftUUID">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>Draft_DraftUUID}"/>
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData/CreationDateTime">
+        <Annotation Term="Common.Label" String="{i18n>Draft_CreationDateTime}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData/CreatedByUser">
+        <Annotation Term="Common.Label" String="{i18n>Draft_CreatedByUser}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData/DraftIsCreatedByMe">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>Draft_DraftIsCreatedByMe}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData/LastChangeDateTime">
+        <Annotation Term="Common.Label" String="{i18n>Draft_LastChangeDateTime}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData/LastChangedByUser">
+        <Annotation Term="Common.Label" String="{i18n>Draft_LastChangedByUser}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData/InProcessByUser">
+        <Annotation Term="Common.Label" String="{i18n>Draft_InProcessByUser}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.DraftAdministrativeData/DraftIsProcessedByMe">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>Draft_DraftIsProcessedByMe}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments">
+        <Annotation Term="UI.HeaderInfo">
+          <Record Type="UI.HeaderInfoType">
+            <PropertyValue Property="TypeName" String="{i18n>Attachment}"/>
+            <PropertyValue Property="TypeNamePlural" String="{i18n>Attachments}"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="UI.LineItem">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="filename"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="20%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="content"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="20%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="createdAt"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="20%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="createdBy"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="20%"/>
+                </Record>
+              </Annotation>
+            </Record>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="note"/>
+              <Annotation Term="HTML5.CssDefaults">
+                <Record Type="HTML5.CssDefaultsType">
+                  <PropertyValue Property="width" String="20%"/>
+                </Record>
+              </Annotation>
+            </Record>
+          </Collection>
+        </Annotation>
+        <Annotation Term="UI.MediaResource">
+          <Record Type="UI.MediaResourceType">
+            <PropertyValue Property="Stream" Path="content"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Messages" Path="DraftMessages"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.EntityContainer/Requests_RequestAttachments">
+        <Annotation Term="Capabilities.UpdateRestrictions">
+          <Record Type="Capabilities.UpdateRestrictionsType">
+            <PropertyValue Property="NonUpdateableProperties">
+              <Collection>
+                <Path>content</Path>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Capabilities.SortRestrictions">
+          <Record Type="Capabilities.SortRestrictionsType">
+            <PropertyValue Property="NonSortableProperties">
+              <Collection>
+                <PropertyPath>content</PropertyPath>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.DraftNode">
+          <Record Type="Common.DraftNodeType">
+            <PropertyValue Property="PreparationAction" String="ZSVC_PPS_VIREMENT.draftPrepare"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.SideEffects" Qualifier="alwaysFetchMessages">
+          <Record Type="Common.SideEffectsType">
+            <PropertyValue Property="SourceEntities">
+              <Collection>
+                <NavigationPropertyPath></NavigationPropertyPath>
+              </Collection>
+            </PropertyValue>
+            <PropertyValue Property="TargetProperties">
+              <Collection>
+                <String>DraftMessages</String>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/ID">
+        <Annotation Term="Core.ComputedDefaultValue" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/createdAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/createdBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Immutable" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>CreatedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/modifiedAt">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedAt}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/modifiedBy">
+        <Annotation Term="UI.HiddenFilter" Bool="true"/>
+        <Annotation Term="UI.ExcludeFromNavigationContext" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Core.Description" String="{i18n>UserID.Description}"/>
+        <Annotation Term="Common.Label" String="{i18n>ChangedBy}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/url">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/content">
+        <Annotation Term="Core.ContentDisposition">
+          <Record Type="Core.ContentDispositionType">
+            <PropertyValue Property="Filename" Path="filename"/>
+            <PropertyValue Property="Type" String="inline"/>
+          </Record>
+        </Annotation>
+        <Annotation Term="Core.MediaType" Path="mimeType"/>
+        <Annotation Term="Common.Label" String="{i18n>Attachment}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/mimeType">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Core.IsMediaType" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>MediaType}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/filename">
+        <Annotation Term="Common.Label" String="{i18n>Filename}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/hash">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/status">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Text" Path="statusNav/name">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Common.Label" String="{i18n>ScanStatus}"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/lastScan">
+        <Annotation Term="Core.Computed" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>LastScan}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/note">
+        <Annotation Term="UI.MultiLineText" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>Note}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/folderId">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="Folder ID"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/repositoryId">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+        <Annotation Term="Common.Label" String="Repository ID"/>
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/linkUrl">
+        <Annotation Term="Common.Label" String="{i18n>LinkURL}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/type">
+        <Annotation Term="UI.IsImageURL" Bool="true"/>
+        <Annotation Term="Common.Label" String="{i18n>Type}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/IsActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/HasActiveEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/HasDraftEntity">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/DraftAdministrativeData">
+        <Annotation Term="UI.Hidden" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests_RequestAttachments/DraftMessages">
+        <Annotation Term="Core.Computed" Bool="true"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestType_texts/locale">
+        <Annotation Term="Common.Label" String="{i18n>LanguageCode}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestType_texts/name">
+        <Annotation Term="Common.Label" String="{i18n>Name}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestType_texts/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestType_texts/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="SUPPL"/>
+              <PropertyValue Property="Value" String="S"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="RETN"/>
+              <PropertyValue Property="Value" String="R"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="TRAN"/>
+              <PropertyValue Property="Value" String="T"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.BudgetType_texts/locale">
+        <Annotation Term="Common.Label" String="{i18n>LanguageCode}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.BudgetType_texts/name">
+        <Annotation Term="Common.Label" String="{i18n>Name}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.BudgetType_texts/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.BudgetType_texts/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="PROJECT"/>
+              <PropertyValue Property="Value" String="P"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="NONPROJ"/>
+              <PropertyValue Property="Value" String="N"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestStatus_texts/locale">
+        <Annotation Term="Common.Label" String="{i18n>LanguageCode}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestStatus_texts/name">
+        <Annotation Term="Common.Label" String="{i18n>Name}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestStatus_texts/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.RequestStatus_texts/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Draft"/>
+              <PropertyValue Property="Value" Int="0"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Rejected"/>
+              <PropertyValue Property="Value" Int="1"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="PendingApproval"/>
+              <PropertyValue Property="Value" Int="2"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Completed"/>
+              <PropertyValue Property="Value" Int="3"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.AssetStatus_texts/locale">
+        <Annotation Term="Common.Label" String="{i18n>LanguageCode}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.AssetStatus_texts/name">
+        <Annotation Term="Common.Label" String="{i18n>Name}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.AssetStatus_texts/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.AssetStatus_texts/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="New"/>
+              <PropertyValue Property="Value" String="001"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Addition"/>
+              <PropertyValue Property="Value" String="002"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Replacement"/>
+              <PropertyValue Property="Value" String="003"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates_texts/locale">
+        <Annotation Term="Common.Label" String="{i18n>LanguageCode}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates_texts/name">
+        <Annotation Term="Common.Label" String="{i18n>ScanStatus}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates_texts/descr">
+        <Annotation Term="Common.Label" String="{i18n>Description}"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.ScanStates_texts/code">
+        <Annotation Term="Common.Text" Path="name">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Unscanned"/>
+              <PropertyValue Property="Value" String="Unscanned"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Scanning"/>
+              <PropertyValue Property="Value" String="Scanning"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Infected"/>
+              <PropertyValue Property="Value" String="Infected"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Clean"/>
+              <PropertyValue Property="Value" String="Clean"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="Failed"/>
+              <PropertyValue Property="Value" String="Failed"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>

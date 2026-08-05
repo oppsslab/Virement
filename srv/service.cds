@@ -24,7 +24,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         {
             grant: 'READ',
             to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and pendingApprover = $user'
+            where: 'status_code = 2 and exists RequestApprovers[emailAddress = $user]'
         },
 
         /*
@@ -46,7 +46,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         {
             grant: 'UPDATE',
             to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and pendingApprover = $user'
+            where: 'status_code = 2 and exists RequestApprovers[emailAddress = $user]'
         },
 
         /*
@@ -68,7 +68,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
                 'postToS4'
             ],
             to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and pendingApprover = $user'
+            where: 'status_code = 2 and exists RequestApprovers[emailAddress = $user]'
         },
     ])
     @odata.draft.enabled
@@ -90,9 +90,6 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
                                  @title: 'Reason'
                                  comment: String)    returns Requests;
 
-            @requires: ['REQUEST_APPROVE']
-            action postToS4()                        returns S4PostingResult;
-
             action uploadItems(content: LargeString) returns Requests;
 
             action downloadItemsTemplate()           returns TemplateFile;
@@ -102,6 +99,9 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
 
     @readonly
     entity RequestHistory       as projection on my.RequestHistory;
+
+    @readonly
+    entity RequestApprovers     as projection on my.RequestApprovers;
 
     type TemplateFile {
         fileName : String;
@@ -158,4 +158,10 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         key emailAddress : String(255);
             fullName     : String(200);
     }
+
+    action assignApprovers(requestId: UUID,
+                           level: String,
+                           approvers: array of {
+        Email : String;
+    }) returns Boolean;
 }
