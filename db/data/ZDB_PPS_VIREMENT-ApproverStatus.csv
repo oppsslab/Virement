@@ -1,0 +1,5 @@
+code,name,descr
+0,Inactive,Inactive
+1,Rejected,Rejected
+2,PendingApproval,Pending Approval
+3,Completed,Completed

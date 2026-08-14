@@ -23,6 +23,7 @@ const {
   approveRequest,
   rejectRequest,
 } = require("./code/approve-reject-request");
+const requests_Resubmit_Logic = require("./code/requests-resubmit-logic");
 
 class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
   async init() {
@@ -88,10 +89,20 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("assignApprovers", async (request) => {
       return assign_Approvers_Logic(request);
+      // return approveRequest(request);
+      // return rejectRequest(request);
     });
 
     this.on("approveRequest", "Requests", async (request) => {
       return approveRequest(request);
+    });
+
+    this.on("rejectRequest", "Requests", async (request) => {
+      return rejectRequest(request);
+    });
+
+    this.on("resubmitRequest", "Requests", async (request) => {
+      return requests_Resubmit_Logic(request);
     });
 
     return super.init();

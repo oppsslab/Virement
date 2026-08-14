@@ -157,6 +157,22 @@ annotate service.Requests with @(
         },
         {
             $Type        : 'UI.DataFieldForAction',
+            Action       : 'service.resubmitRequest',
+            Label        : '{i18n>resubmitRequest}',
+            Criticality  : #Positive,
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Ne: [
+                    {$Path: 'status_code'},
+                    1
+                ]},
+                {$Eq: [
+                    {$Path: 'IsActiveEntity'},
+                    false
+                ]}
+            ]}}
+        },
+        {
+            $Type        : 'UI.DataFieldForAction',
             Action       : 'service.approveRequest',
             Label        : '{i18n>Approve}',
             Criticality  : #Positive,
@@ -220,6 +236,10 @@ annotate service.Requests with @(
         {$Ne: [
             {$Path: 'status_code'},
             2
+        ]},
+        {$Ne: [
+            {$Path: 'status_code'},
+            1
         ]},
         {$Ne: [
             {$Path: 'status_code'},
@@ -437,9 +457,9 @@ annotate service.Requests with @(
         },
         {
             $Type        : 'UI.ReferenceFacet',
-            ID           : 'TransferInItems',
-            Label        : '{i18n>TransferInDetails}',
-            Target       : 'RequestItems/@UI.PresentationVariant#TransferInItems',
+            ID           : 'TransferInOutItems',
+            Label        : '{i18n>TransferInOutDetails}',
+            Target       : 'RequestItems/@UI.PresentationVariant#TransferInOutItems',
             ![@UI.Hidden]: {$edmJson: {$Or: [
                 {$Ne: [
                     {$Path: 'requestType_code'},
@@ -471,46 +491,46 @@ annotate service.Requests with @(
                 ]}
             ]}}
         },
-        {
-            $Type        : 'UI.ReferenceFacet',
-            ID           : 'TransferOutItems',
-            Label        : '{i18n>TransferOutDetails}',
-            Target       : 'RequestItems/@UI.PresentationVariant#TransferOutItems',
-            ![@UI.Hidden]: {$edmJson: {$Or: [
-                {$Ne: [
-                    {$Path: 'requestType_code'},
-                    'T'
-                ]},
-                {$Ne: [
-                    {$Path: 'status_code'},
-                    2
-                ]},
-                {$Eq: [
-                    {$Path: 'transferCategory'},
-                    'J'
-                ]},
-                {$Eq: [
-                    {$Path: 'transferCategory'},
-                    'F'
-                ]},
-                {$And: [
-                    {$Eq: [
-                        {$Path: 'transferCategory'},
-                        null
-                    ]},
-                    {$Or: [
-                        {$Eq: [
-                            {$Path: 'isFunctional'},
-                            true
-                        ]},
-                        {$Eq: [
-                            {$Path: 'isJKEW'},
-                            true
-                        ]}
-                    ]}
-                ]}
-            ]}}
-        },
+        // {
+        //     $Type        : 'UI.ReferenceFacet',
+        //     ID           : 'TransferOutItems',
+        //     Label        : '{i18n>TransferOutDetails}',
+        //     Target       : 'RequestItems/@UI.PresentationVariant#TransferOutItems',
+        //     ![@UI.Hidden]: {$edmJson: {$Or: [
+        //         {$Ne: [
+        //             {$Path: 'requestType_code'},
+        //             'T'
+        //         ]},
+        //         {$Ne: [
+        //             {$Path: 'status_code'},
+        //             2
+        //         ]},
+        //         {$Eq: [
+        //             {$Path: 'transferCategory'},
+        //             'J'
+        //         ]},
+        //         {$Eq: [
+        //             {$Path: 'transferCategory'},
+        //             'F'
+        //         ]},
+        //         {$And: [
+        //             {$Eq: [
+        //                 {$Path: 'transferCategory'},
+        //                 null
+        //             ]},
+        //             {$Or: [
+        //                 {$Eq: [
+        //                     {$Path: 'isFunctional'},
+        //                     true
+        //                 ]},
+        //                 {$Eq: [
+        //                     {$Path: 'isJKEW'},
+        //                     true
+        //                 ]}
+        //             ]}
+        //         ]}
+        //     ]}}
+        // },
         {
             $Type        : 'UI.ReferenceFacet',
             ID           : 'TransferFunctional',
@@ -581,7 +601,7 @@ annotate service.Requests with @(
             $Type : 'UI.ReferenceFacet',
             ID    : 'RequestApprovers',
             Label : '{i18n>Approvers}',
-            Target: 'RequestApprovers/@UI.LineItem#Approvers'
+            Target: 'RequestApprovers/@UI.PresentationVariant#Approvers'
         },
         {
             $Type        : 'UI.ReferenceFacet',
@@ -794,11 +814,11 @@ annotate service.RequestItems with {
     );
     transferInAmount  @(
         title       : '{i18n>TransferInAmount}',
-        Common.Label: '{i18n>Amount}'
+        Common.Label: '{i18n>TransferInAmount}'
     );
     transferOutAmount @(
         title       : '{i18n>TransferOutAmount}',
-        Common.Label: '{i18n>Amount}'
+        Common.Label: '{i18n>TransferOutAmount}'
     );
     description       @(title: '{i18n>Description}');
 };
@@ -906,7 +926,7 @@ annotate service.RequestItems with @(
     // =========================================================================
     // Transfer In Items Table (Type T)
     // =========================================================================
-    UI.LineItem #TransferInItems              : [
+    UI.LineItem #TransferInOutItems              : [
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -937,17 +957,21 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: transferOutAmount
+        },
+        {
+            $Type: 'UI.DataField',
             Value: description
         }
     ],
 
-    UI.PresentationVariant #TransferInItems   : {
+    UI.PresentationVariant #TransferInOutItems   : {
         SortOrder     : [{
             $Type     : 'Common.SortOrderType',
             Property  : srNo,
             Descending: false
         }],
-        Visualizations: ['@UI.LineItem#TransferInItems']
+        Visualizations: ['@UI.LineItem#TransferInOutItems']
     },
 
     // =========================================================================
@@ -1070,49 +1094,49 @@ annotate service.RequestItems with @(
     // =========================================================================
     // Transfer Out Items Table (Type T)
     // =========================================================================
-    UI.LineItem #TransferOutItems             : [
-        {
-            $Type: 'UI.DataField',
-            Value: srNo
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: costCentre
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: glAccount
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: material
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: wbs
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: assetStatus_code
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: transferInAmount
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: description
-        }
-    ],
+    // UI.LineItem #TransferOutItems             : [
+    //     {
+    //         $Type: 'UI.DataField',
+    //         Value: srNo
+    //     },
+    //     {
+    //         $Type: 'UI.DataField',
+    //         Value: costCentre
+    //     },
+    //     {
+    //         $Type: 'UI.DataField',
+    //         Value: glAccount
+    //     },
+    //     {
+    //         $Type: 'UI.DataField',
+    //         Value: material
+    //     },
+    //     {
+    //         $Type: 'UI.DataField',
+    //         Value: wbs
+    //     },
+    //     {
+    //         $Type: 'UI.DataField',
+    //         Value: assetStatus_code
+    //     },
+    //     {
+    //         $Type: 'UI.DataField',
+    //         Value: transferInAmount
+    //     },
+    //     {
+    //         $Type: 'UI.DataField',
+    //         Value: description
+    //     }
+    // ],
 
-    UI.PresentationVariant #TransferOutItems  : {
-        SortOrder     : [{
-            $Type     : 'Common.SortOrderType',
-            Property  : srNo,
-            Descending: false
-        }],
-        Visualizations: ['@UI.LineItem#TransferOutItems']
-    },
+    // UI.PresentationVariant #TransferOutItems  : {
+    //     SortOrder     : [{
+    //         $Type     : 'Common.SortOrderType',
+    //         Property  : srNo,
+    //         Descending: false
+    //     }],
+    //     Visualizations: ['@UI.LineItem#TransferOutItems']
+    // },
 
     Capabilities.SearchRestrictions           : {Searchable: false}
 );
@@ -1252,5 +1276,13 @@ annotate service.RequestApprovers with @(
     Capabilities.SearchRestrictions: {Searchable: false},
     Capabilities.UpdateRestrictions: {Updatable: false},
     UI.CreateHidden,
-    UI.DeleteHidden
+    UI.DeleteHidden,
+    UI.PresentationVariant #Approvers: {
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : level,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem#Approvers']
+    }
 );

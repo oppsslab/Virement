@@ -20,8 +20,8 @@ const LOG = cds.log("approve-reject-request");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
-const DECISION_APPROVED = "APPROVED";
-const DECISION_REJECTED = "REJECTED";
+const DECISION_APPROVED = "approve";
+const DECISION_REJECTED = "reject";
 
 /* ------------------------------------------------------------------ *
  * Helpers
@@ -31,6 +31,12 @@ function normalizeEmail(value) {
   return String(value ?? "")
     .trim()
     .toLowerCase();
+}
+
+function getLevelNumber(level) {
+  // Extract digits from the string
+  const match = level.match(/\d+/);
+  return match ? parseInt(match[0], 10) : null;
 }
 
 /**
@@ -69,14 +75,23 @@ async function findMyPendingApproverRow(
         status_code: REQUEST_STATUS.PENDING_APPROVAL,
       }),
   );
+  
+  const lastApprover = await tx.run(
+    SELECT.one.from(RequestApprovers)
+      .columns("ID", "emailAddress", "status_code", "level")
+      .where({
+        request_ID: requestId
+      })
+      .orderBy('level desc')
+  );
 
   const normalizedUserEmail = normalizeEmail(userEmail);
 
-  return (
-    rows.find(
+  let approverRow = rows.filter(
       (row) => normalizeEmail(row.emailAddress) === normalizedUserEmail,
-    ) || null
-  );
+    ) || [];
+
+  return { approverRow, rows, lastApprover };
 }
 
 /**
@@ -91,7 +106,7 @@ async function loadRequestForApproval(tx, Requests, requestId) {
   return tx.run(
     SELECT.one
       .from(Requests)
-      .columns("ID", "status_code", "workflowInstanceId")
+      .columns("ID", "status_code", "workflowInstanceId", "currentApprovalLevel")
       .where({ ID: requestId }),
   );
 }
@@ -110,12 +125,16 @@ async function loadRequestForApproval(tx, Requests, requestId) {
  */
 async function prepareApprovalAction(request) {
   const requestId = resolveRequestId(request);
+  // const requestId = "b1f49e45-3387-47f3-9c04-a5643d12ce6c";
 
   if (!requestId) {
     request.error(400, "Unable to determine the request to act on.");
 
     return null;
   }
+
+  const approverEmail = request.user?.id;
+  // const approverEmail = "willy.angkasa@pwc.com";
 
   const tx = cds.tx(request);
 
@@ -150,17 +169,17 @@ async function prepareApprovalAction(request) {
     return null;
   }
 
-  const approverRow = await findMyPendingApproverRow(
+  const { approverRow, rows, lastApprover } = await findMyPendingApproverRow(
     tx,
     RequestApprovers,
     requestId,
-    request.user?.id,
+    approverEmail,
   );
 
-  if (!approverRow) {
+  if (!approverRow.length) {
     LOG.warn(
       "User is not a pending approver for this request.",
-      JSON.stringify({ requestId, user: request.user?.id }),
+      JSON.stringify({ requestId, user: approverEmail }),
     );
 
     request.error(
@@ -171,12 +190,13 @@ async function prepareApprovalAction(request) {
     return null;
   }
 
-  let openTask;
+  let openTask = [];
 
   try {
     openTask = await getOpenTaskForWorkflowInstance(
       requestRow.workflowInstanceId,
     );
+    console.log(openTask);
   } catch (error) {
     LOG.error(
       "Failed to look up the open task for this request.",
@@ -196,7 +216,7 @@ async function prepareApprovalAction(request) {
     return null;
   }
 
-  if (!openTask) {
+  if (!openTask.length) {
     LOG.error(
       "No open task instance found for workflow instance.",
       JSON.stringify({
@@ -214,9 +234,17 @@ async function prepareApprovalAction(request) {
     return null;
   }
 
-  const taskId = openTask.id || openTask.taskId;
+  const approverLevel = approverRow.map(x => x.level + " Approval");
+  // console.log("approverLevel:", approverLevel1);
+  // const approverLevel =["L2-A","L2-C"];
+  const filterTask = openTask.filter(function (task) {
+    const subject = String(task?.subject || "");
+    return approverLevel.some(level => subject.includes(level));
+  });
 
-  if (!taskId) {
+  const taskIds = filterTask.map(x => x.id || x.taskId);
+
+  if (!taskIds.length) {
     LOG.error(
       "Open task instance has no recognizable ID field.",
       JSON.stringify({ requestId, rawTask: openTask }),
@@ -230,7 +258,7 @@ async function prepareApprovalAction(request) {
     return null;
   }
 
-  return { requestId, requestRow, approverRow, taskId };
+  return { requestId, requestRow, approverRow, rows, lastApprover, taskIds };
 }
 
 /* ------------------------------------------------------------------ *
@@ -266,11 +294,109 @@ async function approveRequest(request) {
     return;
   }
 
-  const { requestId, taskId } = prepared;
+  const { requestId, taskIds, approverRow, rows, lastApprover, requestRow } = prepared;
+  console.log(prepared)
 
   const approverEmail = request.user?.id;
+  // const approverEmail = "willy.angkasa@pwc.com";
 
+  const currentLevel = requestRow.currentApprovalLevel; // 1
+  console.log("currentLevel:", currentLevel)
+
+  const remainingPendingApproval = rows.filter(x => !approverRow.map(r => r.level).includes(x.level));
+
+  const lastLevel = getLevelNumber(lastApprover.level); // 2
+  console.log("lastLevel:", lastLevel)
+
+  let nextLevel = Math.min(currentLevel + 1, lastLevel);
+  console.log("nextLevel:", nextLevel)
+
+  // Stop Update
+  let remainingParallelApproval = false; 
+  if ( currentLevel === 2 && remainingPendingApproval.length > 0) {
+    nextLevel = 2;
+    remainingParallelApproval = true;
+  }
+  
   const tx = cds.tx(request);
+
+  const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
+
+  // Approve for User
+  await tx.run(
+    UPDATE(RequestApprovers)
+      .set({
+        status_code: REQUEST_STATUS.APPROVED,
+        actionDate: new Date().toISOString()
+      })
+      .where({ ID: { in: approverRow.map(x => x.ID) } }),
+  );
+
+  if ( currentLevel !== nextLevel ){
+    // Pending Next Approver
+    await tx.run(
+      UPDATE(RequestApprovers)
+        .set({
+          status_code: REQUEST_STATUS.PENDING_APPROVAL
+        })
+      .where({ level: { like: `${nextLevel}%` } })   // contains "A"
+    );
+  }
+  
+  // Skip Update if there is remaining parallel approval
+  if (!remainingParallelApproval){
+    // Update Request
+    await tx.run(
+      UPDATE(Requests)
+        .set({
+          status_code: currentLevel === lastLevel ? REQUEST_STATUS.APPROVED : REQUEST_STATUS.PENDING_APPROVAL,
+          currentApprovalLevel: nextLevel 
+        })
+        .where({ ID: requestId })
+    );
+  }
+
+  /*
+    * Resolve every other still-Pending approver at the same
+    * level, since a single rejection ends the whole request
+    * regardless of what they would have decided.
+    */
+  const siblingRows = await tx.run(
+    SELECT.from(RequestApprovers).columns("ID", "emailAddress").where({
+      request_ID: requestId,
+      level: { in: approverRow.map(x => x.level) },
+      status_code: REQUEST_STATUS.PENDING_APPROVAL,
+    }),
+  );
+
+  if (siblingRows.length > 0) {
+    const siblingIds = siblingRows.map((row) => row.ID);
+
+    await tx.run(
+      UPDATE(RequestApprovers)
+        .set({
+          status_code: REQUEST_STATUS.APPROVED,
+          comment: `Not required to act - request already approved by ${approverEmail}.`,
+        })
+        .where({ ID: { in: siblingIds } }),
+    );
+
+    const siblingEmails = siblingRows
+      .map((row) => row.emailAddress)
+      .join(", ");
+
+    await insertRequestHistory(
+      request,
+      requestId,
+      `${siblingEmails} were not required to act - request approved rejected by ${approverEmail}.`,
+    );
+
+    LOG.info(
+      "Other Level pending approvers auto-resolved (rejected):",
+      JSON.stringify({ requestId, siblingEmails }),
+    );
+  }
+
 
   try {
     const result = await performPostToS4({
@@ -292,6 +418,7 @@ async function approveRequest(request) {
      */
     await tx.commit();
   } catch (error) {
+    console.log(error)
     const safe = businessError(error);
 
     LOG.error(
@@ -309,14 +436,16 @@ async function approveRequest(request) {
   }
 
   try {
-    await completeTask({
-      taskId,
-      decision: DECISION_APPROVED,
-    });
+    for (const taskId of taskIds) {
+      await completeTask({
+        taskId,
+        decision: DECISION_APPROVED,
+      });
+    }
 
     LOG.info(
       "Approval task completed via BPA.",
-      JSON.stringify({ requestId, taskId }),
+      JSON.stringify({ requestId, taskIds }),
     );
   } catch (error) {
     /*
@@ -332,12 +461,13 @@ async function approveRequest(request) {
         "Manual intervention may be required in Monitor Workflows.",
       JSON.stringify({
         requestId,
-        taskId,
+        taskIds,
         message: error.message,
         status: error.response?.status || error.statusCode,
       }),
     );
   }
+  request.info('Request Approved successfully');
 }
 
 /**
@@ -363,15 +493,17 @@ async function rejectRequest(request) {
     return;
   }
 
-  const { requestId, approverRow, taskId } = prepared;
+  const { requestId, approverRow, row, lastApprover, taskIds } = prepared;
 
   const approverEmail = request.user?.id;
+  // const approverEmail = "willy.angkasa@pwc.com";
 
   const tx = cds.tx(request);
 
   const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
 
   try {
+
     await tx.run(
       UPDATE(RequestApprovers)
         .set({
@@ -379,7 +511,7 @@ async function rejectRequest(request) {
           actionDate: new Date().toISOString(),
           comment: comment || null,
         })
-        .where({ ID: approverRow.ID }),
+        .where({ ID: { in: approverRow.map(x => x.ID) } }),
     );
 
     await tx.run(
@@ -402,10 +534,11 @@ async function rejectRequest(request) {
      * level, since a single rejection ends the whole request
      * regardless of what they would have decided.
      */
+    const approverLevel = getLevelNumber(approverRow[0].level); // 2
     const siblingRows = await tx.run(
       SELECT.from(RequestApprovers).columns("ID", "emailAddress").where({
         request_ID: requestId,
-        level: approverRow.level,
+        level: { like: `${approverLevel}%` },  // contains "A"
         status_code: REQUEST_STATUS.PENDING_APPROVAL,
       }),
     );
@@ -453,15 +586,16 @@ async function rejectRequest(request) {
   }
 
   try {
-    await completeTask({
-      taskId,
-      decision: DECISION_REJECTED,
-      comment,
-    });
+    for (const taskId of taskIds) {
+      await completeTask({
+        taskId,
+        decision: DECISION_REJECTED,
+      });
+    }
 
     LOG.info(
       "Rejection task completed via BPA.",
-      JSON.stringify({ requestId, taskId }),
+      JSON.stringify({ requestId, taskIds }),
     );
   } catch (error) {
     LOG.error(
@@ -470,12 +604,13 @@ async function rejectRequest(request) {
         "Manual intervention may be required in Monitor Workflows.",
       JSON.stringify({
         requestId,
-        taskId,
+        taskIds,
         message: error.message,
         status: error.response?.status || error.statusCode,
       }),
     );
   }
+  request.info('Request Rejected successfully');
 }
 
 module.exports = { approveRequest, rejectRequest };

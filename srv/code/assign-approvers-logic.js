@@ -2,7 +2,7 @@ const cds = require("@sap/cds");
 
 const insertRequestHistory = require("./insert-request-history");
 
-const { REQUEST_STATUS } = require("./utils/request-status");
+const { REQUEST_STATUS, APPROVER_STATUS } = require("./utils/request-status");
 
 const LOG = cds.log("assign-approvers");
 
@@ -123,7 +123,7 @@ function buildApproverRows(approvers, requestId, level) {
         request_ID: requestId,
         emailAddress: extractEmailAddress(approver),
         level,
-        status_code: REQUEST_STATUS.PENDING_APPROVAL,
+        status_code: level === "1" ? APPROVER_STATUS.PENDING_APPROVAL : APPROVER_STATUS.INACTIVE,
       };
     })
     .filter(function (row) {
@@ -157,15 +157,17 @@ module.exports = async function (request) {
       return false;
     }
 
-    const normalizedLevel = parseApprovalLevel(level);
+    const normalizedLevel = level;
 
-    if (normalizedLevel === null) {
-      LOG.error("Invalid level received:", level);
+    // const normalizedLevel = parseApprovalLevel(level);
 
-      request.error(400, "level must resolve to a positive integer.");
+    // if (normalizedLevel === null) {
+    //   LOG.error("Invalid level received:", level);
 
-      return false;
-    }
+    //   request.error(400, "level must resolve to a positive integer.");
+
+    //   return false;
+    // }
 
     const normalizedApprovers = normalizeApproversInput(approvers);
 
@@ -175,7 +177,7 @@ module.exports = async function (request) {
     );
 
     if (normalizedApprovers.length === 0) {
-      request.error(400, "approvers must be a non-empty array.");
+      // request.error(400, "approvers must be a non-empty array.");
       return false;
     }
 
@@ -222,11 +224,13 @@ module.exports = async function (request) {
 
     await tx.run(INSERT.into(RequestApprovers).entries(rowsToInsert));
 
-    await tx.run(
-      UPDATE(Requests)
-        .set({ currentApprovalLevel: normalizedLevel })
-        .where({ ID: requestId }),
-    );
+    if (normalizedLevel === "1"){
+      await tx.run(
+        UPDATE(Requests)
+          .set({ currentApprovalLevel: 1 })
+          .where({ ID: requestId }),
+      );
+    }
 
     const approverEmails = rowsToInsert
       .map(function (row) {

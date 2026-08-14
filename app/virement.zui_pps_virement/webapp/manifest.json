@@ -5,7 +5,7 @@
     "type": "application",
     "i18n": "i18n/i18n.properties",
     "applicationVersion": {
-      "version": "0.0.79"
+      "version": "0.0.81"
     },
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
@@ -220,7 +220,7 @@
                     }
                   }
                 },
-                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferInItems": {
+                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferInOutItems": {
                   "tableSettings": {
                     "type": "GridTable"
                   },
@@ -247,16 +247,6 @@
                         "placement": "Before",
                         "anchor": "downloadTemplate"
                       }
-                    }
-                  }
-                },
-                "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#TransferOutItems": {
-                  "tableSettings": {
-                    "type": "GridTable"
-                  },
-                  "columns": {
-                    "DataField::srNo": {
-                      "width": "6em"
                     }
                   }
                 },

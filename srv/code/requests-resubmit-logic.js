@@ -8,7 +8,7 @@ const { startApprovalWorkflow } = require("./utils/workflow-utils");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
-const LOG = cds.log("requests-after-create-logic");
+const LOG = cds.log("requests-resubmit-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
@@ -17,32 +17,15 @@ const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
  * ------------------------------------------------------------------ */
 
 /**
- * Returns the first created record.
+ * Resolves the Request ID from the bound action's entity context.
  *
- * Handles both a single object and an array result.
- *
- * @param {object|object[]} results
- * @returns {object}
- */
-function resolveCreatedRequest(results) {
-  if (Array.isArray(results)) {
-    return results[0] || {};
-  }
-
-  return results || {};
-}
-
-/**
- * Resolves the Request ID from the created result or request.data.
- *
- * @param {object|object[]} results
  * @param {cds.Request} request
  * @returns {string|null}
  */
-function resolveRequestId(results, request) {
-  const createdRequest = resolveCreatedRequest(results);
-
-  return createdRequest.ID || request.data?.ID || null;
+function resolveRequestId(request) {
+  return (
+    request.params?.[0]?.ID || request.data?.in?.ID || request.data?.ID || null
+  );
 }
 
 /**
@@ -134,7 +117,7 @@ function getWorkflowErrorStatus(error) {
  * @param {object|object[]} results
  * @param {cds.Request} request
  */
-module.exports = async function (results, request) {
+module.exports = async function (request) {
   LOG.info("--- AFTER CREATE Requests started ---");
 
   try {
@@ -142,18 +125,16 @@ module.exports = async function (results, request) {
 
     LOG.info("Target:", request.target?.name);
 
-    LOG.info("Results:", JSON.stringify(results || {}));
-
-    const createdRequest = resolveCreatedRequest(results);
-
-    LOG.info("createdRequest:", JSON.stringify(createdRequest || {}));
-
     LOG.info("request.data:", JSON.stringify(request.data || {}));
+
+    const tx = cds.tx(request);
+
+    const { Requests, RequestItems, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
 
     /*
      * 1. Resolve the saved Request ID.
      */
-    const requestId = resolveRequestId(results, request);
+    const requestId = resolveRequestId(request);
 
     if (!requestId) {
       const error = new Error(
@@ -165,31 +146,33 @@ module.exports = async function (results, request) {
       throw error;
     }
 
-    const requestType =
-      createdRequest.requestType_code || request.data?.requestType_code || "";
+    const createdRequest = await tx.run(
+      SELECT.one.from(Requests).where({ ID: requestId }),
+    );
 
-    const requestNumber =
-      createdRequest.requestNumber || request.data?.requestNumber || "";
+    const createdRequestItems = await tx.run(
+      SELECT.from(RequestItems).where({ request_ID: requestId }),
+    );
 
-    const requestLink =
-      createdRequest.requestLink || request.data?.requestLink || "";
+    const requestType = createdRequest.requestType_code || "";
+
+    const requestNumber = createdRequest.requestNumber || "";
+
+    const requestLink = createdRequest.requestLink || "";
     
     // Add filter to first Item
-    const lineitemCostCenter =
-      createdRequest.RequestItems?.[0].costCentre || request.data?.RequestItems?.[0].costCentre || [];
+    const lineitemCostCenter = createdRequestItems?.[0].costCentre || [];
 
     // Add filter for Transfer Out Items
-    const transferOutCostCenter =
-      createdRequest.RequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || request.data?.RequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || [];
+    const transferOutCostCenter = createdRequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || [];
 
-    const projectType = 
-      createdRequest.budgetType_code || request.data?.budgetType_code || "";
+    const projectType = createdRequest.budgetType_code || "";
 
-    const requestAmount = 
-      Number(createdRequest.transferOutAmount) || Number(request.data?.transferOutAmount) || 0;
+    const requestAmount = Number(createdRequest.transferOutAmount) || 0;
 
     const requestor = resolveRequestor(createdRequest, request);
 
+    const workFlowInstanceId = createdRequestItems.workflowInstanceId;
     LOG.info(
       "Resolved created request:",
       JSON.stringify({
@@ -253,6 +236,8 @@ module.exports = async function (results, request) {
       workflowInstance.workflowInstanceId ||
       null;
 
+    const status_code = 2;
+
     LOG.info(
       "Approval workflow started successfully:",
       JSON.stringify({
@@ -264,12 +249,12 @@ module.exports = async function (results, request) {
     );
 
     if (workflowInstanceId) {
-      const tx = cds.tx(request);
-
-      const { Requests } = cds.entities(SERVICE_NAMESPACE);
+      await tx.run(
+        UPDATE(Requests).set({ workflowInstanceId, status_code: REQUEST_STATUS.PENDING_APPROVAL }).where({ ID: requestId }),
+      );
 
       await tx.run(
-        UPDATE(Requests).set({ workflowInstanceId }).where({ ID: requestId }),
+        DELETE.from(RequestApprovers).where({ request_ID: requestId })
       );
     } else {
       LOG.warn(
@@ -296,11 +281,7 @@ module.exports = async function (results, request) {
       "Request creation failed because the approval workflow " +
         "could not be started:",
       JSON.stringify({
-        requestId: resolveRequestId(results, request),
-        requestNumber:
-          resolveCreatedRequest(results).requestNumber ||
-          request.data?.requestNumber ||
-          null,
+        requestId: resolveRequestId(request),
         destination: "sap_process_automation_service",
         statusCode,
         message: errorMessage,

@@ -223,6 +223,10 @@ async function startApprovalWorkflow({
   requestNumber,
   requestor,
   requestLink,
+  lineitemCostCenter,
+  transferOutCostCenter,
+  projectType,
+  requestAmount
 }) {
   if (!requestId) {
     const error = new Error(
@@ -259,6 +263,14 @@ async function startApprovalWorkflow({
       requestor: requestor || "",
 
       requestLink: requestLink || "",
+
+      lineitemCostCenter: lineitemCostCenter || "",
+
+      transferOutCostCenter: transferOutCostCenter,
+
+      projectType: projectType || "",
+
+      requestAmount: requestAmount || 0
     },
   };
 
@@ -446,7 +458,7 @@ async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
     }),
   );
 
-  const openTask = taskInstances.find(function (task) {
+  const openTask = taskInstances.filter(function (task) {
     const status = String(task?.status || "")
       .trim()
       .toUpperCase();
@@ -454,7 +466,7 @@ async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
     return OPEN_TASK_STATUSES.includes(status);
   });
 
-  if (!openTask) {
+  if (!openTask.length) {
     LOG.warn(
       "No open task instance found for workflow instance.",
       JSON.stringify({ workflowInstanceId }),
@@ -467,9 +479,7 @@ async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
     "Open task instance found.",
     JSON.stringify({
       workflowInstanceId,
-      taskId: openTask.id || openTask.taskId || null,
-      subject: openTask.subject || openTask.name || null,
-      status: openTask.status || null,
+      tasks: openTask
     }),
   );
 
@@ -514,7 +524,7 @@ async function completeTask({ taskId, decision, comment }) {
 
   const payload = {
     status: "COMPLETED",
-
+    decision: decision,
     context: {
       comment: comment || "",
     },

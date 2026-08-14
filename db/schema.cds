@@ -73,7 +73,7 @@ entity RequestHistory : cuid, managed {
 entity RequestApprovers : cuid, managed {
     request      : Association to Requests;
     emailAddress : String;
-    level        : Integer;
+    level        : String;
     status       : Association to RequestStatus default 2;
     taskId       : String;
     actionDate   : DateTime;
@@ -103,6 +103,17 @@ type RequestStatusCode : Integer enum {
 
 entity RequestStatus : CodeList {
     key code : RequestStatusCode
+};
+
+type ApproverStatusCode : Integer enum {
+    Inactive = 0;
+    Rejected = 1;
+    PendingApproval = 2;
+    Completed = 3;
+};
+
+entity ApproverStatus : CodeList {
+    key code : ApproverStatusCode
 };
 
 type AssetStatusCode   : String(3) enum {

@@ -52,6 +52,16 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         /*
          * Generic request actions.
          */
+        {
+            grant: [
+                'resubmitRequest'
+            ],
+            where: 'createdBy = $user'
+        },
+
+        /*
+         * Generic request actions.
+         */
         {grant: [
             'calculateValues',
             'uploadItems',
@@ -81,6 +91,8 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         }
         actions {
             action calculateValues()                 returns Requests;
+
+            action resubmitRequest()                  returns Requests;
 
             @requires: ['REQUEST_APPROVE']
             action approveRequest()                  returns Requests;

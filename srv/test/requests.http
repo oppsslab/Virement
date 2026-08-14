@@ -6,3 +6,25 @@ Content-Type: application/json
   "requestId": "00000000-0000-0000-0000-000000000001",
   "testMode": "X"
 }
+
+### Test POST to S4 Action
+POST http://localhost:4004/service/ZSVC_PPS_VIREMENT/assignApprovers
+Content-Type: application/json
+
+{
+  "requestId": "b1f49e45-3387-47f3-9c04-a5643d12ce6c",
+  "level": "2A",
+  "approvers": [
+    {
+        "Email" : "kevin.p.orense@pwc.com"
+    }
+  ]
+}
+
+
+### Test POST to S4 Action
+POST http://localhost:4004/service/ZSVC_PPS_VIREMENT/Requests(ID=b1f49e45-3387-47f3-9c04-a5643d12ce6c,IsActiveEntity=true)/approveRequest
+Content-Type: application/json
+
+{
+}
