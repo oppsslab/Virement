@@ -765,6 +765,37 @@ annotate service.Requests actions {
     })
 };
 
+annotate service.Requests actions {
+    rejectRequest @(Common.SideEffects: {
+        TargetProperties: [
+            'in/status_code',
+            'in/supplementDocNumber',
+            'in/returnDocNumber',
+            'in/transferInDocNumber',
+            'in/transferOutDocNumber'
+        ],
+        TargetEntities  : [
+            RequestApprovers,
+            RequestHistory
+        ]
+    })
+};
+
+annotate service.Requests actions {
+    resubmitRequest @(Common.SideEffects: {
+        TargetProperties: [
+            'in/status_code',
+            'in/supplementDocNumber',
+            'in/returnDocNumber',
+            'in/transferInDocNumber',
+            'in/transferOutDocNumber'
+        ],
+        TargetEntities  : [
+            RequestApprovers,
+            RequestHistory
+        ]
+    })
+};
 
 // =============================================================================
 // RequestItems - Field Labels, Value Helps, Field Controls

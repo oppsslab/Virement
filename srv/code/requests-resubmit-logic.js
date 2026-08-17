@@ -161,10 +161,16 @@ module.exports = async function (request) {
     const requestLink = createdRequest.requestLink || "";
     
     // Add filter to first Item
-    const lineitemCostCenter = createdRequestItems?.[0].costCentre || [];
+    const lineitemCostCenter = createdRequestItems?.[0]?.costCentre || "";
 
     // Add filter for Transfer Out Items
-    const transferOutCostCenter = createdRequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || [];
+    // const transferOutCostCenter = createdRequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || [];
+    const transferOutCostCenter = [
+      ...new Set(
+        createdRequestItems?.filter(x => Number(x.transferOutAmount))
+          ?.map(x => x.costCentre) || []
+      )
+    ];
 
     const projectType = createdRequest.budgetType_code || "";
 

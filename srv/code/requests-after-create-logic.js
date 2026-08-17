@@ -176,11 +176,17 @@ module.exports = async function (results, request) {
     
     // Add filter to first Item
     const lineitemCostCenter =
-      createdRequest.RequestItems?.[0].costCentre || request.data?.RequestItems?.[0].costCentre || [];
+      createdRequest.RequestItems?.find(x => Number(x.transferInAmount))?.costCentre || request.data?.RequestItems?.find(x => Number(x.transferInAmount))?.costCentre || 
+        createdRequest.RequestItems?.[0]?.costCentre || request.data?.RequestItems?.[0]?.costCentre || "";
 
     // Add filter for Transfer Out Items
     const transferOutCostCenter =
-      createdRequest.RequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || request.data?.RequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || [];
+      // createdRequest.RequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || request.data?.RequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || [];
+      [...new Set(
+        createdRequest.RequestItems?.filter(x => Number(x.transferOutAmount)).map(x => x.costCentre)
+          || request.data?.RequestItems?.filter(x => Number(x.transferOutAmount)).map(x => x.costCentre)
+          || []
+      )];
 
     const projectType = 
       createdRequest.budgetType_code || request.data?.budgetType_code || "";

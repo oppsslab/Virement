@@ -332,7 +332,7 @@ async function approveRequest(request) {
       .where({ ID: { in: approverRow.map(x => x.ID) } }),
   );
 
-  if ( currentLevel !== nextLevel ){
+  if ( currentLevel !== nextLevel ) {
     // Pending Next Approver
     await tx.run(
       UPDATE(RequestApprovers)
@@ -342,14 +342,16 @@ async function approveRequest(request) {
       .where({ level: { like: `${nextLevel}%` } })   // contains "A"
     );
   }
-  
+
+  let newStatusCode = REQUEST_STATUS.PENDING_APPROVAL;
   // Skip Update if there is remaining parallel approval
   if (!remainingParallelApproval){
     // Update Request
+    newStatusCode = currentLevel === lastLevel ? REQUEST_STATUS.APPROVED : REQUEST_STATUS.PENDING_APPROVAL;
     await tx.run(
       UPDATE(Requests)
         .set({
-          status_code: currentLevel === lastLevel ? REQUEST_STATUS.APPROVED : REQUEST_STATUS.PENDING_APPROVAL,
+          status_code: newStatusCode,
           currentApprovalLevel: nextLevel 
         })
         .where({ ID: requestId })
@@ -397,42 +399,43 @@ async function approveRequest(request) {
     );
   }
 
-
-  try {
-    const result = await performPostToS4({
-      tx,
-      request,
-      requestId,
-      emailAddress: approverEmail,
-    });
-
-    LOG.info(
-      "S/4 posting completed successfully.",
-      JSON.stringify({ requestId, documentNumbers: result.documentNumbers }),
-    );
-
-    /*
-     * Commit the DB transaction before calling out to BPA, so the
-     * posted state is durable before we tell BPA this task/branch
-     * is done.
-     */
-    await tx.commit();
-  } catch (error) {
-    console.log(error)
-    const safe = businessError(error);
-
-    LOG.error(
-      "S/4 posting failed. Approval task will remain open for retry.",
-      JSON.stringify({
+  if (newStatusCode === REQUEST_STATUS.APPROVED){
+    try {
+      const result = await performPostToS4({
+        tx,
+        request,
         requestId,
-        message: error.message,
-        status: safe.status,
-      }),
-    );
+        emailAddress: approverEmail,
+      });
 
-    request.error(safe.status, safe.message);
+      LOG.info(
+        "S/4 posting completed successfully.",
+        JSON.stringify({ requestId, documentNumbers: result.documentNumbers }),
+      );
 
-    return;
+      /*
+      * Commit the DB transaction before calling out to BPA, so the
+      * posted state is durable before we tell BPA this task/branch
+      * is done.
+      */
+      await tx.commit();
+    } catch (error) {
+      console.log(error)
+      const safe = businessError(error);
+
+      LOG.error(
+        "S/4 posting failed. Approval task will remain open for retry.",
+        JSON.stringify({
+          requestId,
+          message: error.message,
+          status: safe.status,
+        }),
+      );
+
+      request.error(safe.status, safe.message);
+
+      return;
+    }
   }
 
   try {

@@ -74,7 +74,7 @@ entity RequestApprovers : cuid, managed {
     request      : Association to Requests;
     emailAddress : String;
     level        : String;
-    status       : Association to RequestStatus default 2;
+    status       : Association to ApproverStatus default 0;
     taskId       : String;
     actionDate   : DateTime;
     comment      : String(500);

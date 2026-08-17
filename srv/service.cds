@@ -56,7 +56,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             grant: [
                 'resubmitRequest'
             ],
-            where: 'createdBy = $user'
+            where: 'createdBy = $user and status_code = 1'
         },
 
         /*
