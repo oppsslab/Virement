@@ -29,6 +29,10 @@ const buildMessage = {
       : HISTORY_MESSAGES.REJECTED;
   },
 
+  earmarkedFundsCreated(documentNumber) {
+    return `Earmarked Funds document ${documentNumber} has been created`;
+  },
+
   statusChangedTo(statusCode) {
     const label = REQUEST_STATUS_LABEL[statusCode] || `status ${statusCode}`;
     return `Virement status changed to ${label}`;

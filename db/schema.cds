@@ -31,6 +31,11 @@ entity Requests : cuid, managed {
     returnDocNumber      : String                     @readonly;
     transferInDocNumber  : String                     @readonly;
     transferOutDocNumber : String                     @readonly;
+    // Earmarked Funds (S/4 fund reservation) document number, created at
+    // submit time for Supplement + Non Project requests. Kept separate from
+    // supplementDocNumber, which holds the FMBB posting document written
+    // after approval by post-to-s4-logic.
+    earmarkedFundsDocNumber : String                  @readonly;
     postingDate          : Date;
     postingPeriod        : Integer; // Month posted to IFAMS (1-12)
     reason               : String(500);

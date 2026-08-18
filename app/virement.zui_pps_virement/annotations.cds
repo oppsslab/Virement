@@ -81,6 +81,7 @@ annotate service.Requests with {
     returnDocNumber      @(title: '{i18n>ReturnDocNumber}');
     transferInDocNumber  @(title: '{i18n>TransferInDocNumber}');
     transferOutDocNumber @(title: '{i18n>TransferOutDocNumber}');
+    earmarkedFundsDocNumber @(title: '{i18n>EarmarkedFundsDocNumber}');
     postingDate          @(title: '{i18n>PostingDate}');
     postingPeriod        @(title: '{i18n>PostingPeriod}');
     reason               @(title: '{i18n>Reason}');
@@ -669,6 +670,24 @@ annotate service.Requests with @(
             {
                 $Type: 'UI.DataField',
                 Value: reason
+            },
+            {
+                $Type        : 'UI.DataField',
+                Value        : earmarkedFundsDocNumber,
+                // Shown for Supplement + Non Project requests, which reserve
+                // funds in S/4 at submit time. Unlike the posting document
+                // numbers below, this exists from submission onwards, so it is
+                // not gated on an approved status.
+                ![@UI.Hidden]: {$edmJson: {$Or: [
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'S'
+                    ]},
+                    {$Ne: [
+                        {$Path: 'budgetType_code'},
+                        'N'
+                    ]}
+                ]}}
             },
             {
                 $Type        : 'UI.DataField',

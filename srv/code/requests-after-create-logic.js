@@ -2,7 +2,10 @@ const cds = require("@sap/cds");
 
 const insertRequestHistory = require("./insert-request-history");
 
-const { HISTORY_MESSAGES } = require("./utils/history-messages");
+const {
+  HISTORY_MESSAGES,
+  buildMessage,
+} = require("./utils/history-messages");
 
 const { startApprovalWorkflow } = require("./utils/workflow-utils");
 
@@ -224,6 +227,30 @@ module.exports = async function (results, request) {
     );
 
     LOG.info("RequestHistory inserted:", inserted);
+
+    /*
+     * 2a. Record the Earmarked Funds document, when one was created.
+     *
+     * The document itself is created Before CREATE (see
+     * requests-before-create-logic.js) because a failure there must abort
+     * the submission. History can only be written once the Request row
+     * exists, so the entry is added here instead.
+     */
+    const earmarkedFundsDocNumber =
+      createdRequest?.earmarkedFundsDocNumber || request.data?.earmarkedFundsDocNumber;
+
+    if (earmarkedFundsDocNumber) {
+      await insertRequestHistory(
+        request,
+        requestId,
+        buildMessage.earmarkedFundsCreated(earmarkedFundsDocNumber),
+      );
+
+      LOG.info(
+        "Earmarked Funds history entry inserted:",
+        earmarkedFundsDocNumber,
+      );
+    }
 
     /*
      * 3. Start the approval workflow.

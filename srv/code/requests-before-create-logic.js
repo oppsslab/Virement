@@ -8,6 +8,10 @@ const { getLocalDateParts } = require("./utils/date-utils");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
+const {
+  createEarmarkedFundsDocument,
+} = require("./utils/earmarked-funds");
+
 const LOG = cds.log("requests-before-create-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
@@ -33,6 +37,13 @@ const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
  * WBS validation for Project budget type only applies to this type.
  */
 const REQUEST_TYPE_SUPPLEMENT = "S";
+
+/*
+ * Budget type code that represents "Non Project" budget requests.
+ * Supplement (S) + Non Project (N) requests reserve funds in S/4 via the
+ * Earmarked Funds API at submit time.
+ */
+const BUDGET_TYPE_NON_PROJECT = "N";
 
 /*
  * Budget type code that represents "Project" budget requests.
@@ -381,7 +392,18 @@ async function fetchRequestItems({ tx, RequestItems, request, requestId }) {
 
   const persistedItems = await tx.run(
     SELECT.from(RequestItems)
-      .columns("ID", "wbs", "material", "glAccount")
+      .columns(
+        "ID",
+        "wbs",
+        "material",
+        "glAccount",
+        // Required to build the Earmarked Funds payload (see
+        // utils/earmarked-funds.js). Harmless for the WBS / Material-GL
+        // validations, which read only the fields above.
+        "costCentre",
+        "supplementAmount",
+        "description",
+      )
       .where({
         request_ID: requestId,
       }),
@@ -1214,6 +1236,43 @@ module.exports = async function (request) {
     request.data.requestLink = generateRequestLink(request, requestId);
 
     LOG.info("Generated requestLink:", request.data.requestLink);
+
+    /*
+     * 8. Reserve funds in S/4 for Supplement + Non Project requests.
+     *
+     * The Earmarked Funds document must exist before the request is
+     * persisted, so that a rejection from S/4 aborts the submission and
+     * the user sees the SAP message instead of a half-submitted request.
+     * Because this runs Before CREATE, the approval workflow (started in
+     * requests-after-create-logic.js) only ever runs once the document
+     * has been created successfully.
+     */
+    if (
+      requestTypeCode === REQUEST_TYPE_SUPPLEMENT &&
+      budgetTypeCode === BUDGET_TYPE_NON_PROJECT
+    ) {
+      LOG.info(
+        "Supplement + Non Project request detected. " +
+          "Creating Earmarked Funds document before submit.",
+      );
+
+      const earmarkedFundsItems = await fetchRequestItems({
+        tx,
+        RequestItems,
+        request,
+        requestId,
+      });
+
+      const { documentNumber } = await createEarmarkedFundsDocument({
+        requestNumber: request.data.requestNumber,
+        items: earmarkedFundsItems,
+        documentDate: request.data.submissionDate,
+      });
+
+      request.data.earmarkedFundsDocNumber = documentNumber;
+
+      LOG.info("Earmarked Funds document number:", documentNumber);
+    }
 
     /*
      * Do not start the workflow here.
