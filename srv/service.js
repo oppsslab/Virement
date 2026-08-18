@@ -14,6 +14,7 @@ const download_Items_Template_Logic = require("./code/download-items-template-lo
 const requests_Drafts_Upload_Items_Logic = require("./code/requests-drafts-upload-items-logic");
 const requestitems_Drafts_Before_Delete_Logic = require("./code/requestitems-drafts-before-delete-logic");
 const requestitems_Drafts_After_Create_Logic = require("./code/requestitems-drafts-after-create-logic");
+const requestitems_Drafts_After_Update_Logic = require("./code/requestitems-drafts-after-update-logic");
 const requests_Before_Update_Logic = require("./code/requests-before-update-logic");
 const requests_Drafts_After_Read_Logic = require("./code/requests-drafts-after-read-logic");
 const recent_Requests_Read_Logic = require("./code/recent-requests-read-logic");
@@ -69,6 +70,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.after("CREATE", "RequestItems.drafts", async (results, request) => {
       await requestitems_Drafts_After_Create_Logic(results, request);
+    });
+
+    this.after("UPDATE", "RequestItems.drafts", async (results, request) => {
+      await requestitems_Drafts_After_Update_Logic(results, request);
     });
 
     this.before("UPDATE", "Requests", async (request) => {

@@ -744,9 +744,38 @@ annotate service.Requests actions {
     ]})
 };
 
+// Header amounts are recalculated server-side whenever the item collection
+// changes (after-CREATE / after-UPDATE on RequestItems.drafts), so refresh
+// them alongside the items themselves. Without TargetProperties the table
+// refreshes but the header keeps showing stale totals.
 annotate service.Requests with @Common.SideEffects #RefreshItemsAfterItemChange: {
-    SourceEntities: [RequestItems],
-    TargetEntities: [RequestItems]
+    SourceEntities  : [RequestItems],
+    TargetEntities  : [RequestItems],
+    TargetProperties: [
+        'supplementAmount',
+        'returnAmount',
+        'transferInAmount',
+        'transferOutAmount'
+    ]
+};
+
+// When a line item amount changes, the after-UPDATE handler on
+// RequestItems.drafts recalculates the parent header amounts. Declare the
+// header fields as side-effect targets so the object page refetches them
+// instead of showing stale totals until Calculate is pressed.
+annotate service.RequestItems with @Common.SideEffects #RecalcHeaderOnAmountChange: {
+    SourceProperties: [
+        supplementAmount,
+        returnAmount,
+        transferInAmount,
+        transferOutAmount
+    ],
+    TargetProperties: [
+        'request/supplementAmount',
+        'request/returnAmount',
+        'request/transferInAmount',
+        'request/transferOutAmount'
+    ]
 };
 
 annotate service.Requests actions {
