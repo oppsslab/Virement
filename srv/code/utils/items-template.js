@@ -13,13 +13,13 @@ const XLSX = require("xlsx");
  *   - description
  *
  * Conditional amount columns:
- *   - supplementAmount      : MASS_UPLOAD_ALL, Transfer only
+ *   - supplementAmount      : Supplement (any role), or MASS_UPLOAD_ALL for Transfer
  *   - returnAmount          : Return, or MASS_UPLOAD_ALL for Transfer
  *   - transferInAmount      : Transfer normal user, MASS_UPLOAD_TRANSFER, or MASS_UPLOAD_ALL
- *   - transferOutAmount     : Transfer MASS_UPLOAD_TRANSFER or MASS_UPLOAD_ALL
+ *   - transferOutAmount     : Transfer normal user, MASS_UPLOAD_TRANSFER, or MASS_UPLOAD_ALL
  *
  * Important:
- *   - Return ignores roles.
+ *   - Supplement and Return ignore roles.
  *   - Roles only affect Transfer templates.
  */
 
@@ -115,6 +115,22 @@ function getTemplateDefinition(userRoles, requestType) {
   }
 
   /*
+   * Supplement:
+   * Role should not matter, mirroring Return. Supplement always gets
+   * supplementAmount only, matching the columns of the Request Details
+   * table on a Supplement request.
+   */
+  if (type === "S") {
+    columns.push(SUPPLEMENT_AMOUNT_COLUMN);
+    columns.push(DESCRIPTION_COLUMN);
+
+    return {
+      templateName: "Supplement",
+      columns: columns,
+    };
+  }
+
+  /*
    * Transfer + MASS_UPLOAD_ALL:
    * Gets all amount columns.
    */
@@ -148,10 +164,12 @@ function getTemplateDefinition(userRoles, requestType) {
 
   /*
    * Transfer + normal user:
-   * Gets transferInAmount only.
+   * Gets both transfer amounts, matching the Transfer In/Out Details
+   * table on the request, which shows both columns for these users.
    */
   if (type === "T") {
     columns.push(TRANSFER_IN_AMOUNT_COLUMN);
+    columns.push(TRANSFER_OUT_AMOUNT_COLUMN);
     columns.push(DESCRIPTION_COLUMN);
 
     return {
@@ -161,10 +179,11 @@ function getTemplateDefinition(userRoles, requestType) {
   }
 
   /*
-   * Supplement or other request types are not supported.
+   * Any other request type is not supported.
    */
   throw new Error(
-    "Mass upload template is only available for Return and Transfer requests.",
+    "Mass upload template is only available for Supplement, Return " +
+      "and Transfer requests.",
   );
 }
 

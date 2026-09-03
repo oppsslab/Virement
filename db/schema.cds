@@ -14,6 +14,11 @@ entity Requests : cuid, managed {
     requestNumber        : String(10)                 @readonly;
     requestType          : Association to RequestType @Core.Immutable;
     budgetType           : Association to BudgetType default 'N';
+    // Return requests only: whether the released budget is zerorised or
+    // handed back to the central fund. The two are mutually exclusive, so
+    // they are modelled as one code instead of two flags, and surfaced as a
+    // radio group in the request header. Null for every other request type.
+    returnCategory       : Association to ReturnCategory;
     transferCategory     : String(1);
     status               : Association to RequestStatus default 0;
     currentApprovalLevel : Integer;
@@ -32,9 +37,9 @@ entity Requests : cuid, managed {
     transferInDocNumber  : String                     @readonly;
     transferOutDocNumber : String                     @readonly;
     // Earmarked Funds (S/4 fund reservation) document number, created at
-    // submit time for Supplement + Non Project requests. Kept separate from
-    // supplementDocNumber, which holds the FMBB posting document written
-    // after approval by post-to-s4-logic.
+    // submit time for Virement requests carrying a transfer-out amount.
+    // Kept separate from supplementDocNumber, which holds the FMBB posting
+    // document written after approval by post-to-s4-logic.
     earmarkedFundsDocNumber : String                  @readonly;
     postingDate          : Date;
     postingPeriod        : Integer; // Month posted to IFAMS (1-12)
@@ -138,4 +143,13 @@ type BudgetTypeCode    : String(1) enum {
 
 entity BudgetType : CodeList {
     key code : BudgetTypeCode
+};
+
+type ReturnCategoryCode : String(1) enum {
+    ZERORISE = 'Z';
+    CENTRALFUND = 'C';
+};
+
+entity ReturnCategory : CodeList {
+    key code : ReturnCategoryCode
 };

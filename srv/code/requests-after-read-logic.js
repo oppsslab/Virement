@@ -4,6 +4,8 @@ const cds = require("@sap/cds");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
+const { applyAgingToRows } = require("./utils/request-aging");
+
 const LOG = cds.log("requests-after-read-logic");
 
 const REQUESTS_DATABASE_ENTITY = "ZDB_PPS_VIREMENT.Requests";
@@ -41,7 +43,8 @@ async function enrichApprovalData(rows, request) {
       row?.ID &&
       (row.status_code === undefined ||
         row.requestNumber === undefined ||
-        row.currentApprovalLevel === undefined),
+        row.currentApprovalLevel === undefined ||
+        row.submissionDate === undefined),
   );
 
   if (!rowsToLoad.length) {
@@ -59,6 +62,7 @@ async function enrichApprovalData(rows, request) {
         "currentApprovalLevel",
         "requestor",
         "createdBy",
+        "submissionDate",
       )
       .where({
         ID: {
@@ -85,6 +89,8 @@ async function enrichApprovalData(rows, request) {
     row.requestor ??= databaseRow.requestor;
 
     row.createdBy ??= databaseRow.createdBy;
+
+    row.submissionDate ??= databaseRow.submissionDate;
   }
 }
 
@@ -196,6 +202,8 @@ module.exports = async function requestsAfterRead(results, request) {
     for (const row of rows) {
       applyVirtualFields(row, user, roleFlags, pendingApproverRequestIds);
     }
+
+    await applyAgingToRows(rows);
   } catch (error) {
     LOG.error("Error computing request UI fields", {
       message: error.message,
@@ -212,6 +220,19 @@ module.exports = async function requestsAfterRead(results, request) {
       row.isJKEW = false;
 
       row.isFunctional = false;
+    }
+
+    /*
+     * Aging is independent of the flags above, and the persisted
+     * column it falls back to is always 0. Compute it even when the
+     * flags could not be resolved.
+     */
+    try {
+      await applyAgingToRows(rows);
+    } catch (agingError) {
+      LOG.error("Error computing request aging", {
+        message: agingError.message,
+      });
     }
   }
 };

@@ -35,7 +35,7 @@
         <f:header>
             <f:DynamicPageHeader pinnable="false" backgroundDesign="Transparent" class="dynamicPageHeader">
                 <Button type="Emphasized" text="Create Virement Request" press=".onNavigate" app:route="RequestsCreate" icon="sap-icon://add" class="buttonHeight sapUiSmallMarginBottom goldButton"/>
-                <Button type="Emphasized" text="Review Pending Approvals" press=".onPress" icon="sap-icon://arrow-right" class="buttonHeight sapUiSmallMarginBottom sapUiSmallMarginBegin translucentButton" iconFirst="false"/>
+                <Button type="Emphasized" text="Review Pending Approvals" press=".onNavigate" app:route="PendingApprovals" icon="sap-icon://arrow-right" class="buttonHeight sapUiSmallMarginBottom sapUiSmallMarginBegin translucentButton" iconFirst="false"/>
             </f:DynamicPageHeader>
         </f:header>
         <f:content>
@@ -46,19 +46,14 @@
                             <NewsContent contentText="Create Request" subheader="Start a new virement document" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/approvalIcon}" frameType="TwoByOne" press=".onPress">
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/approvalIcon}" frameType="TwoByOne" press=".onNavigate" app:route="PendingApprovals">
                         <TileContent>
                             <NewsContent contentText="Pending Approvals" subheader="Review and take action" />
                         </TileContent>
                     </GenericTile>
                     <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/viewRequestIcon}" frameType="TwoByOne" press=".onNavigate" app:route="VirementRequests">
                         <TileContent>
-                            <NewsContent contentText="View All Requests" subheader="Track Status and history" />
-                        </TileContent>
-                    </GenericTile>
-                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/reportIcon}" frameType="TwoByOne" press=".onPress">
-                        <TileContent>
-                            <NewsContent contentText="Reports" subheader="Monitor budget movements" />
+                            <NewsContent contentText="View All Requests" subheader="Track status and history across all requestors" />
                         </TileContent>
                     </GenericTile>
                 </l:Grid>

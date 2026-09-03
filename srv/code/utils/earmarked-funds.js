@@ -49,6 +49,9 @@ function toApiDate(value) {
 /**
  * Builds one Earmarked Funds item from a Request Item.
  *
+ * The reserved amount is the line's transfer-out amount: only the outgoing
+ * side of a Virement commits budget.
+ *
  * Field order matters: the integration layer converts the JSON to a
  * schema-validated format in which element order is significant, so the
  * properties below are emitted in exactly the order given by the guide.
@@ -65,7 +68,7 @@ function buildItem(item, index) {
   return {
     CommitmentItem: String(item.glAccount ?? "").trim(),
     DocumentItemText: String(item.description ?? "").trim() || `Line ${index + 1}`,
-    EmrkdFndsAmountInTransCrcy: Number(item.supplementAmount) || 0,
+    EmrkdFndsAmountInTransCrcy: Number(item.transferOutAmount) || 0,
     FundsCenter: String(item.costCentre ?? "").trim(),
     TransactionCurrency: CURRENCY,
   };
@@ -141,16 +144,19 @@ function extractErrorDetail(error) {
 /**
  * Keeps only the items that actually reserve funds.
  *
- * A zero-amount line commits nothing, and S/4 rejects zero-value items on
- * a funds reservation, which would fail an otherwise valid request. Such
- * lines are therefore left out of the document rather than sent through.
+ * Funds are reserved against the transfer-out amount, since that is the
+ * side of a Virement that commits budget. A zero-amount line commits
+ * nothing, and S/4 rejects zero-value items on a funds reservation, which
+ * would fail an otherwise valid request. Such lines are therefore left out
+ * of the document rather than sent through. On a Virement this also drops
+ * the pure transfer-in lines, which carry no transfer-out amount.
  *
  * @param {object[]} items
  * @returns {object[]}
  */
 function withReservableAmount(items) {
   return items.filter(function (item) {
-    return (Number(item.supplementAmount) || 0) > 0;
+    return (Number(item.transferOutAmount) || 0) > 0;
   });
 }
 

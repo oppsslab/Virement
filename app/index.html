@@ -1,0 +1,51 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <title> Project Preview </title>
+    <script src="https://ui5.sap.com/1.136.9/resources/sap-ui-core.js" 
+            id="sap-ui-bootstrap"
+            data-sap-ui-theme="sap_horizon"
+            data-sap-ui-bindingSyntax="complex" 
+            data-sap-ui-xx-bindingSyntax="complex"
+            data-sap-ui-resourceroots='{"assets": "assets"}' 
+            data-sap-ui-libs="sap.m,sap.uxap,sap.ui.layout,sap.f">
+    </script>
+    <link rel="stylesheet" href="assets/preview.css">
+</head>
+
+<body id="body" class="sapUiBody">
+    <script>
+        "use strict";
+        sap.ui.localResources("assets");
+        (function (jQuery, App, Page) {
+            sap.ui.getCore().attachInit(function () {
+                sap.ui.define([
+                    "sap/ui/core/mvc/Controller",
+                    "sap/ui/model/json/JSONModel"
+                ], function (Controller, JSONModel) {
+                    return Controller.extend("PreviewController", {
+                        onInit: function () {
+
+                            const data = {"Services":[{"ServiceName":"ZSVC_PPS_VIREMENT","DetailsURL":"./service/ZSVC_PPS_VIREMENT/","Metadata":"./service/ZSVC_PPS_VIREMENT/$metadata","Entities":[{"Name":"Requests","URL":"./service/ZSVC_PPS_VIREMENT/Requests","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/Requests#preview-app"},{"Name":"RequestItems","URL":"./service/ZSVC_PPS_VIREMENT/RequestItems","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/RequestItems#preview-app"},{"Name":"RequestHistory","URL":"./service/ZSVC_PPS_VIREMENT/RequestHistory","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/RequestHistory#preview-app"},{"Name":"RequestApprovers","URL":"./service/ZSVC_PPS_VIREMENT/RequestApprovers","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/RequestApprovers#preview-app"},{"Name":"RecentRequests","URL":"./service/ZSVC_PPS_VIREMENT/RecentRequests","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/RecentRequests#preview-app"},{"Name":"PendingApprovalCount","URL":"./service/ZSVC_PPS_VIREMENT/PendingApprovalCount","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/PendingApprovalCount#preview-app"},{"Name":"CostCenters","URL":"./service/ZSVC_PPS_VIREMENT/CostCenters","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/CostCenters#preview-app"},{"Name":"GLAccounts","URL":"./service/ZSVC_PPS_VIREMENT/GLAccounts","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/GLAccounts#preview-app"},{"Name":"MaterialGroups","URL":"./service/ZSVC_PPS_VIREMENT/MaterialGroups","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/MaterialGroups#preview-app"},{"Name":"WBSElements","URL":"./service/ZSVC_PPS_VIREMENT/WBSElements","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/WBSElements#preview-app"},{"Name":"UserDetails","URL":"./service/ZSVC_PPS_VIREMENT/UserDetails","FioriURL":"$fiori-preview/ZSVC_PPS_VIREMENT/UserDetails#preview-app"}],"EntitiesCount":11}]}
+                            this.getView().setModel(new JSONModel(data));
+                        }
+                    });
+                });
+                var oApp = new App()
+                var previewView = sap.ui.view({
+                    viewName: "assets.Preview",
+                    type: sap.ui.core.mvc.ViewType.XML
+                });
+                oApp.addPage(new Page({
+                    content: [previewView],
+                    showHeader: false
+                })).placeAt("content");
+            });
+
+        }(jQuery, sap.m.App, sap.m.Page));
+    </script>
+    <div id="content"></div>
+</body>
+
+</html>

@@ -9,6 +9,16 @@ using from '../../db/schema';
 annotate service.Requests with {
     requestNumber        @(title: '{i18n>RequestNumber}');
 
+    /*
+     * The managed aspect marks these @UI.HiddenFilter, which keeps them
+     * out of the filter bar. They are wanted as filter fields here, so
+     * the flag is overridden. Labels come from @sap/cds/common
+     * ("Created On" / "Changed On").
+     */
+    createdAt            @UI.HiddenFilter: false;
+
+    modifiedAt           @UI.HiddenFilter: false;
+
     requestType          @(
         title                          : '{i18n>RequestType}',
         Common.Text                    : requestType.descr,
@@ -39,6 +49,29 @@ annotate service.Requests with {
             Parameters     : [{
                 $Type            : 'Common.ValueListParameterInOut',
                 LocalDataProperty: budgetType_code,
+                ValueListProperty: 'code'
+            }]
+        }
+    );
+
+    /*
+     * Return requests only. The Object Page renders this as a radio group
+     * through the ReturnCategory custom field (see manifest.json); the value
+     * help below is what drives the list report filter and the text
+     * arrangement everywhere else.
+     */
+    returnCategory       @(
+        title                          : '{i18n>ReturnCategory}',
+        Common.Text                    : returnCategory.descr,
+        Common.Text.@UI.TextArrangement: #TextOnly,
+        Common.ValueListWithFixedValues: true,
+        Common.ValueList               : {
+            $Type          : 'Common.ValueListType',
+            CollectionPath : 'ReturnCategory',
+            SearchSupported: false,
+            Parameters     : [{
+                $Type            : 'Common.ValueListParameterInOut',
+                LocalDataProperty: returnCategory_code,
                 ValueListProperty: 'code'
             }]
         }
@@ -85,6 +118,22 @@ annotate service.Requests with {
     postingDate          @(title: '{i18n>PostingDate}');
     postingPeriod        @(title: '{i18n>PostingPeriod}');
     reason               @(title: '{i18n>Reason}');
+    transferCategory     @(title: '{i18n>TransferCategory}');
+    currentApprovalLevel @(title: '{i18n>CurrentApprovalLevel}');
+    approverComment      @(title: '{i18n>ApproverComment}');
+    workflowInstanceId   @(title: '{i18n>WorkflowInstanceId}');
+    workflowStatus       @(title: '{i18n>WorkflowStatus}');
+    workflowError        @(title: '{i18n>WorkflowError}');
+
+    /*
+     * Virtual flags filled by requests-after-read-logic. They drive
+     * conditional visibility, but still surface in table and filter
+     * personalization, so they need readable labels.
+     */
+    isPendingApprover    @(title: '{i18n>IsPendingApprover}');
+    isJKEW               @(title: '{i18n>IsJKEW}');
+    isFunctional         @(title: '{i18n>IsFunctional}');
+
     requestLink          @UI.Hidden;
 };
 
@@ -135,6 +184,14 @@ annotate service.Requests with @(
             {
                 $Type: 'UI.DataField',
                 Value: reason
+            },
+            {
+                $Type: 'UI.DataField',
+                Value: createdAt
+            },
+            {
+                $Type: 'UI.DataField',
+                Value: modifiedAt
             }
         ],
         ![@UI.Criticality]: status_code
@@ -146,8 +203,66 @@ annotate service.Requests with @(
     UI.SelectionFields: [
         requestNumber,
         status_code,
-        requestType_code
+        requestType_code,
+        createdAt,
+        modifiedAt
     ],
+
+    /*
+     * Default sort for the list reports: newest request number first.
+     * Request numbers are issued in sequence, so descending order puts
+     * the most recent requests at the top.
+     */
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : requestNumber,
+            Descending: true
+        }],
+        Visualizations: ['@UI.LineItem']
+    },
+
+    /*
+     * Drives the Pending Approvals list, via that target's
+     * defaultTemplateAnnotationPath.
+     *
+     * isPendingApprover is a virtual field, so it cannot be filtered in
+     * SQL. requests-list-scope-logic intercepts this filter and rewrites
+     * it into a real ID restriction before the query reaches the
+     * database. status 2 keeps drafts and decided requests off the page.
+     */
+    UI.SelectionVariant #PendingApprovals: {
+        $Type        : 'UI.SelectionVariantType',
+        SelectOptions: [
+            {
+                $Type       : 'UI.SelectOptionType',
+                PropertyName: isPendingApprover,
+                Ranges      : [{
+                    $Type : 'UI.SelectionRangeType',
+                    Sign  : #I,
+                    Option: #EQ,
+                    Low   : true
+                }]
+            },
+            {
+                $Type       : 'UI.SelectOptionType',
+                PropertyName: status_code,
+                Ranges      : [{
+                    $Type : 'UI.SelectionRangeType',
+                    Sign  : #I,
+                    Option: #EQ,
+                    Low   : 2
+                }]
+            }
+        ]
+    },
+
+    UI.SelectionPresentationVariant #PendingApprovals: {
+        $Type              : 'UI.SelectionPresentationVariantType',
+        SelectionVariant   : ![@UI.SelectionVariant#PendingApprovals],
+        PresentationVariant: ![@UI.PresentationVariant]
+    },
 
     UI.Identification : [
         {
@@ -630,10 +745,17 @@ annotate service.Requests with @(
             {
                 $Type        : 'UI.DataField',
                 Value        : budgetType_code,
+                // Shown for Supplement and Return outright, and for Transfer
+                // only when the category is not driven by a JKEW/Functional
+                // role (those derive the budget type themselves).
                 ![@UI.Hidden]: {$edmJson: {$And: [
                     {$Ne: [
                         {$Path: 'requestType_code'},
                         'S'
+                    ]},
+                    {$Ne: [
+                        {$Path: 'requestType_code'},
+                        'R'
                     ]},
                     {$Or: [
                         {$Ne: [
@@ -674,18 +796,20 @@ annotate service.Requests with @(
             {
                 $Type        : 'UI.DataField',
                 Value        : earmarkedFundsDocNumber,
-                // Shown for Supplement + Non Project requests, which reserve
-                // funds in S/4 at submit time. Unlike the posting document
-                // numbers below, this exists from submission onwards, so it is
-                // not gated on an approved status.
+                // Shown for Virement requests that move budget out, which
+                // reserve funds in S/4 at submit time. A Virement with no
+                // transfer-out amount reserves nothing, so it has no document
+                // to show. Unlike the posting document numbers below, this
+                // exists from submission onwards, so it is not gated on an
+                // approved status.
                 ![@UI.Hidden]: {$edmJson: {$Or: [
                     {$Ne: [
                         {$Path: 'requestType_code'},
-                        'S'
+                        'T'
                     ]},
-                    {$Ne: [
-                        {$Path: 'budgetType_code'},
-                        'N'
+                    {$Le: [
+                        {$Path: 'transferOutAmount'},
+                        0
                     ]}
                 ]}}
             },
@@ -855,18 +979,115 @@ annotate service.RequestItems with {
         Common.FieldControl: #ReadOnly
     );
     costCentre        @(
-        title              : '{i18n>CostCentre}',
-        Common.FieldControl: #Mandatory
+        title                : '{i18n>CostCentre}',
+        Common.FieldControl  : #Mandatory,
+
+        /*
+         * Live search help against S/4, served by the CostCenters
+         * entity. Not a fixed-value list: the entity queries S/4 on
+         * every keystroke, so the dropdown must stay searchable.
+         */
+        Common.ValueList     : {
+            $Type          : 'Common.ValueListType',
+            CollectionPath : 'CostCenters',
+            SearchSupported: true,
+            Parameters     : [
+                {
+                    $Type            : 'Common.ValueListParameterInOut',
+                    LocalDataProperty: costCentre,
+                    ValueListProperty: 'costCentre'
+                },
+                {
+                    $Type            : 'Common.ValueListParameterDisplayOnly',
+                    ValueListProperty: 'costCentreName'
+                },
+                {
+                    $Type            : 'Common.ValueListParameterDisplayOnly',
+                    ValueListProperty: 'controllingArea'
+                }
+            ]
+        }
     );
     glAccount         @(
-        title              : '{i18n>GL}',
-        Common.FieldControl: #Mandatory
+        title                : '{i18n>GL}',
+        Common.FieldControl  : #Mandatory,
+
+        /*
+         * Live search help against S/4, served by the GLAccounts
+         * entity. Searchable rather than a fixed list: the entity
+         * queries S/4 on each search.
+         */
+        Common.ValueList     : {
+            $Type          : 'Common.ValueListType',
+            CollectionPath : 'GLAccounts',
+            SearchSupported: true,
+            Parameters     : [
+                {
+                    $Type            : 'Common.ValueListParameterInOut',
+                    LocalDataProperty: glAccount,
+                    ValueListProperty: 'glAccount'
+                },
+                {
+                    $Type            : 'Common.ValueListParameterDisplayOnly',
+                    ValueListProperty: 'glAccountName'
+                },
+                {
+                    $Type            : 'Common.ValueListParameterDisplayOnly',
+                    ValueListProperty: 'companyCode'
+                }
+            ]
+        }
     );
     material          @(
-        title              : '{i18n>Material}',
-        Common.FieldControl: #Mandatory
+        title                : '{i18n>Material}',
+        Common.FieldControl  : #Mandatory,
+
+        /*
+         * Live search help against S/4, served by the MaterialGroups
+         * entity.
+         */
+        Common.ValueList     : {
+            $Type          : 'Common.ValueListType',
+            CollectionPath : 'MaterialGroups',
+            SearchSupported: true,
+            Parameters     : [
+                {
+                    $Type            : 'Common.ValueListParameterInOut',
+                    LocalDataProperty: material,
+                    ValueListProperty: 'materialGroup'
+                },
+                {
+                    $Type            : 'Common.ValueListParameterDisplayOnly',
+                    ValueListProperty: 'materialGroupDescription'
+                }
+            ]
+        }
     );
-    wbs               @(title: '{i18n>WBS}');
+    wbs               @(
+        title           : '{i18n>WBS}',
+
+        /*
+         * Live search help against S/4, served by the WBSElements
+         * entity. That service filters with startswith rather than a
+         * search parameter.
+         */
+        Common.ValueList: {
+            $Type          : 'Common.ValueListType',
+            CollectionPath : 'WBSElements',
+            SearchSupported: true,
+            Parameters     : [
+                {
+                    $Type            : 'Common.ValueListParameterInOut',
+                    LocalDataProperty: wbs,
+                    ValueListProperty: 'wbsElement'
+                },
+                {
+                    $Type            : 'Common.ValueListParameterDisplayOnly',
+                    ValueListProperty: 'wbsElementInternalID'
+                }
+            ]
+        }
+    );
     assetStatus       @(
         title                          : '{i18n>AssetStatus}',
         Common.Text                    : assetStatus.descr,
@@ -929,8 +1150,15 @@ annotate service.RequestItems with @(
             Value: material
         },
         {
-            $Type: 'UI.DataField',
-            Value: wbs
+            $Type        : 'UI.DataField',
+            Value        : wbs,
+            // WBS elements only exist for Project budgets, so the column
+            // is hidden for Non Project requests. budgetType lives on the
+            // parent, hence the path across the request association.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'request/budgetType_code'},
+                'N'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -976,8 +1204,15 @@ annotate service.RequestItems with @(
             Value: material
         },
         {
-            $Type: 'UI.DataField',
-            Value: wbs
+            $Type        : 'UI.DataField',
+            Value        : wbs,
+            // WBS elements only exist for Project budgets, so the column
+            // is hidden for Non Project requests. budgetType lives on the
+            // parent, hence the path across the request association.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'request/budgetType_code'},
+                'N'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1023,8 +1258,15 @@ annotate service.RequestItems with @(
             Value: material
         },
         {
-            $Type: 'UI.DataField',
-            Value: wbs
+            $Type        : 'UI.DataField',
+            Value        : wbs,
+            // WBS elements only exist for Project budgets, so the column
+            // is hidden for Non Project requests. budgetType lives on the
+            // parent, hence the path across the request association.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'request/budgetType_code'},
+                'N'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1074,8 +1316,15 @@ annotate service.RequestItems with @(
             Value: material
         },
         {
-            $Type: 'UI.DataField',
-            Value: wbs
+            $Type        : 'UI.DataField',
+            Value        : wbs,
+            // WBS elements only exist for Project budgets, so the column
+            // is hidden for Non Project requests. budgetType lives on the
+            // parent, hence the path across the request association.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'request/budgetType_code'},
+                'N'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1128,8 +1377,15 @@ annotate service.RequestItems with @(
             Value: material
         },
         {
-            $Type: 'UI.DataField',
-            Value: wbs
+            $Type        : 'UI.DataField',
+            Value        : wbs,
+            // WBS elements only exist for Project budgets, so the column
+            // is hidden for Non Project requests. budgetType lives on the
+            // parent, hence the path across the request association.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'request/budgetType_code'},
+                'N'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1365,3 +1621,50 @@ annotate service.RequestApprovers with @(
         Visualizations: ['@UI.LineItem#Approvers']
     }
 );
+
+// =============================================================================
+// Pending Approval Requests
+//
+// Backs the Pending Approvals list report. This is a separate entity from
+// service.Requests, so none of the annotations above apply to it and the
+// list report needs its own set. Kept deliberately lean: the list is a
+// worklist, and anything more detailed belongs on the object page the row
+// navigates to.
+// =============================================================================
+
+// =============================================================================
+// Cost Centre Search Help
+// =============================================================================
+annotate service.CostCenters with {
+    costCentre      @(title: '{i18n>CostCentre}');
+    costCentreName  @(title: '{i18n>CostCentreName}');
+    controllingArea @(title: '{i18n>ControllingArea}');
+};
+
+// =============================================================================
+// GL Account Search Help
+// =============================================================================
+annotate service.GLAccounts with {
+    glAccount         @(title: '{i18n>GL}');
+    glAccountName     @(title: '{i18n>GLAccountName}');
+    glAccountLongName @(title: '{i18n>GLAccountLongName}');
+    companyCode       @(title: '{i18n>CompanyCode}');
+    isExpenseAccount  @(title: '{i18n>IsExpenseAccount}');
+};
+
+// =============================================================================
+// Material Group Search Help
+// =============================================================================
+annotate service.MaterialGroups with {
+    materialGroup            @(title: '{i18n>Material}');
+    materialGroupDescription @(title: '{i18n>MaterialGroupDescription}');
+};
+
+// =============================================================================
+// WBS Element Search Help
+// =============================================================================
+annotate service.WBSElements with {
+    wbsElement           @(title: '{i18n>WBS}');
+    wbsElementInternalID @(title: '{i18n>WBSInternalID}');
+    isBillingElement     @(title: '{i18n>IsBillingElement}');
+};

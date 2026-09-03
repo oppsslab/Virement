@@ -11,21 +11,16 @@ extend my.Requests {
 service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
     @(restrict: [
         /*
-         * Users can read their own requests.
+         * Every authenticated user can read every request, whoever
+         * raised it. This backs the View All Requests tile.
+         *
+         * Reading is all this grants. Editing, approving and rejecting
+         * stay bound by the rules below, so seeing someone else's
+         * request does not confer any right to act on it. Drafts are
+         * unaffected: CAP keeps an in-progress draft visible only to
+         * the user who owns it.
          */
-        {
-            grant: 'READ',
-            where: 'createdBy = $user'
-        },
-
-        /*
-         * Assigned approvers can read requests pending approval.
-         */
-        {
-            grant: 'READ',
-            to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and exists RequestApprovers[emailAddress = $user]'
-        },
+        {grant: 'READ'},
 
         /*
          * Users can create requests.
@@ -156,14 +151,72 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             status        : String;
     }
 
+    /*
+     * Number of requests waiting for the CURRENT user's approval.
+     * Filled by the ON READ handler, which matches the user against
+     * the pending RequestApprovers rows.
+     */
     @readonly
+    @cds.persistence.skip
     @cds.redirection.target: false
-    entity PendingApprovalCount as
-        select from my.Requests {
-            key count( * ) as pendingCount : Integer
-        }
-        where
-            status.code = 2;
+    entity PendingApprovalCount {
+        key pendingCount : Integer;
+    }
+
+    /*
+     * Cost centre search help, served live from S/4 through the
+     * DV1-230-S4HANA destination. Not persisted: every read is a call
+     * to S/4, filtered by whatever the user has typed.
+     */
+    @readonly
+    @cds.persistence.skip
+    @cds.redirection.target: false
+    entity CostCenters {
+        key costCentre      : String(10);
+            costCentreName  : String(100);
+            controllingArea : String(4);
+    }
+
+    /*
+     * GL account search help, served live from S/4 through the
+     * DV1-230-S4HANA destination. Not persisted: every read is a call
+     * to S/4, filtered by whatever the user has typed.
+     */
+    @readonly
+    @cds.persistence.skip
+    @cds.redirection.target: false
+    entity GLAccounts {
+        key glAccount         : String(10);
+            glAccountName     : String(100);
+            glAccountLongName : String(200);
+            companyCode       : String(4);
+            isExpenseAccount  : Boolean;
+    }
+
+    /*
+     * Material group search help, served live from S/4 through the
+     * DV1-230-S4HANA destination.
+     */
+    @readonly
+    @cds.persistence.skip
+    @cds.redirection.target: false
+    entity MaterialGroups {
+        key materialGroup            : String(20);
+            materialGroupDescription : String(200);
+    }
+
+    /*
+     * WBS element search help, served live from S/4 through the
+     * DV1-230-S4HANA destination.
+     */
+    @readonly
+    @cds.persistence.skip
+    @cds.redirection.target: false
+    entity WBSElements {
+        key wbsElement           : String(24);
+            wbsElementInternalID : String(20);
+            isBillingElement     : Boolean;
+    }
 
     @readonly
     entity UserDetails {

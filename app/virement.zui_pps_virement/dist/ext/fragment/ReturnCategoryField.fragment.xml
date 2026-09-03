@@ -1,0 +1,40 @@
+<!--
+    Return Category radio group, injected into the Request Header form as a
+    custom field. It is registered in manifest.json under
+    controlConfiguration > "@com.sap.vocabularies.UI.v1.FieldGroup#RequestHeader"
+    > fields, which is where Fiori elements looks up custom form fields (keyed
+    by the facet's annotation target, not by the facet ID).
+
+    Budget Zerorise and Budget Return to Central Fund are mutually exclusive,
+    so they are backed by the single returnCategory_code property rather than
+    two flags.
+
+    Use %{...} rather than ${...} inside expression bindings here. Fiori
+    elements runs this fragment through the XML preprocessor, which consumes
+    ${...} before it reaches the control - on typed properties such as visible
+    and selectedIndex that surfaces as a FormatException and the property
+    silently falls back to its default. %{...} survives templating and is
+    evaluated at runtime, which is also what the framework's own
+    BindingToolkit emits.
+
+    selectedIndex is one-way, so the write back happens in
+    onReturnCategorySelect on the ObjectPage controller extension.
+-->
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <RadioButtonGroup
+        id="returnCategoryGroup"
+        columns="1"
+        visible="{= %{requestType_code} === 'R' }"
+        editable="{ui>/isEditable}"
+        selectedIndex="{= %{returnCategory_code} === 'Z' ? 0 : (%{returnCategory_code} === 'C' ? 1 : -1) }"
+        select=".extension.virement.zuippsvirement.ext.controller.ObjectPageExt.onReturnCategorySelect">
+        <RadioButton
+            id="returnCategoryZerorise"
+            text="{i18n>BudgetZerorise}" />
+        <RadioButton
+            id="returnCategoryCentralFund"
+            text="{i18n>BudgetReturnToCentralFund}" />
+    </RadioButtonGroup>
+</core:FragmentDefinition>

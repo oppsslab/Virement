@@ -19,6 +19,12 @@ const requests_Before_Update_Logic = require("./code/requests-before-update-logi
 const requests_Drafts_After_Read_Logic = require("./code/requests-drafts-after-read-logic");
 const recent_Requests_Read_Logic = require("./code/recent-requests-read-logic");
 const user_Details_Read_Logic = require("./code/user-details-read-logic");
+const pending_Approval_Count_Read_Logic = require("./code/pending-approval-count-read-logic");
+const requests_List_Scope_Logic = require("./code/requests-list-scope-logic");
+const cost_Centers_Read_Logic = require("./code/cost-centers-read-logic");
+const gl_Accounts_Read_Logic = require("./code/gl-accounts-read-logic");
+const material_Groups_Read_Logic = require("./code/material-groups-read-logic");
+const wbs_Elements_Read_Logic = require("./code/wbs-elements-read-logic");
 const assign_Approvers_Logic = require("./code/assign-approvers-logic");
 const {
   approveRequest,
@@ -50,6 +56,20 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("calculateValues", "Requests.drafts", async (request) => {
       return requests_Drafts_CalculateValues_Logic(request);
+    });
+
+    /*
+     * Both targets are needed: Fiori Elements reads the list through
+     * the draft union (Requests.drafts) whenever its filter carries the
+     * IsActiveEntity / SiblingEntity predicates, and through Requests
+     * otherwise.
+     */
+    this.before("READ", "Requests", async (request) => {
+      await requests_List_Scope_Logic(request);
+    });
+
+    this.before("READ", "Requests.drafts", async (request) => {
+      await requests_List_Scope_Logic(request);
     });
 
     this.after("READ", "Requests", async (results, request) => {
@@ -90,6 +110,26 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("READ", "UserDetails", async (request) => {
       return await user_Details_Read_Logic(request);
+    });
+
+    this.on("READ", "PendingApprovalCount", async (request) => {
+      return await pending_Approval_Count_Read_Logic(request);
+    });
+
+    this.on("READ", "CostCenters", async (request) => {
+      return await cost_Centers_Read_Logic(request);
+    });
+
+    this.on("READ", "GLAccounts", async (request) => {
+      return await gl_Accounts_Read_Logic(request);
+    });
+
+    this.on("READ", "MaterialGroups", async (request) => {
+      return await material_Groups_Read_Logic(request);
+    });
+
+    this.on("READ", "WBSElements", async (request) => {
+      return await wbs_Elements_Read_Logic(request);
     });
 
     this.on("assignApprovers", async (request) => {

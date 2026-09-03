@@ -67,6 +67,20 @@
                 "groups": []
               },
               "policies": []
+            },
+            "chun.leong.yeap@pwc.com": {
+              "password": "1234567",
+              "attr": {
+                "givenName": "Chun Leong",
+                "familyName": "Yeap",
+                "email": "chun.leong.yeap@pwc.com",
+                "groups": []
+              },
+              "policies": [
+                "cap.VR_REQUEST_APPROVE",
+                "cap.VR_FUNCTIONAL",
+                "cap.VR_JKEW"
+              ]
             }
           }
         },

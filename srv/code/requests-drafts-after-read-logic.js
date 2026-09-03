@@ -1,5 +1,7 @@
 const cds = require("@sap/cds");
 
+const { applyAgingToRows } = require("./utils/request-aging");
+
 const LOG = cds.log("requests-drafts-after-read-logic");
 
 // =============================================================================
@@ -208,6 +210,7 @@ function applyRoleFlags(row, roleFlags) {
 //  - isJKEW
 //  - isFunctional
 //  - transferCategory fallback for draft UI display
+//  - aging
 //
 //  These fields must be filled every time Requests.drafts is read.
 // =============================================================================
@@ -218,6 +221,21 @@ function applyRoleFlags(row, roleFlags) {
  */
 module.exports = async function (results, request) {
   LOG.info("--- AFTER READ Requests.drafts started ---");
+
+  /*
+   * Fiori Elements serves the list through this entity whenever its
+   * filter carries the IsActiveEntity / SiblingEntity predicates, so
+   * aging has to be computed here as well. Without it the rows carry
+   * the persisted aging column, which is never written and always 0.
+   *
+   * Kept outside the role-flag try block: the two are independent, and
+   * a failure in either must not suppress the other.
+   */
+  try {
+    await applyAgingToRows(results);
+  } catch (error) {
+    LOG.error("Error computing request aging on drafts read:", error);
+  }
 
   try {
     const roleFlags = getUserRoleFlags(request.user);

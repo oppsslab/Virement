@@ -44,7 +44,39 @@ function getLocalDateParts(date = new Date()) {
   };
 }
 
+/**
+ * Calculates whole calendar days elapsed between two dates.
+ *
+ * Both dates are normalized to midnight first, so the result counts
+ * date boundaries crossed rather than elapsed hours. Calendar days:
+ * weekends and public holidays are included.
+ *
+ * @param {string|Date} fromDate
+ * @param {string|Date} [toDate] - defaults to now
+ * @returns {number} whole days, never negative; 0 if either date is unusable
+ */
+function calculateDaysSince(fromDate, toDate = new Date()) {
+  if (!fromDate) {
+    return 0;
+  }
+
+  const from = new Date(fromDate);
+  const to = new Date(toDate);
+
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    return 0;
+  }
+
+  from.setHours(0, 0, 0, 0);
+  to.setHours(0, 0, 0, 0);
+
+  const millisecondsPerDay = 86400000;
+
+  return Math.max(0, Math.floor((to.getTime() - from.getTime()) / millisecondsPerDay));
+}
+
 module.exports = {
+  calculateDaysSince,
   formatLocalDate,
   formatLocalTime,
   getLocalDateParts,

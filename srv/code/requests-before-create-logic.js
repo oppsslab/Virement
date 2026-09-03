@@ -39,11 +39,11 @@ const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
 const REQUEST_TYPE_SUPPLEMENT = "S";
 
 /*
- * Budget type code that represents "Non Project" budget requests.
- * Supplement (S) + Non Project (N) requests reserve funds in S/4 via the
+ * Request type code for Virement (Transfer) requests.
+ * A Virement carrying a transfer-out amount reserves funds in S/4 via the
  * Earmarked Funds API at submit time.
  */
-const BUDGET_TYPE_NON_PROJECT = "N";
+const REQUEST_TYPE_TRANSFER = "T";
 
 /*
  * Budget type code that represents "Project" budget requests.
@@ -283,74 +283,6 @@ function generateRequestLink(request, requestId) {
 }
 
 /* ------------------------------------------------------------------ *
- * Aging helpers
- * ------------------------------------------------------------------ */
-
-/**
- * Calculates the number of calendar days from the last action date.
- *
- * @param {string|Date} lastActionDate
- * @param {Date} currentDate
- * @returns {number}
- */
-function calculateAgingDays(lastActionDate, currentDate = new Date()) {
-  if (!lastActionDate) {
-    return 0;
-  }
-
-  const last = new Date(lastActionDate);
-  const current = new Date(currentDate);
-
-  if (Number.isNaN(last.getTime()) || Number.isNaN(current.getTime())) {
-    LOG.warn("Invalid date encountered while calculating aging.");
-
-    return 0;
-  }
-
-  last.setHours(0, 0, 0, 0);
-  current.setHours(0, 0, 0, 0);
-
-  const diffMs = current.getTime() - last.getTime();
-
-  return Math.max(0, Math.floor(diffMs / 86400000));
-}
-
-/**
- * Calculates aging based on the latest request-history record.
- *
- * @param {object} options
- * @param {object} options.tx
- * @param {object} options.RequestHistory
- * @param {string} options.requestId
- * @returns {Promise<number>}
- */
-async function calculateAging({ tx, RequestHistory, requestId }) {
-  if (!RequestHistory) {
-    LOG.warn("RequestHistory entity not found. " + "Defaulting aging to zero.");
-
-    return 0;
-  }
-
-  const latestHistory = await tx.run(
-    SELECT.one
-      .from(RequestHistory)
-      .columns("date", "time")
-      .where({
-        request_ID: requestId,
-      })
-      .orderBy("date desc", "time desc"),
-  );
-
-  LOG.info("Latest history:", JSON.stringify(latestHistory || {}));
-
-  if (!latestHistory?.date) {
-    return 0;
-  }
-
-  return calculateAgingDays(latestHistory.date, new Date());
-}
-
-/* ------------------------------------------------------------------ *
  * Request items helpers
  * ------------------------------------------------------------------ */
 
@@ -401,7 +333,7 @@ async function fetchRequestItems({ tx, RequestItems, request, requestId }) {
         // utils/earmarked-funds.js). Harmless for the WBS / Material-GL
         // validations, which read only the fields above.
         "costCentre",
-        "supplementAmount",
+        "transferOutAmount",
         "description",
       )
       .where({
@@ -830,11 +762,19 @@ async function generateRequestNumber({
  * @param {string} values.budgetTypeCode
  * @param {string|number} values.fiscalYear
  * @param {string|null} values.transferCategory
+ * @param {string|null} values.returnCategory
  * @returns {boolean}
  */
 function validateSubmission(
   request,
-  { requestId, requestTypeCode, budgetTypeCode, fiscalYear, transferCategory },
+  {
+    requestId,
+    requestTypeCode,
+    budgetTypeCode,
+    fiscalYear,
+    transferCategory,
+    returnCategory,
+  },
 ) {
   if (!requestId) {
     LOG.error("Request ID is missing.");
@@ -872,6 +812,18 @@ function validateSubmission(
     LOG.error("Unsupported request type:", type);
 
     request.error(400, "Request Type must be R, S, or T.");
+
+    return false;
+  }
+
+  if (type === "R" && !["Z", "C"].includes(returnCategory)) {
+    LOG.error("Invalid returnCategory_code:", returnCategory);
+
+    request.error(
+      400,
+      "Return Category must be Budget Zerorise or " +
+        "Budget Return to Central Fund for Return requests.",
+    );
 
     return false;
   }
@@ -950,7 +902,6 @@ function targetHasElement(request, fieldName) {
  * - Initializes workflow tracking fields
  * - Sets submission date and period
  * - Calculates all amount fields
- * - Calculates aging
  * - Generates the request number
  * - Generates the UI request link
  *
@@ -1037,6 +988,19 @@ module.exports = async function (request) {
 
     request.data.transferCategory = transferCategory;
 
+    /*
+     * Return Category only applies to Return requests. Normalize it here so
+     * a stale draft value cannot survive a change of request type.
+     */
+    const returnCategory =
+      normalizedRequestType === "R"
+        ? String(request.data.returnCategory_code || "")
+            .trim()
+            .toUpperCase() || null
+        : null;
+
+    request.data.returnCategory_code = returnCategory;
+
     LOG.info("requestId:", requestId);
 
     LOG.info("requestType_code:", requestTypeCode);
@@ -1049,6 +1013,8 @@ module.exports = async function (request) {
 
     LOG.info("transferCategory:", request.data.transferCategory);
 
+    LOG.info("returnCategory_code:", request.data.returnCategory_code);
+
     /*
      * Validate the request before performing calculations.
      */
@@ -1058,6 +1024,7 @@ module.exports = async function (request) {
       budgetTypeCode,
       fiscalYear,
       transferCategory,
+      returnCategory,
     });
 
     if (!isValid) {
@@ -1187,17 +1154,6 @@ module.exports = async function (request) {
     LOG.info("Calculated amounts:", JSON.stringify(amounts));
 
     /*
-     * 5. Calculate aging.
-     */
-    request.data.aging = await calculateAging({
-      tx,
-      RequestHistory,
-      requestId,
-    });
-
-    LOG.info("Calculated aging:", request.data.aging);
-
-    /*
      * 6. Generate the request number when it is not
      * already provided.
      */
@@ -1238,7 +1194,12 @@ module.exports = async function (request) {
     LOG.info("Generated requestLink:", request.data.requestLink);
 
     /*
-     * 8. Reserve funds in S/4 for Supplement + Non Project requests.
+     * 8. Reserve funds in S/4 for Virement requests that move budget out.
+     *
+     * Only a transfer-out commits funds, so a Virement whose transfer-out
+     * total is zero reserves nothing and skips the call entirely. The
+     * amount is read from request.data, which step 4 above has already
+     * recalculated from the line items.
      *
      * The Earmarked Funds document must exist before the request is
      * persisted, so that a rejection from S/4 aborts the submission and
@@ -1248,11 +1209,11 @@ module.exports = async function (request) {
      * has been created successfully.
      */
     if (
-      requestTypeCode === REQUEST_TYPE_SUPPLEMENT &&
-      budgetTypeCode === BUDGET_TYPE_NON_PROJECT
+      normalizedRequestType === REQUEST_TYPE_TRANSFER &&
+      Number(request.data.transferOutAmount) > 0
     ) {
       LOG.info(
-        "Supplement + Non Project request detected. " +
+        "Virement request with a transfer-out amount detected. " +
           "Creating Earmarked Funds document before submit.",
       );
 

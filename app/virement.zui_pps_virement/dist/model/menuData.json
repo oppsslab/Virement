@@ -18,12 +18,6 @@
       "key": "PendingApprovals",
       "visible": true,
       "role": []
-    },
-    {
-      "titleI18nKey": "Navigation.Text.Reports",
-      "key": "Reports",
-      "visible": true,
-      "role": []
     }
   ]
 }

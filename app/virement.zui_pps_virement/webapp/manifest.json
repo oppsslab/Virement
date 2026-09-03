@@ -58,6 +58,15 @@
   },
   "sap.ui5": {
     "flexEnabled": true,
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ObjectPage.ObjectPageController": {
+            "controllerName": "virement.zuippsvirement.ext.controller.ObjectPageExt"
+          }
+        }
+      }
+    },
     "dependencies": {
       "minUI5Version": "1.149.1",
       "libs": {
@@ -130,6 +139,11 @@
           "target": "VirementRequests"
         },
         {
+          "name": "PendingApprovals",
+          "pattern": "PendingApprovals:?query:",
+          "target": "PendingApprovals"
+        },
+        {
           "name": "RequestsCreate",
           "pattern": "Requests/create:?query:",
           "target": "RequestsCreate"
@@ -162,6 +176,20 @@
               },
               "editableHeaderContent": false,
               "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.FieldGroup#RequestHeader": {
+                  "fields": {
+                    "ReturnCategory": {
+                      "template": "virement.zuippsvirement.ext.fragment.ReturnCategoryField",
+                      "label": "{i18n>ReturnCategory}",
+                      "property": "returnCategory_code",
+                      "visible": "{= %{requestType_code} === 'R' }",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "DataField::budgetType_code"
+                      }
+                    }
+                  }
+                },
                 "RequestHistory/@com.sap.vocabularies.UI.v1.LineItem#History": {
                   "tableSettings": {
                     "disableCopyToClipboard": true,
@@ -187,6 +215,26 @@
                   "columns": {
                     "DataField::srNo": {
                       "width": "6em"
+                    }
+                  },
+                  "actions": {
+                    "downloadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
+                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadTemplate"
+                      }
                     }
                   }
                 },
@@ -321,6 +369,34 @@
           "name": "sap.fe.templates.ListReport",
           "options": {
             "settings": {
+              "navigation": {
+                "Requests": {
+                  "detail": {
+                    "route": "RequestsObjectPage"
+                  }
+                }
+              },
+              "contextPath": "/Requests",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "disableCopyToClipboard": true,
+                    "type": "GridTable"
+                  }
+                }
+              },
+              "initialLoad": "Enabled",
+              "enhanceI18n": "i18n/custom-fe.properties"
+            }
+          }
+        },
+        "PendingApprovals": {
+          "type": "Component",
+          "id": "PendingApprovals",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "defaultTemplateAnnotationPath": "@com.sap.vocabularies.UI.v1.SelectionPresentationVariant#PendingApprovals",
               "navigation": {
                 "Requests": {
                   "detail": {
