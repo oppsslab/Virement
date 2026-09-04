@@ -235,6 +235,10 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * is open to any authenticated user, same as the rest of this
      * service; maintaining it (create/update/delete) is restricted to
      * VR_ADMIN below.
+     *
+     * Draft-enabled so the List Report table supports inline edit of
+     * existing rows - that Fiori Elements feature requires a draft
+     * service, not just Capabilities.UpdateRestrictions.
      */
     @(restrict: [
         {grant: 'READ'},
@@ -243,6 +247,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             to   : 'VR_ADMIN'
         },
     ])
+    @odata.draft.enabled
     entity ApproverMatrix as projection on my.ApproverMatrix;
 
     @requires: ['VR_ADMIN']
