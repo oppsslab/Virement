@@ -116,6 +116,24 @@ function extractDocumentNumber(data) {
 }
 
 /**
+ * Strips technical noise the integration layer sometimes appends to
+ * an S/4 error detail: a stray "null" (an unset field concatenated in
+ * upstream) followed by the raw HTTP status line in brackets, e.g.
+ * "...document item 00001null [HTTP/1.1 400 Bad Request]". Neither
+ * tells the user anything the SAP message code and text before it
+ * hasn't already said, so both are trimmed off the end.
+ *
+ * @param {string} detail
+ * @returns {string}
+ */
+function cleanErrorDetail(detail) {
+  return String(detail ?? "")
+    .replace(/\s*\[HTTP\/\d+(?:\.\d+)?\s+\d{3}[^\]]*\]\s*$/i, "")
+    .replace(/\s*null\s*$/i, "")
+    .trim();
+}
+
+/**
  * Pulls the human-readable SAP message out of an error response.
  *
  * The integration layer wraps S/4 rejections as
@@ -129,16 +147,17 @@ function extractErrorDetail(error) {
   const body = error?.response?.data;
 
   if (typeof body === "string" && body.trim()) {
-    return body.trim();
+    return cleanErrorDetail(body);
   }
 
-  return (
+  const detail =
     body?.detail ||
     body?.error?.message?.value ||
     body?.error ||
     error?.message ||
-    "Unknown Earmarked Funds error."
-  );
+    "Unknown Earmarked Funds error.";
+
+  return cleanErrorDetail(detail);
 }
 
 /**

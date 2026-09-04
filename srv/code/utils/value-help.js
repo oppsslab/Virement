@@ -12,7 +12,7 @@ const LOG = cds.log("value-help");
  * carries the Location ID, so nothing here needs to know about the
  * connector itself.
  */
-const DESTINATION_NAME = "DV1-230-S4HANA";
+const DESTINATION_NAME = "QA1-800-S4HANA";
 
 /*
  * Rows fetched when the client does not ask for a specific page size.

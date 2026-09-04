@@ -10,7 +10,7 @@ const LOG = cds.log("cost-centers");
  * destination carries the Location ID, so nothing here needs to know
  * about the connector itself.
  */
-const DESTINATION_NAME = "DV1-230-S4HANA";
+const DESTINATION_NAME = "QA1-800-S4HANA";
 
 const COST_CENTER_PATH = "/sap/opu/odata/sap/API_COSTCENTER_SRV/A_CostCenter";
 

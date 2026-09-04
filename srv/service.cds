@@ -165,7 +165,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
 
     /*
      * Cost centre search help, served live from S/4 through the
-     * DV1-230-S4HANA destination. Not persisted: every read is a call
+     * QA1-800-S4HANA destination. Not persisted: every read is a call
      * to S/4, filtered by whatever the user has typed.
      */
     @readonly
@@ -179,7 +179,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
 
     /*
      * GL account search help, served live from S/4 through the
-     * DV1-230-S4HANA destination. Not persisted: every read is a call
+     * QA1-800-S4HANA destination. Not persisted: every read is a call
      * to S/4, filtered by whatever the user has typed.
      */
     @readonly
@@ -195,7 +195,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
 
     /*
      * Material group search help, served live from S/4 through the
-     * DV1-230-S4HANA destination.
+     * QA1-800-S4HANA destination.
      */
     @readonly
     @cds.persistence.skip
@@ -207,7 +207,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
 
     /*
      * WBS element search help, served live from S/4 through the
-     * DV1-230-S4HANA destination.
+     * QA1-800-S4HANA destination.
      */
     @readonly
     @cds.persistence.skip
