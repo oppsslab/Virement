@@ -497,7 +497,13 @@
           "name": "sap.fe.templates.ObjectPage",
           "options": {
             "settings": {
-              "contextPath": "/ApproverMatrix"
+              "contextPath": "/ApproverMatrix",
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false
             }
           }
         }
