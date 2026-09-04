@@ -56,6 +56,11 @@
                             <NewsContent contentText="View All Requests" subheader="Track status and history across all requestors" />
                         </TileContent>
                     </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/approverMatrixIcon}" frameType="TwoByOne" press=".onNavigate" app:route="ApproverMatrix">
+                        <TileContent>
+                            <NewsContent contentText="Approver Matrix" subheader="Maintain workflow approver" />
+                        </TileContent>
+                    </GenericTile>
                 </l:Grid>
             </l:VerticalLayout>
         </f:content>

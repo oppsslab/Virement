@@ -1,0 +1,13 @@
+code,name,descr
+HOD_XFER_CC,Head of Transfer-out Cost Center,Head of Transfer-out Cost Center
+HOD,Head of Department,Head of Department
+HOB,Head of Branch,Head of Branch
+REG_DIR,Regional Director,Regional Director
+HOD_FUNC,Head of Functional Department,Head of Functional Department
+HOD_JKEW,Head of JKEW,Head of JKEW
+JKEW_PG14,JKEW Officer PG14 and above,JKEW Officer PG14 and above
+JKEW_PG19,JKEW Officer PG19 and above,JKEW Officer PG19 and above
+JKEW_PG21,JKEW Officer PG21 and above,JKEW Officer PG21 and above
+JKEW_BCM,JKEW Officer (BCM),JKEW Officer (BCM)
+CFO,CFO,CFO
+CEO,CEO,CEO

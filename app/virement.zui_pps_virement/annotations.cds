@@ -1668,3 +1668,98 @@ annotate service.WBSElements with {
     wbsElementInternalID @(title: '{i18n>WBSInternalID}');
     isBillingElement     @(title: '{i18n>IsBillingElement}');
 };
+
+// =============================================================================
+// Approver Matrix - maintain workflow approver reference data
+// =============================================================================
+annotate service.ApproverMatrix with {
+    userRole         @(
+        title                          : '{i18n>UserRoleName}',
+        Common.Text                    : userRole.descr,
+        Common.Text.@UI.TextArrangement: #TextOnly,
+        Common.ValueListWithFixedValues: true,
+        Common.ValueList               : {
+            $Type          : 'Common.ValueListType',
+            CollectionPath : 'UserRoles',
+            SearchSupported: false,
+            Parameters     : [{
+                $Type            : 'Common.ValueListParameterInOut',
+                LocalDataProperty: userRole_code,
+                ValueListProperty: 'code'
+            }]
+        },
+        Common.FieldControl            : #Mandatory
+    );
+
+    departmentBranch @(title: '{i18n>DepartmentBranch}');
+
+    emailAddress     @(
+        title               : '{i18n>ApproverEmailAddress}',
+        Common.FieldControl : #Mandatory
+    );
+
+    name             @(
+        title               : '{i18n>ApproverName}',
+        Common.FieldControl : #Mandatory
+    );
+
+    isActive         @(title: '{i18n>Active}');
+    startDate        @(title: '{i18n>StartDate}');
+    endDate          @(title: '{i18n>EndDate}');
+};
+
+annotate service.ApproverMatrix with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: userRole.descr,
+            Label: '{i18n>UserRoleName}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: departmentBranch,
+            Label: '{i18n>DepartmentBranch}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: emailAddress,
+            Label: '{i18n>ApproverEmailAddress}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: name,
+            Label: '{i18n>ApproverName}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isActive,
+            Label: '{i18n>Active}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: startDate,
+            Label: '{i18n>StartDate}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: endDate,
+            Label: '{i18n>EndDate}'
+        }
+    ],
+
+    UI.HeaderInfo: {
+        TypeName      : '{i18n>ApproverMatrixEntry}',
+        TypeNamePlural: '{i18n>ApproverMatrixTitle}',
+        Title         : {Value: name}
+    },
+
+    UI.SelectionFields: [
+        userRole_code,
+        emailAddress,
+        isActive
+    ],
+
+    Capabilities.InsertRestrictions.Insertable: true,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : true
+);

@@ -31,6 +31,8 @@ const {
   rejectRequest,
 } = require("./code/approve-reject-request");
 const requests_Resubmit_Logic = require("./code/requests-resubmit-logic");
+const download_Approver_Matrix_Template_Logic = require("./code/download-approver-matrix-template-logic");
+const upload_Approver_Matrix_Logic = require("./code/upload-approver-matrix-logic");
 
 class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
   async init() {
@@ -136,6 +138,14 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
       return assign_Approvers_Logic(request);
       // return approveRequest(request);
       // return rejectRequest(request);
+    });
+
+    this.on("downloadApproverMatrixTemplate", async (request) => {
+      return download_Approver_Matrix_Template_Logic(request);
+    });
+
+    this.on("uploadApproverMatrix", async (request) => {
+      return upload_Approver_Matrix_Logic(request);
     });
 
     this.on("approveRequest", "Requests", async (request) => {

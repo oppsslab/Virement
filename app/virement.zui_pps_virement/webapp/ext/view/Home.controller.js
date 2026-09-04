@@ -25,6 +25,7 @@ sap.ui.define(
           addIcon: `${appModulePath}/images/addIcon.png`,
           approvalIcon: `${appModulePath}/images/approvalIcon.png`,
           viewRequestIcon: `${appModulePath}/images/viewRequestIcon.png`,
+          approverMatrixIcon: `${appModulePath}/images/reportIcon.png`,
         });
 
         this.getView().setModel(oImageModel, "ImageModel");

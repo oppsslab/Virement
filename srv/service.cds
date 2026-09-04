@@ -229,4 +229,35 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
                            approvers: array of {
         Email : String;
     }) returns Boolean;
+
+    /*
+     * Approver Matrix - reference data maintained by admins. Reading
+     * is open to any authenticated user, same as the rest of this
+     * service; maintaining it (create/update/delete) is restricted to
+     * VR_ADMIN below.
+     */
+    @(restrict: [
+        {grant: 'READ'},
+        {
+            grant: ['CREATE', 'UPDATE', 'DELETE'],
+            to   : 'VR_ADMIN'
+        },
+    ])
+    entity ApproverMatrix as projection on my.ApproverMatrix;
+
+    @requires: ['VR_ADMIN']
+    action downloadApproverMatrixTemplate() returns TemplateFile;
+
+    @requires: ['VR_ADMIN']
+    action uploadApproverMatrix(content: LargeString) returns {
+        rows : array of {
+            userRole_code    : String;
+            departmentBranch : String;
+            emailAddress     : String;
+            name             : String;
+            isActive         : Boolean;
+            startDate        : Date;
+            endDate          : Date;
+        };
+    };
 }

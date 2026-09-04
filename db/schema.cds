@@ -153,3 +153,28 @@ type ReturnCategoryCode : String(1) enum {
 entity ReturnCategory : CodeList {
     key code : ReturnCategoryCode
 };
+
+/*
+ * User roles eligible to be assigned in the Approver Matrix. Modelled
+ * as a plain CodeList rather than an enum, since these are full role
+ * names (e.g. "Head of Department") rather than short technical codes.
+ */
+entity UserRoles : CodeList {
+    key code : String(60);
+};
+
+/*
+ * Approver Matrix - reference data maintained by admins recording who
+ * currently holds each approval-related role, for which department or
+ * branch, and for what period. This is master data only: it does not
+ * itself drive the BPA approval workflow or RequestApprovers.
+ */
+entity ApproverMatrix : cuid, managed {
+    userRole         : Association to UserRoles @mandatory;
+    departmentBranch : String(100);
+    emailAddress     : String(100) @mandatory;
+    name             : String(100) @mandatory;
+    isActive         : Boolean default true;
+    startDate        : Date;
+    endDate          : Date;
+};

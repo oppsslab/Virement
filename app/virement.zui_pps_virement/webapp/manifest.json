@@ -147,6 +147,11 @@
           "name": "RequestsCreate",
           "pattern": "Requests/create:?query:",
           "target": "RequestsCreate"
+        },
+        {
+          "name": "ApproverMatrix",
+          "pattern": "ApproverMatrix:?query:",
+          "target": "ApproverMatrix"
         }
       ],
       "targets": {
@@ -433,6 +438,47 @@
                   }
                 }
               }
+            }
+          }
+        },
+        "ApproverMatrix": {
+          "type": "Component",
+          "id": "ApproverMatrix",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/ApproverMatrix",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable",
+                    "creationMode": {
+                      "name": "InlineCreationRows"
+                    }
+                  },
+                  "actions": {
+                    "downloadApproverMatrixTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.ApproverMatrixListReportActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadApproverMatrix": {
+                      "press": "virement.zuippsvirement.ext.controller.ApproverMatrixListReportActions.onOpenUploadDialog",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadApproverMatrixTemplate"
+                      }
+                    }
+                  }
+                }
+              },
+              "initialLoad": "Enabled"
             }
           }
         }

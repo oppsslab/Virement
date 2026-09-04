@@ -275,6 +275,10 @@ resources:
             name: virement-REQUEST_APPROVE-${space}
             role-template-references:
               - $XSAPPNAME.REQUEST_APPROVE
+          - description: VR_ADMIN
+            name: virement-VR_ADMIN-${space}
+            role-template-references:
+              - $XSAPPNAME.VR_ADMIN
 
   # ============================================================
   # HANA HDI CONTAINER
