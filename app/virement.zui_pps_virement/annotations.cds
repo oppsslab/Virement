@@ -1760,14 +1760,17 @@ annotate service.ApproverMatrix with @(
     ],
 
     /*
-     * New rows are added via the always-present empty row at the
-     * bottom of the table (tableSettings.creationMode:
-     * InlineCreationRows in manifest.json), not the standalone
-     * toolbar "Create" button. With no Object Page configured for
-     * this List Report, that button had nowhere to send a new draft
-     * - it left a stuck, unfillable row - so it is hidden here.
+     * The InlineCreationRows setting on the table (manifest.json)
+     * was expected to add an always-present empty row for new
+     * entries, and the standalone toolbar "Create" button was hidden
+     * on the theory that it had nowhere useful to go without an
+     * Object Page configured. In practice InlineCreationRows never
+     * rendered that row, leaving no way to add a row at all - so
+     * Create stays visible. It is untested against the inlineEdit
+     * manifest setting added alongside it (that combination was never
+     * actually tried together), so the original "can't edit after
+     * Create" symptom may already be resolved by inlineEdit alone.
      */
-    UI.CreateHidden: true,
 
     Capabilities.InsertRestrictions.Insertable: true,
     Capabilities.UpdateRestrictions.Updatable : true,
