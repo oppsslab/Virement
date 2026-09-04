@@ -367,7 +367,18 @@ async function findExistingCostCentres(codes) {
     .map((code) => `CostCenter eq '${escapeODataLiteral(code)}'`)
     .join(" or ");
 
-  const filter = `ControllingArea eq '${CONTROLLING_AREA}' and (${codeFilter})`;
+  /*
+   * Without the validity filter, a code with more than one validity
+   * period (the norm - see buildQueryString above) can return more
+   * than one row, and $top capped at the code count then lets one
+   * code's history crowd out another code's row entirely: a perfectly
+   * valid cost centre comes back missing from the response and gets
+   * wrongly reported as invalid. The same ValidityEndDate filter used
+   * for the value help keeps this to at most one row per code.
+   */
+  const filter =
+    `ControllingArea eq '${CONTROLLING_AREA}' and (${codeFilter}) and ` +
+    `ValidityEndDate ge ${todayLiteral()}`;
 
   const query = [
     `$filter=${encodeURIComponent(filter)}`,
