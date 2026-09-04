@@ -34,6 +34,18 @@ function escapeODataLiteral(value) {
 }
 
 /**
+ * Today's date as an OData V2 datetime literal, for a ValidityEndDate
+ * filter.
+ *
+ * @returns {string} e.g. "datetime'2026-09-04T00:00:00'"
+ */
+function todayLiteral() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  return `datetime'${today}T00:00:00'`;
+}
+
+/**
  * Builds the S/4 query string for a cost centre prefix.
  *
  * The query is encoded here and appended to the path, rather than
@@ -45,6 +57,17 @@ function escapeODataLiteral(value) {
  * cost centre, which is what the value help should show before the
  * user types anything.
  *
+ * A_CostCenter carries one row per validity period, so a cost centre
+ * that has ever been re-validated (a new period opened after an old
+ * one lapsed) comes back as more than one row for the same code. Our
+ * CostCenters entity keys only on the code, so two such rows collide
+ * on that key once they reach the value-help table - which is why a
+ * cost centre that is very much still active could appear to be
+ * missing: the picker was rendering the lapsed row instead of the
+ * current one. Restricting to ValidityEndDate >= today keeps only the
+ * period that is current (or a future one), which is also the one a
+ * new posting would actually use.
+ *
  * @param {string} prefix
  * @param {boolean} withText - expand to_Text for the cost centre name
  * @returns {string} encoded query string, without the leading "?"
@@ -54,7 +77,8 @@ function buildQueryString(prefix, withText, paging = {}) {
 
   const filter =
     `ControllingArea eq '${CONTROLLING_AREA}' and ` +
-    `startswith(CostCenter,'${literal}')`;
+    `startswith(CostCenter,'${literal}') and ` +
+    `ValidityEndDate ge ${todayLiteral()}`;
 
   const parts = [
     `$filter=${encodeURIComponent(filter)}`,
@@ -170,6 +194,36 @@ function extractRows(data) {
 }
 
 /**
+ * Keeps one row per cost centre code.
+ *
+ * The ValidityEndDate filter in buildQueryString should already leave
+ * at most one row per code, but this is the backstop if S/4 ever
+ * returns overlapping validity periods anyway: a duplicate key reaching
+ * the value-help table is exactly what let a genuinely current cost
+ * centre appear to be missing, so the first row - the one this S/4
+ * release happened to list first - is kept and the rest are dropped
+ * rather than risk that again.
+ *
+ * @param {object[]} rows
+ * @returns {object[]}
+ */
+function dedupeByCostCentre(rows) {
+  const seen = new Set();
+
+  return rows.filter((row) => {
+    const code = String(row.costCentre ?? "").trim().toUpperCase();
+
+    if (seen.has(code)) {
+      return false;
+    }
+
+    seen.add(code);
+
+    return true;
+  });
+}
+
+/**
  * Reads cost centres from S/4 for the given prefix.
  *
  * @param {string} prefix - what the user has typed so far
@@ -236,11 +290,13 @@ async function readCostCenters(prefix, paging = {}) {
         );
       }
 
-      return rows.map((row) => ({
-        costCentre: row.CostCenter,
-        costCentreName: extractName(row),
-        controllingArea: row.ControllingArea,
-      }));
+      return dedupeByCostCentre(
+        rows.map((row) => ({
+          costCentre: row.CostCenter,
+          costCentreName: extractName(row),
+          controllingArea: row.ControllingArea,
+        }))
+      );
     } catch (error) {
       const detail =
         error?.response?.data?.error?.message?.value ||
