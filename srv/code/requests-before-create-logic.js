@@ -12,6 +12,8 @@ const {
   createEarmarkedFundsDocument,
 } = require("./utils/earmarked-funds");
 
+const { findExistingCostCentres } = require("./utils/cost-centers");
+
 const LOG = cds.log("requests-before-create-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
@@ -451,6 +453,77 @@ function validateMaterialGlAlignment(request, { items }) {
       "The first " +
         `${MATERIAL_GL_MATCH_LENGTH} digits of Material must match ` +
         "the GL Account on all Request Items.",
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validates that every Cost Centre on the request items is a real S/4
+ * code. Applies to all request types.
+ *
+ * The value help only ever offers a real code, but a code can still
+ * reach here by being typed directly or pasted in via the upload
+ * template. Left unchecked it flows straight through to the S/4
+ * posting call later in this handler, where an invalid FUNDCTR fails
+ * far less clearly than it does here.
+ *
+ * @param {cds.Request} request
+ * @param {object} options
+ * @param {object[]} options.items
+ * @returns {Promise<boolean>}
+ */
+async function validateCostCentresExist(request, { items }) {
+  const codesByItem = (items || [])
+    .map(function (item, index) {
+      return {
+        id: item.ID || `#${index + 1}`,
+        code: String(item.costCentre || "").trim(),
+      };
+    })
+    .filter(function (entry) {
+      return Boolean(entry.code);
+    });
+
+  if (!codesByItem.length) {
+    return true;
+  }
+
+  const existingCodes = await findExistingCostCentres(
+    codesByItem.map(function (entry) {
+      return entry.code;
+    }),
+  );
+
+  const invalidItems = codesByItem.filter(function (entry) {
+    return !existingCodes.has(entry.code.toUpperCase());
+  });
+
+  if (invalidItems.length > 0) {
+    const invalidCodes = [
+      ...new Set(invalidItems.map(function (entry) {
+        return entry.code;
+      })),
+    ].join(", ");
+
+    const invalidItemIds = invalidItems
+      .map(function (entry) {
+        return entry.id;
+      })
+      .join(", ");
+
+    LOG.error(
+      "Cost Centre is not valid on items:",
+      JSON.stringify({ invalidCodes, invalidItemIds }),
+    );
+
+    request.error(
+      400,
+      `Cost Centre ${invalidCodes} is not valid. Please select a Cost ` +
+        "Centre from the search help.",
     );
 
     return false;
@@ -1087,6 +1160,20 @@ module.exports = async function (request) {
 
     if (!isMaterialGlValid) {
       LOG.error("Request failed Material / GL Account alignment validation.");
+
+      return;
+    }
+
+    /*
+     * Validate that every Cost Centre exists in S/4. Applies to all
+     * request types.
+     */
+    const isCostCentreValid = await validateCostCentresExist(request, {
+      items: requestItems,
+    });
+
+    if (!isCostCentreValid) {
+      LOG.error("Request failed Cost Centre validation.");
 
       return;
     }

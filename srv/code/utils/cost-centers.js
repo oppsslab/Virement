@@ -264,8 +264,101 @@ async function readCostCenters(prefix, paging = {}) {
   throw wrapped;
 }
 
+/**
+ * Checks which of the given cost centre codes actually exist in S/4.
+ *
+ * The value help only ever offers real codes, but nothing stops a user
+ * typing or pasting one in directly (as on the upload template), so
+ * this is the check that catches a bad code before it reaches an S/4
+ * posting - where it fails far less clearly.
+ *
+ * All codes are checked in a single request rather than one per code,
+ * to keep this cheap enough to run on every submit.
+ *
+ * @param {string[]} codes - cost centre codes to check, as entered
+ * @returns {Promise<Set<string>>} the subset that exist in S/4, uppercased
+ * @throws {Error} with .statusCode and a message safe to show the user
+ */
+async function findExistingCostCentres(codes) {
+  const uniqueCodes = [
+    ...new Set(
+      (codes || [])
+        .map((code) => String(code ?? "").trim().toUpperCase())
+        .filter(Boolean)
+    ),
+  ];
+
+  if (!uniqueCodes.length) {
+    return new Set();
+  }
+
+  const destination = await getDestination({
+    destinationName: DESTINATION_NAME,
+  });
+
+  if (!destination) {
+    const error = new Error(
+      `Destination '${DESTINATION_NAME}' was not found. Cost centres ` +
+        "could not be validated."
+    );
+
+    error.statusCode = 500;
+
+    throw error;
+  }
+
+  const codeFilter = uniqueCodes
+    .map((code) => `CostCenter eq '${escapeODataLiteral(code)}'`)
+    .join(" or ");
+
+  const filter = `ControllingArea eq '${CONTROLLING_AREA}' and (${codeFilter})`;
+
+  const query = [
+    `$filter=${encodeURIComponent(filter)}`,
+    `$select=${encodeURIComponent("CostCenter")}`,
+    `$top=${uniqueCodes.length}`,
+  ].join("&");
+
+  LOG.info(
+    "Validating cost centres.",
+    JSON.stringify({ codes: uniqueCodes, query })
+  );
+
+  try {
+    const response = await executeHttpRequest(destination, {
+      method: "GET",
+      url: `${COST_CENTER_PATH}?${query}`,
+      headers: { Accept: "application/json" },
+    });
+
+    const rows = extractRows(response && response.data);
+
+    return new Set(
+      rows.map((row) => String(row.CostCenter ?? "").trim().toUpperCase())
+    );
+  } catch (error) {
+    const detail =
+      error?.response?.data?.error?.message?.value ||
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      "Unknown error";
+
+    LOG.error("Cost centre validation failed.", {
+      status: error?.response?.status,
+      detail,
+    });
+
+    const wrapped = new Error(`Could not validate cost centres: ${detail}`);
+
+    wrapped.statusCode = error?.response?.status || 502;
+
+    throw wrapped;
+  }
+}
+
 module.exports = {
   readCostCenters,
+  findExistingCostCentres,
   buildQueryString,
   extractRows,
   extractName,
