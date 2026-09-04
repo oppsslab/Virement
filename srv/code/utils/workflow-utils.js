@@ -373,25 +373,17 @@ async function startApprovalWorkflow({
 }
 
 /**
- * Queries SAP Build Process Automation for task instances matching
- * the given workflow instance ID, and returns the first task that
- * is still open (awaiting a decision).
+ * Fetches every task instance SAP Build Process Automation has for
+ * the given workflow instance, regardless of status.
  *
- * This is used so the CAP app's own Approve/Reject buttons can
- * discover the correct taskId to complete, without needing BPA to
- * proactively report it back to CAP when the task is first created.
+ * Shared by getOpenTaskForWorkflowInstance and
+ * getCompletedTaskForWorkflowInstance, which each filter the same
+ * raw list down to the status they care about.
  *
  * @param {string} workflowInstanceId
- * @returns {Promise<object|null>} the raw open task instance
- *   object, or null if none is found
+ * @returns {Promise<object[]>}
  */
-async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
-  if (!workflowInstanceId) {
-    LOG.error("Cannot look up task instances without a workflowInstanceId.");
-
-    return null;
-  }
-
+async function fetchTaskInstances(workflowInstanceId) {
   const { destination, apiKey } = await getProcessAutomationDestination();
 
   LOG.info(
@@ -458,6 +450,31 @@ async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
     }),
   );
 
+  return taskInstances;
+}
+
+/**
+ * Queries SAP Build Process Automation for task instances matching
+ * the given workflow instance ID, and returns the first task that
+ * is still open (awaiting a decision).
+ *
+ * This is used so the CAP app's own Approve/Reject buttons can
+ * discover the correct taskId to complete, without needing BPA to
+ * proactively report it back to CAP when the task is first created.
+ *
+ * @param {string} workflowInstanceId
+ * @returns {Promise<object|null>} the raw open task instance
+ *   object, or null if none is found
+ */
+async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
+  if (!workflowInstanceId) {
+    LOG.error("Cannot look up task instances without a workflowInstanceId.");
+
+    return null;
+  }
+
+  const taskInstances = await fetchTaskInstances(workflowInstanceId);
+
   const openTask = taskInstances.filter(function (task) {
     const status = String(task?.status || "")
       .trim()
@@ -484,6 +501,35 @@ async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
   );
 
   return openTask;
+}
+
+/**
+ * Reports whether SAP Build Process Automation shows a COMPLETED
+ * task for the given workflow instance.
+ *
+ * A task ends up completed outside of this app's own Approve/Reject
+ * buttons when someone actions it directly in BPA's My Inbox - most
+ * often because the CAP-side flow errored partway through (e.g. an
+ * S/4 posting rejection) and the user worked around it there instead.
+ * When that happens, getOpenTaskForWorkflowInstance correctly finds
+ * no open task, but this app's own RequestApprovers/Requests rows
+ * are left stuck Pending with no task left to complete. This lets
+ * the Approve/Reject handlers recognize that case and resync their
+ * own records instead of dead-ending with "already actioned".
+ *
+ * @param {string} workflowInstanceId
+ * @returns {Promise<boolean>}
+ */
+async function hasCompletedTaskForWorkflowInstance(workflowInstanceId) {
+  if (!workflowInstanceId) {
+    return false;
+  }
+
+  const taskInstances = await fetchTaskInstances(workflowInstanceId);
+
+  return taskInstances.some(function (task) {
+    return String(task?.status || "").trim().toUpperCase() === "COMPLETED";
+  });
 }
 
 /**
@@ -587,5 +633,6 @@ module.exports = {
   getProcessAutomationDestination,
   getDestinationProperty,
   getOpenTaskForWorkflowInstance,
+  hasCompletedTaskForWorkflowInstance,
   completeTask,
 };

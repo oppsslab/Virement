@@ -6,6 +6,7 @@ const cds = require("@sap/cds");
 
 const {
   getOpenTaskForWorkflowInstance,
+  hasCompletedTaskForWorkflowInstance,
   completeTask,
 } = require("./utils/workflow-utils");
 
@@ -217,6 +218,57 @@ async function prepareApprovalAction(request) {
   }
 
   if (!openTask.length) {
+    /*
+     * No open task doesn't necessarily mean nothing is left to do
+     * here. If BPA shows the task as COMPLETED, it was actioned
+     * directly in BPA's My Inbox rather than through this app - most
+     * often because this app's own flow errored partway through
+     * (e.g. an S/4 posting rejection) and the user worked around it
+     * there. This app's RequestApprovers/Requests rows are then left
+     * stuck Pending with no task left to complete. Rather than
+     * dead-ending on "already actioned", let the caller resync its
+     * own records: taskIds stays empty, so no BPA call is attempted
+     * again.
+     */
+    let completedExternally = false;
+
+    try {
+      completedExternally = await hasCompletedTaskForWorkflowInstance(
+        requestRow.workflowInstanceId,
+      );
+    } catch (error) {
+      LOG.error(
+        "Failed to check for a completed task instance.",
+        JSON.stringify({
+          requestId,
+          workflowInstanceId: requestRow.workflowInstanceId,
+          message: error.message,
+        }),
+      );
+    }
+
+    if (completedExternally) {
+      LOG.warn(
+        "No open task, but a completed one exists for this workflow " +
+          "instance - it was actioned outside this app. Resyncing " +
+          "local records only.",
+        JSON.stringify({
+          requestId,
+          workflowInstanceId: requestRow.workflowInstanceId,
+        }),
+      );
+
+      return {
+        requestId,
+        requestRow,
+        approverRow,
+        rows,
+        lastApprover,
+        taskIds: [],
+        syncOnly: true,
+      };
+    }
+
     LOG.error(
       "No open task instance found for workflow instance.",
       JSON.stringify({
@@ -317,7 +369,7 @@ async function approveRequest(request) {
     return;
   }
 
-  const { requestId, taskIds, approverRow, rows, lastApprover, requestRow } = prepared;
+  const { requestId, taskIds, approverRow, rows, lastApprover, requestRow, syncOnly } = prepared;
   console.log(prepared)
 
   const approverEmail = request.user?.id;
@@ -420,6 +472,39 @@ async function approveRequest(request) {
       "Other Level pending approvers auto-resolved (rejected):",
       JSON.stringify({ requestId, siblingEmails }),
     );
+  }
+
+  if (syncOnly) {
+    /*
+     * The BPA task was already completed outside this app, so there
+     * is no task left to complete and - per how this request was
+     * resolved - no S/4 posting is attempted here either. Only the
+     * local bookkeeping (already updated above) is synced to match
+     * BPA. This is recorded explicitly so it is never mistaken for a
+     * normal, fully-posted approval.
+     */
+    await insertRequestHistory(
+      request,
+      requestId,
+      `Approval status synced by ${approverEmail}: the BPA task was ` +
+        "already completed outside this app. No S/4 posting was " +
+        "attempted as part of this sync.",
+    );
+
+    await tx.commit();
+
+    LOG.warn(
+      "Synced local approval status without an S/4 posting " +
+        "(BPA task was already completed externally).",
+      JSON.stringify({ requestId, approverEmail }),
+    );
+
+    request.info(
+      "Approval status has been synced to match the workflow, which " +
+        "was already completed. No S/4 posting was attempted.",
+    );
+
+    return;
   }
 
   if (newStatusCode === REQUEST_STATUS.APPROVED){
