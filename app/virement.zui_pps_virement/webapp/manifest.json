@@ -448,6 +448,9 @@
           "options": {
             "settings": {
               "contextPath": "/ApproverMatrix",
+              "inlineEdit": {
+                "disabledFields": []
+              },
               "controlConfiguration": {
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {

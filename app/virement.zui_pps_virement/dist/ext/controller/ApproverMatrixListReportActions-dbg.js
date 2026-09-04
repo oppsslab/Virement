@@ -3,9 +3,22 @@ sap.ui.define(
     "sap/m/MessageBox",
     "sap/m/MessageToast",
     "sap/ui/core/Fragment",
+    "sap/ui/model/resource/ResourceModel",
   ],
-  function (MessageBox, MessageToast, Fragment) {
+  function (MessageBox, MessageToast, Fragment, ResourceModel) {
     "use strict";
+
+    /*
+     * List Report table actions are invoked with (oBindingContext,
+     * aSelectedContexts), not a UI event - there is no reliable
+     * oEvent.getSource() to walk up from, unlike an Object Page
+     * button press. Rather than depend on view/model inheritance
+     * through addDependent (which the dialog's blank i18n texts
+     * showed is not reliable here), the dialog gets its own
+     * standalone ResourceModel pointed at the same bundle declared
+     * in manifest.json.
+     */
+    const I18N_BUNDLE_NAME = "virement.zuippsvirement.i18n.i18n";
 
     let oUploadDialog = null;
     let oUploadModel = null;
@@ -216,8 +229,15 @@ sap.ui.define(
             { $$updateGroupId: sUpdateGroupId || "$auto" },
           );
 
-          aRows.forEach(function (oRow) {
-            oListBinding.create({
+          /*
+           * ApproverMatrix is draft-enabled (required for the List
+           * Report's inline edit of existing rows), so a plain create
+           * only produces a draft - it still needs draftActivate per
+           * row to become a live, visible record. Contexts are kept
+           * so each one can be activated once the batch confirms it.
+           */
+          const aCreatedContexts = aRows.map(function (oRow) {
+            return oListBinding.create({
               userRole_code: oRow.userRole_code,
               departmentBranch: oRow.departmentBranch,
               emailAddress: oRow.emailAddress,
@@ -228,7 +248,22 @@ sap.ui.define(
             });
           });
 
-          return oUploadModel.submitBatch(sUpdateGroupId || "$auto");
+          return oUploadModel
+            .submitBatch(sUpdateGroupId || "$auto")
+            .then(function () {
+              return Promise.all(
+                aCreatedContexts.map(function (oContext) {
+                  return oContext.created().then(function () {
+                    return oUploadModel
+                      .bindContext(
+                        "ZSVC_PPS_VIREMENT.draftActivate(...)",
+                        oContext,
+                      )
+                      .execute();
+                  });
+                }),
+              );
+            });
         })
         .then(function () {
           /*
@@ -353,6 +388,11 @@ sap.ui.define(
           })
             .then(function (oDialog) {
               oUploadDialog = oDialog;
+
+              oDialog.setModel(
+                new ResourceModel({ bundleName: I18N_BUNDLE_NAME }),
+                "i18n",
+              );
 
               if (oView) {
                 oView.addDependent(oDialog);

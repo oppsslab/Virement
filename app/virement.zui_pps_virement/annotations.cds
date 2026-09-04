@@ -1759,6 +1759,16 @@ annotate service.ApproverMatrix with @(
         isActive
     ],
 
+    /*
+     * New rows are added via the always-present empty row at the
+     * bottom of the table (tableSettings.creationMode:
+     * InlineCreationRows in manifest.json), not the standalone
+     * toolbar "Create" button. With no Object Page configured for
+     * this List Report, that button had nowhere to send a new draft
+     * - it left a stuck, unfillable row - so it is hidden here.
+     */
+    UI.CreateHidden: true,
+
     Capabilities.InsertRestrictions.Insertable: true,
     Capabilities.UpdateRestrictions.Updatable : true,
     Capabilities.DeleteRestrictions.Deletable : true
