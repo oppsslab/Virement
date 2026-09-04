@@ -1673,8 +1673,24 @@ annotate service.WBSElements with {
 // Approver Matrix - maintain workflow approver reference data
 // =============================================================================
 annotate service.ApproverMatrix with {
+    /*
+     * The value-help/text-display setup has to live on the userRole
+     * association itself, not the generated userRole_code field:
+     * compiling it directly on userRole_code silently drops title,
+     * Common.Text and TextArrangement in this CDS version (confirmed
+     * - requestType/budgetType elsewhere in this file use the same
+     * association-level pattern and compile fine; moving the exact
+     * same annotations onto ApproverMatrix.userRole_code made them
+     * vanish from the compiled output).
+     *
+     * No "title" here, though, unlike requestType/budgetType: giving
+     * the association its own label is what caused it to also be
+     * offered as a second, identically-labelled column in the
+     * table's column settings, alongside the explicit LineItem entry
+     * below (which already carries its own Label). The LineItem's
+     * Label is enough - the association doesn't need one of its own.
+     */
     userRole         @(
-        title                          : '{i18n>UserRoleName}',
         Common.Text                    : userRole.descr,
         Common.Text.@UI.TextArrangement: #TextOnly,
         Common.ValueListWithFixedValues: true,
@@ -1709,6 +1725,17 @@ annotate service.ApproverMatrix with {
 };
 
 annotate service.ApproverMatrix with @(
+    /*
+     * Standard List Report + Object Page, the same pattern already
+     * used for Requests: Create navigates to a new draft's Object
+     * Page, a row click navigates to that row's Object Page, and
+     * editing there uses the regular Edit/Save flow. The List
+     * Report's inline-edit/no-navigation route (SAPUI5 1.136's
+     * inline edit feature, or InlineCreationRows for the table)
+     * turned out fragile here - a blank dialog, an unusable Create
+     * row, then a non-functional Save - so this reverts to the
+     * pattern already proven working elsewhere in this app.
+     */
     UI.LineItem: [
         {
             $Type: 'UI.DataField',
@@ -1760,17 +1787,27 @@ annotate service.ApproverMatrix with @(
     ],
 
     /*
-     * The InlineCreationRows setting on the table (manifest.json)
-     * was expected to add an always-present empty row for new
-     * entries, and the standalone toolbar "Create" button was hidden
-     * on the theory that it had nowhere useful to go without an
-     * Object Page configured. In practice InlineCreationRows never
-     * rendered that row, leaving no way to add a row at all - so
-     * Create stays visible. It is untested against the inlineEdit
-     * manifest setting added alongside it (that combination was never
-     * actually tried together), so the original "can't edit after
-     * Create" symptom may already be resolved by inlineEdit alone.
+     * Object Page form: one section with all seven fields.
      */
+    UI.Facets: [{
+        $Type : 'UI.ReferenceFacet',
+        ID    : 'ApproverMatrixDetails',
+        Label : '{i18n>ApproverMatrixEntry}',
+        Target: '@UI.FieldGroup#Details'
+    }],
+
+    UI.FieldGroup #Details: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: userRole_code},
+            {$Type: 'UI.DataField', Value: departmentBranch},
+            {$Type: 'UI.DataField', Value: emailAddress},
+            {$Type: 'UI.DataField', Value: name},
+            {$Type: 'UI.DataField', Value: isActive},
+            {$Type: 'UI.DataField', Value: startDate},
+            {$Type: 'UI.DataField', Value: endDate}
+        ]
+    },
 
     Capabilities.InsertRestrictions.Insertable: true,
     Capabilities.UpdateRestrictions.Updatable : true,

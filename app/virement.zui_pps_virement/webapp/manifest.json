@@ -152,6 +152,11 @@
           "name": "ApproverMatrix",
           "pattern": "ApproverMatrix:?query:",
           "target": "ApproverMatrix"
+        },
+        {
+          "name": "ApproverMatrixObjectPage",
+          "pattern": "ApproverMatrix({ApproverMatrixKey}):?query:",
+          "target": "ApproverMatrixObjectPage"
         }
       ],
       "targets": {
@@ -448,16 +453,17 @@
           "options": {
             "settings": {
               "contextPath": "/ApproverMatrix",
-              "inlineEdit": {
-                "disabledFields": []
+              "navigation": {
+                "ApproverMatrix": {
+                  "detail": {
+                    "route": "ApproverMatrixObjectPage"
+                  }
+                }
               },
               "controlConfiguration": {
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
-                    "type": "ResponsiveTable",
-                    "creationMode": {
-                      "name": "InlineCreationRows"
-                    }
+                    "type": "ResponsiveTable"
                   },
                   "actions": {
                     "downloadApproverMatrixTemplate": {
@@ -482,6 +488,16 @@
                 }
               },
               "initialLoad": "Enabled"
+            }
+          }
+        },
+        "ApproverMatrixObjectPage": {
+          "type": "Component",
+          "id": "ApproverMatrixObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/ApproverMatrix"
             }
           }
         }
