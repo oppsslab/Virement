@@ -234,13 +234,36 @@ async function prepareApprovalAction(request) {
     return null;
   }
 
-  const approverLevel = approverRow.map(x => x.level + " Approval");
-  // console.log("approverLevel:", approverLevel1);
-  // const approverLevel =["L2-A","L2-C"];
-  const filterTask = openTask.filter(function (task) {
-    const subject = String(task?.subject || "");
-    return approverLevel.some(level => subject.includes(level));
-  });
+  /*
+   * Matching a task to this approver's level.
+   *
+   * With only one open task for this workflow instance there is
+   * nothing to disambiguate: findMyPendingApproverRow already
+   * confirmed a Pending Approval row for this user on this request,
+   * and getOpenTaskForWorkflowInstance already scoped the tasks to
+   * this exact request's workflow instance, so that task is the one
+   * to act on regardless of its subject text. Requiring the subject
+   * to also spell out the level broke a real approval: BPA's subject
+   * text carries only the numeric level ("Pending L1 Approval ..."),
+   * never the level value stored on RequestApprovers ("2A"), so the
+   * two could never match here.
+   *
+   * With more than one open task - parallel levels genuinely pending
+   * at once - the numeric level is matched against an "L<number>"
+   * token, which is the format BPA's subject text actually uses.
+   */
+  let filterTask = openTask;
+
+  if (openTask.length > 1) {
+    const levelTokens = approverRow
+      .map((x) => `L${getLevelNumber(x.level)}`)
+      .filter((token) => token !== "Lnull");
+
+    filterTask = openTask.filter(function (task) {
+      const subject = String(task?.subject || "");
+      return levelTokens.some((token) => subject.includes(token));
+    });
+  }
 
   const taskIds = filterTask.map(x => x.id || x.taskId);
 
