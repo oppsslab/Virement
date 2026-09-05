@@ -1670,6 +1670,18 @@ annotate service.WBSElements with {
 };
 
 // =============================================================================
+// Code Lists - User Roles
+// =============================================================================
+
+annotate service.UserRoles with {
+    code  @(
+        Common.Text                    : descr,
+        Common.Text.@UI.TextArrangement: #TextOnly
+    );
+    descr @(title: '{i18n>UserRoleName}');
+};
+
+// =============================================================================
 // Approver Matrix - maintain workflow approver reference data
 // =============================================================================
 annotate service.ApproverMatrix with {
@@ -1799,7 +1811,13 @@ annotate service.ApproverMatrix with @(
     UI.FieldGroup #Details: {
         $Type: 'UI.FieldGroupType',
         Data : [
-            {$Type: 'UI.DataField', Value: userRole_code},
+            /*
+             * userRole_code carries no title of its own (see the
+             * comment above the userRole association annotation) -
+             * an explicit Label here, same technique as the LineItem
+             * column, is what supplies the field's label on the form.
+             */
+            {$Type: 'UI.DataField', Value: userRole_code, Label: '{i18n>UserRoleName}'},
             {$Type: 'UI.DataField', Value: departmentBranch},
             {$Type: 'UI.DataField', Value: emailAddress},
             {$Type: 'UI.DataField', Value: name},
