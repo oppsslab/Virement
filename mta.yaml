@@ -156,7 +156,13 @@ modules:
               sap.cloud.service: lcap.virement
               sap.applicationdevelopment.actions.enabled: false
               sap.build.usage: CAP
-              sap.processautomation.enabled: false
+              # Enabled so SAP Build Process Automation can use this
+              # destination as an API source (e.g. for getApprovers,
+              # assignApprovers) - it was previously disabled here,
+              # which is why it never showed up as a usable API
+              # source and a separate ad-hoc "virement-backend"
+              # destination had to be created instead.
+              sap.processautomation.enabled: true
               HTML5.DynamicDestination: true
               WebIDEEnabled: false
               MobileEnabled: false
