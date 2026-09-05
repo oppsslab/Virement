@@ -265,4 +265,28 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             endDate          : Date;
         };
     };
+
+    /*
+     * For SAP Build Process Automation: resolves the current, valid
+     * approver(s) for a given Approver Matrix role. "Valid" means the
+     * matching row is Active and today falls within its Start/End
+     * Date (an unset End Date means no expiry). departmentBranch is
+     * optional - omit it for roles that aren't department/branch
+     * specific (Regional Director, CFO, CEO, ...).
+     *
+     * userRole accepts either the role's code (e.g. "HOD") or its
+     * full display name (e.g. "Head of Department").
+     *
+     * A GET-style function rather than an action, since this only
+     * reads data and has no side effects.
+     */
+    function getApprovers(
+        userRole         : String,
+        departmentBranch : String
+    ) returns array of {
+        emailAddress     : String;
+        name             : String;
+        userRole         : String;
+        departmentBranch : String;
+    };
 }

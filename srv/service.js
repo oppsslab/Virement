@@ -33,6 +33,7 @@ const {
 const requests_Resubmit_Logic = require("./code/requests-resubmit-logic");
 const download_Approver_Matrix_Template_Logic = require("./code/download-approver-matrix-template-logic");
 const upload_Approver_Matrix_Logic = require("./code/upload-approver-matrix-logic");
+const get_Approvers_Logic = require("./code/get-approvers-logic");
 
 class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
   async init() {
@@ -146,6 +147,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("uploadApproverMatrix", async (request) => {
       return upload_Approver_Matrix_Logic(request);
+    });
+
+    this.on("getApprovers", async (request) => {
+      return get_Approvers_Logic(request);
     });
 
     this.on("approveRequest", "Requests", async (request) => {
