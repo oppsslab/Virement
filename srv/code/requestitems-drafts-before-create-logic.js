@@ -1,5 +1,14 @@
 const cds = require("@sap/cds");
 
+const { resolveGLGroup } = require("./utils/gl-grouping-lookup");
+const { resolveDepartment } = require("./utils/department-grouping-lookup");
+const {
+  resolveRegionBranch,
+} = require("./utils/region-branch-grouping-lookup");
+const {
+  resolveFunctionalDepartment,
+} = require("./utils/functional-department-grouping-lookup");
+
 const LOG = cds.log("requestitems-drafts-before-create-logic");
 
 const SR_NO_PAD_LENGTH = 3;
@@ -76,6 +85,58 @@ module.exports = async function (request) {
     if (!parentRequestId) {
       LOG.error("Unable to determine parent Request ID.");
       return request.error(400, "Unable to determine parent Request ID.");
+    }
+
+    // 1a. Auto-populate the read-only GL Group and Functional
+    // Department whenever a GL Account is already provided at
+    // creation time (e.g. a deep-create/upload payload). Client-
+    // provided values are always overwritten - these fields are
+    // never user-settable.
+    if (request.data.glAccount) {
+      request.data.glGroup = await resolveGLGroup(tx, request.data.glAccount);
+
+      request.data.functionalDepartment = await resolveFunctionalDepartment(
+        tx,
+        request.data.glAccount,
+      );
+
+      LOG.info(
+        "Auto-populated glGroup/functionalDepartment on create:",
+        JSON.stringify({
+          glAccount: request.data.glAccount,
+          glGroup: request.data.glGroup,
+          functionalDepartment: request.data.functionalDepartment,
+        }),
+      );
+    }
+
+    // 1b. Auto-populate the read-only Department, Region, and Branch
+    // whenever a Cost Centre is already provided at creation time.
+    // Client-provided values are always overwritten - these fields
+    // are never user-settable.
+    if (request.data.costCentre) {
+      request.data.department = await resolveDepartment(
+        tx,
+        request.data.costCentre,
+      );
+
+      const { region, branch } = await resolveRegionBranch(
+        tx,
+        request.data.costCentre,
+      );
+
+      request.data.region = region;
+      request.data.branch = branch;
+
+      LOG.info(
+        "Auto-populated department/region/branch on create:",
+        JSON.stringify({
+          costCentre: request.data.costCentre,
+          department: request.data.department,
+          region,
+          branch,
+        }),
+      );
     }
 
     // 2. If srNo already provided, skip generation.

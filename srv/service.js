@@ -6,6 +6,7 @@ const LCAPApplicationService = require("@sap/low-code-event-handler");
 const requests_Before_Create_Logic = require("./code/requests-before-create-logic");
 const requests_Drafts_Before_Create_Logic = require("./code/requests-drafts-before-create-logic");
 const requestitems_Drafts_Before_Create_Logic = require("./code/requestitems-drafts-before-create-logic");
+const requestitems_Drafts_Before_Update_Logic = require("./code/requestitems-drafts-before-update-logic");
 const requests_After_Create_Logic = require("./code/requests-after-create-logic");
 const requests_CalculateValues_Logic = require("./code/requests-calculateValues-logic");
 const requests_Drafts_CalculateValues_Logic = require("./code/requests-drafts-calculateValues-logic");
@@ -17,6 +18,7 @@ const requestitems_Drafts_After_Create_Logic = require("./code/requestitems-draf
 const requestitems_Drafts_After_Update_Logic = require("./code/requestitems-drafts-after-update-logic");
 const requests_Before_Update_Logic = require("./code/requests-before-update-logic");
 const requests_Drafts_After_Read_Logic = require("./code/requests-drafts-after-read-logic");
+const requests_Drafts_After_Update_Logic = require("./code/requests-drafts-after-update-logic");
 const recent_Requests_Read_Logic = require("./code/recent-requests-read-logic");
 const user_Details_Read_Logic = require("./code/user-details-read-logic");
 const pending_Approval_Count_Read_Logic = require("./code/pending-approval-count-read-logic");
@@ -33,7 +35,20 @@ const {
 const requests_Resubmit_Logic = require("./code/requests-resubmit-logic");
 const download_Approver_Matrix_Template_Logic = require("./code/download-approver-matrix-template-logic");
 const upload_Approver_Matrix_Logic = require("./code/upload-approver-matrix-logic");
+const download_GL_Grouping_Template_Logic = require("./code/download-gl-grouping-template-logic");
+const upload_GL_Grouping_Logic = require("./code/upload-gl-grouping-logic");
+const download_Department_Grouping_Template_Logic = require("./code/download-department-grouping-template-logic");
+const upload_Department_Grouping_Logic = require("./code/upload-department-grouping-logic");
+const download_Functional_Department_Grouping_Template_Logic = require("./code/download-functional-department-grouping-template-logic");
+const upload_Functional_Department_Grouping_Logic = require("./code/upload-functional-department-grouping-logic");
+const download_Building_Grouping_Template_Logic = require("./code/download-building-grouping-template-logic");
+const upload_Building_Grouping_Logic = require("./code/upload-building-grouping-logic");
+const download_Region_Branch_Grouping_Template_Logic = require("./code/download-region-branch-grouping-template-logic");
+const upload_Region_Branch_Grouping_Logic = require("./code/upload-region-branch-grouping-logic");
 const get_Approvers_Logic = require("./code/get-approvers-logic");
+const get_Request_Approvers_Logic = require("./code/get-request-approvers-logic");
+const delegate_Approval_Logic = require("./code/delegate-approval-logic");
+const workflow_Logs_Read_Logic = require("./code/workflow-logs-read-logic");
 
 class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
   async init() {
@@ -47,6 +62,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.before("CREATE", "RequestItems.drafts", async (request) => {
       await requestitems_Drafts_Before_Create_Logic(request);
+    });
+
+    this.before("UPDATE", "RequestItems.drafts", async (request) => {
+      await requestitems_Drafts_Before_Update_Logic(request);
     });
 
     this.after("CREATE", "Requests", async (results, request) => {
@@ -99,6 +118,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
       await requestitems_Drafts_After_Update_Logic(results, request);
     });
 
+    this.after("UPDATE", "Requests.drafts", async (results, request) => {
+      await requests_Drafts_After_Update_Logic(results, request);
+    });
+
     this.before("UPDATE", "Requests", async (request) => {
       await requests_Before_Update_Logic(request);
     });
@@ -149,8 +172,56 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
       return upload_Approver_Matrix_Logic(request);
     });
 
+    this.on("downloadGLGroupingTemplate", async (request) => {
+      return download_GL_Grouping_Template_Logic(request);
+    });
+
+    this.on("uploadGLGrouping", async (request) => {
+      return upload_GL_Grouping_Logic(request);
+    });
+
+    this.on("downloadDepartmentGroupingTemplate", async (request) => {
+      return download_Department_Grouping_Template_Logic(request);
+    });
+
+    this.on("uploadDepartmentGrouping", async (request) => {
+      return upload_Department_Grouping_Logic(request);
+    });
+
+    this.on("downloadFunctionalDepartmentGroupingTemplate", async (request) => {
+      return download_Functional_Department_Grouping_Template_Logic(request);
+    });
+
+    this.on("uploadFunctionalDepartmentGrouping", async (request) => {
+      return upload_Functional_Department_Grouping_Logic(request);
+    });
+
+    this.on("downloadBuildingGroupingTemplate", async (request) => {
+      return download_Building_Grouping_Template_Logic(request);
+    });
+
+    this.on("uploadBuildingGrouping", async (request) => {
+      return upload_Building_Grouping_Logic(request);
+    });
+
+    this.on("downloadRegionBranchGroupingTemplate", async (request) => {
+      return download_Region_Branch_Grouping_Template_Logic(request);
+    });
+
+    this.on("uploadRegionBranchGrouping", async (request) => {
+      return upload_Region_Branch_Grouping_Logic(request);
+    });
+
     this.on("getApprovers", async (request) => {
       return get_Approvers_Logic(request);
+    });
+
+    this.on("getRequestApprovers", async (request) => {
+      return get_Request_Approvers_Logic(request);
+    });
+
+    this.on("READ", "WorkflowLogs", async (request) => {
+      return workflow_Logs_Read_Logic(request);
     });
 
     this.on("approveRequest", "Requests", async (request) => {
@@ -159,6 +230,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("rejectRequest", "Requests", async (request) => {
       return rejectRequest(request);
+    });
+
+    this.on("delegateApproval", "Requests", async (request) => {
+      return delegate_Approval_Logic(request);
     });
 
     this.on("resubmitRequest", "Requests", async (request) => {

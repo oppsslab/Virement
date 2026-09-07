@@ -129,6 +129,11 @@
           "target": "Home"
         },
         {
+          "name": "GroupingMaintenance",
+          "pattern": "GroupingMaintenance:?query:",
+          "target": "GroupingMaintenance"
+        },
+        {
           "name": "RequestsObjectPage",
           "pattern": "Requests({RequestsKey}):?query:",
           "target": "RequestsObjectPage"
@@ -157,6 +162,56 @@
           "name": "ApproverMatrixObjectPage",
           "pattern": "ApproverMatrix({ApproverMatrixKey}):?query:",
           "target": "ApproverMatrixObjectPage"
+        },
+        {
+          "name": "GLGrouping",
+          "pattern": "GLGrouping:?query:",
+          "target": "GLGrouping"
+        },
+        {
+          "name": "GLGroupingObjectPage",
+          "pattern": "GLGrouping({GLGroupingKey}):?query:",
+          "target": "GLGroupingObjectPage"
+        },
+        {
+          "name": "DepartmentGrouping",
+          "pattern": "DepartmentGrouping:?query:",
+          "target": "DepartmentGrouping"
+        },
+        {
+          "name": "DepartmentGroupingObjectPage",
+          "pattern": "DepartmentGrouping({DepartmentGroupingKey}):?query:",
+          "target": "DepartmentGroupingObjectPage"
+        },
+        {
+          "name": "FunctionalDepartmentGrouping",
+          "pattern": "FunctionalDepartmentGrouping:?query:",
+          "target": "FunctionalDepartmentGrouping"
+        },
+        {
+          "name": "FunctionalDepartmentGroupingObjectPage",
+          "pattern": "FunctionalDepartmentGrouping({FunctionalDepartmentGroupingKey}):?query:",
+          "target": "FunctionalDepartmentGroupingObjectPage"
+        },
+        {
+          "name": "BuildingGrouping",
+          "pattern": "BuildingGrouping:?query:",
+          "target": "BuildingGrouping"
+        },
+        {
+          "name": "BuildingGroupingObjectPage",
+          "pattern": "BuildingGrouping({BuildingGroupingKey}):?query:",
+          "target": "BuildingGroupingObjectPage"
+        },
+        {
+          "name": "RegionBranchGrouping",
+          "pattern": "RegionBranchGrouping:?query:",
+          "target": "RegionBranchGrouping"
+        },
+        {
+          "name": "RegionBranchGroupingObjectPage",
+          "pattern": "RegionBranchGrouping({RegionBranchGroupingKey}):?query:",
+          "target": "RegionBranchGroupingObjectPage"
         }
       ],
       "targets": {
@@ -168,6 +223,17 @@
             "settings": {
               "contextPath": "/Requests",
               "viewName": "virement.zuippsvirement.ext.view.Home"
+            }
+          }
+        },
+        "GroupingMaintenance": {
+          "type": "Component",
+          "id": "GroupingMaintenance",
+          "name": "sap.fe.core.fpm",
+          "options": {
+            "settings": {
+              "contextPath": "/Requests",
+              "viewName": "virement.zuippsvirement.ext.view.GroupingMaintenance"
             }
           }
         },
@@ -197,6 +263,23 @@
                         "placement": "After",
                         "anchor": "DataField::budgetType_code"
                       }
+                    }
+                  }
+                },
+                "@com.sap.vocabularies.UI.v1.FieldGroup#WorkflowInfo": {
+                  "fields": {
+                    "WorkflowInstanceId": {
+                      "template": "virement.zuippsvirement.ext.fragment.WorkflowInstanceIdLink",
+                      "label": "{i18n>InstanceId}",
+                      "property": "workflowInstanceId",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "DataField::workflowStatus"
+                      }
+                    },
+                    "DataField::workflowStatus": {
+                      "template": "virement.zuippsvirement.ext.fragment.WorkflowStatusField",
+                      "label": "{i18n>Status}"
                     }
                   }
                 },
@@ -498,6 +581,311 @@
           "options": {
             "settings": {
               "contextPath": "/ApproverMatrix",
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "GLGrouping": {
+          "type": "Component",
+          "id": "GLGrouping",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/GLGrouping",
+              "navigation": {
+                "GLGrouping": {
+                  "detail": {
+                    "route": "GLGroupingObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable"
+                  },
+                  "actions": {
+                    "downloadGLGroupingTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.GLGroupingListReportActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadGLGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.GLGroupingListReportActions.onOpenUploadDialog",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadGLGroupingTemplate"
+                      }
+                    }
+                  }
+                }
+              },
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "GLGroupingObjectPage": {
+          "type": "Component",
+          "id": "GLGroupingObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/GLGrouping",
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "DepartmentGrouping": {
+          "type": "Component",
+          "id": "DepartmentGrouping",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/DepartmentGrouping",
+              "navigation": {
+                "DepartmentGrouping": {
+                  "detail": {
+                    "route": "DepartmentGroupingObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable"
+                  },
+                  "actions": {
+                    "downloadDepartmentGroupingTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.DepartmentGroupingListReportActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadDepartmentGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.DepartmentGroupingListReportActions.onOpenUploadDialog",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadDepartmentGroupingTemplate"
+                      }
+                    }
+                  }
+                }
+              },
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "DepartmentGroupingObjectPage": {
+          "type": "Component",
+          "id": "DepartmentGroupingObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/DepartmentGrouping",
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "FunctionalDepartmentGrouping": {
+          "type": "Component",
+          "id": "FunctionalDepartmentGrouping",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/FunctionalDepartmentGrouping",
+              "navigation": {
+                "FunctionalDepartmentGrouping": {
+                  "detail": {
+                    "route": "FunctionalDepartmentGroupingObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable"
+                  },
+                  "actions": {
+                    "downloadFunctionalDepartmentGroupingTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.FunctionalDepartmentGroupingListReportActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadFunctionalDepartmentGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.FunctionalDepartmentGroupingListReportActions.onOpenUploadDialog",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadFunctionalDepartmentGroupingTemplate"
+                      }
+                    }
+                  }
+                }
+              },
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "FunctionalDepartmentGroupingObjectPage": {
+          "type": "Component",
+          "id": "FunctionalDepartmentGroupingObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/FunctionalDepartmentGrouping",
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "BuildingGrouping": {
+          "type": "Component",
+          "id": "BuildingGrouping",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/BuildingGrouping",
+              "navigation": {
+                "BuildingGrouping": {
+                  "detail": {
+                    "route": "BuildingGroupingObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable"
+                  },
+                  "actions": {
+                    "downloadBuildingGroupingTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.BuildingGroupingListReportActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadBuildingGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.BuildingGroupingListReportActions.onOpenUploadDialog",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadBuildingGroupingTemplate"
+                      }
+                    }
+                  }
+                }
+              },
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "BuildingGroupingObjectPage": {
+          "type": "Component",
+          "id": "BuildingGroupingObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/BuildingGrouping",
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "RegionBranchGrouping": {
+          "type": "Component",
+          "id": "RegionBranchGrouping",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/RegionBranchGrouping",
+              "navigation": {
+                "RegionBranchGrouping": {
+                  "detail": {
+                    "route": "RegionBranchGroupingObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable"
+                  },
+                  "actions": {
+                    "downloadRegionBranchGroupingTemplate": {
+                      "press": "virement.zuippsvirement.ext.controller.RegionBranchGroupingListReportActions.onDownloadTemplate",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>downloadTemplate}"
+                    },
+                    "uploadRegionBranchGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.RegionBranchGroupingListReportActions.onOpenUploadDialog",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>UploadTemplate}",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "downloadRegionBranchGroupingTemplate"
+                      }
+                    }
+                  }
+                }
+              },
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "RegionBranchGroupingObjectPage": {
+          "type": "Component",
+          "id": "RegionBranchGroupingObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/RegionBranchGrouping",
               "content": {
                 "header": {
                   "anchorBarVisible": false

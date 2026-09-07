@@ -1,0 +1,35 @@
+<!--
+    Workflow Status field, injected into the Workflow header field
+    group as a custom field so its execution error message (when
+    present) can be shown in a proper sap.m.Popover on press, rather
+    than a native browser tooltip - see onWorkflowStatusPress in
+    ObjectPageExt.controller.js.
+
+    A Common.QuickInfo annotation on the workflowStatus property
+    itself was tried first and broke the List Report entirely
+    (PropertyHelper threw "The value of 'tooltip' is invalid" while
+    processing entity metadata for views that don't even show this
+    field) - this local control has no such effect, since it never
+    touches the property's own metadata.
+
+    icon/active use formatter functions (formatWorkflowStatusIcon /
+    formatWorkflowStatusActive), not inline {= %{...} } expression
+    bindings - the latter silently failed to evaluate in this
+    custom-field-template context (text="{workflowStatus}" updated
+    correctly, but icon/active never did, with no console error to
+    diagnose). Formatters are the more standard, debuggable choice
+    regardless.
+
+    Registered in manifest.json under controlConfiguration >
+    "@com.sap.vocabularies.UI.v1.FieldGroup#WorkflowInfo" > fields.
+-->
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <ObjectStatus
+        id="workflowStatusText"
+        text="{workflowStatus}"
+        icon="{path: 'workflowStatus', formatter: '.extension.virement.zuippsvirement.ext.controller.ObjectPageExt.formatWorkflowStatusIcon'}"
+        active="{path: 'workflowStatus', formatter: '.extension.virement.zuippsvirement.ext.controller.ObjectPageExt.formatWorkflowStatusActive'}"
+        press=".extension.virement.zuippsvirement.ext.controller.ObjectPageExt.onWorkflowStatusPress" />
+</core:FragmentDefinition>

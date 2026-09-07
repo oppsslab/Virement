@@ -6,6 +6,12 @@ const { REQUEST_STATUS } = require("./utils/request-status");
 
 const { applyAgingToRows } = require("./utils/request-aging");
 
+const {
+  getWorkflowInstanceStatus,
+  getWorkflowInstanceErrorMessages,
+  ERROR_WORKFLOW_STATUSES,
+} = require("./utils/workflow-utils");
+
 const LOG = cds.log("requests-after-read-logic");
 
 const REQUESTS_DATABASE_ENTITY = "ZDB_PPS_VIREMENT.Requests";
@@ -15,6 +21,13 @@ const REQUEST_APPROVER_DATABASE_ENTITY = "ZDB_PPS_VIREMENT.RequestApprovers";
 const ROLE_JKEW = "MASS_UPLOAD_ALL";
 
 const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
+
+/*
+ * workflowStatus values that mean the workflow instance is done and
+ * will never change again - no point calling out to SAP Build to
+ * refresh it once a request reaches one of these.
+ */
+const TERMINAL_WORKFLOW_STATUSES = ["COMPLETED", "REJECTED"];
 
 function hasRole(user, roleName) {
   return Boolean(
@@ -163,6 +176,101 @@ function applyVirtualFields(row, user, roleFlags, pendingApproverRequestIds) {
   });
 }
 
+/**
+ * Live-refreshes workflowStatus from SAP Build Process Automation
+ * for a single-entity (Object Page) read, instead of relying on
+ * whatever snapshot CAP last happened to persist. Skipped for list
+ * reads (to avoid one BPA call per row) and for requests already in
+ * a terminal workflow state.
+ *
+ * @param {object[]} rows
+ * @param {cds.Request} request
+ */
+async function refreshLiveWorkflowStatus(rows, request) {
+  try {
+    const isSingleEntityRead = Boolean(
+      request.params && request.params.length,
+    );
+
+    if (!isSingleEntityRead) {
+      return;
+    }
+
+    for (const row of rows) {
+      if (!row.workflowInstanceId) {
+        continue;
+      }
+
+      if (TERMINAL_WORKFLOW_STATUSES.includes(row.workflowStatus)) {
+        continue;
+      }
+
+      const liveStatus = await getWorkflowInstanceStatus(
+        row.workflowInstanceId,
+      );
+
+      if (!liveStatus) {
+        continue;
+      }
+
+      const statusChanged = liveStatus !== row.workflowStatus;
+      const isErrorStatus = ERROR_WORKFLOW_STATUSES.includes(liveStatus);
+      const needsErrorFetch = isErrorStatus && !row.workflowError;
+
+      if (!statusChanged && !needsErrorFetch) {
+        continue;
+      }
+
+      const updates = {};
+
+      if (statusChanged) {
+        row.workflowStatus = liveStatus;
+        updates.workflowStatus = liveStatus;
+
+        if (!isErrorStatus && row.workflowError) {
+          row.workflowError = null;
+          updates.workflowError = null;
+        }
+      }
+
+      if (needsErrorFetch) {
+        const workflowError = await getWorkflowInstanceErrorMessages(
+          row.workflowInstanceId,
+        );
+
+        if (workflowError) {
+          row.workflowError = workflowError;
+          updates.workflowError = workflowError;
+        }
+      }
+
+      if (Object.keys(updates).length) {
+        try {
+          await cds.db.run(
+            UPDATE(REQUESTS_DATABASE_ENTITY)
+              .set(updates)
+              .where({ ID: row.ID }),
+          );
+        } catch (error) {
+          LOG.error("Failed to persist refreshed workflow status/error.", {
+            requestId: row.ID,
+            message: error.message,
+          });
+        }
+      }
+    }
+  } catch (error) {
+    /*
+     * Never let a live-status refresh failure disturb the rest of
+     * the read response (approval flags, aging, etc. already
+     * computed above this call).
+     */
+    LOG.error("Error refreshing live workflow status.", {
+      message: error.message,
+    });
+  }
+}
+
 module.exports = async function requestsAfterRead(results, request) {
   const rows = (Array.isArray(results) ? results : [results]).filter(
     (row) => row && row.ID,
@@ -204,6 +312,13 @@ module.exports = async function requestsAfterRead(results, request) {
     }
 
     await applyAgingToRows(rows);
+
+    /*
+     * Live-refresh workflowStatus from SAP Build when a single
+     * request is opened (Object Page), rather than showing whatever
+     * snapshot was last persisted.
+     */
+    await refreshLiveWorkflowStatus(rows, request);
   } catch (error) {
     LOG.error("Error computing request UI fields", {
       message: error.message,

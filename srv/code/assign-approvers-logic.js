@@ -123,7 +123,7 @@ function buildApproverRows(approvers, requestId, level) {
         request_ID: requestId,
         emailAddress: extractEmailAddress(approver),
         level,
-        status_code: level === "1" ? APPROVER_STATUS.PENDING_APPROVAL : APPROVER_STATUS.INACTIVE,
+        status_code: String(level || "").startsWith("1") ? APPROVER_STATUS.PENDING_APPROVAL : APPROVER_STATUS.INACTIVE,
       };
     })
     .filter(function (row) {
@@ -224,7 +224,7 @@ module.exports = async function (request) {
 
     await tx.run(INSERT.into(RequestApprovers).entries(rowsToInsert));
 
-    if (normalizedLevel === "1"){
+    if (String(normalizedLevel || "").startsWith("1")){
       await tx.run(
         UPDATE(Requests)
           .set({ currentApprovalLevel: 1 })

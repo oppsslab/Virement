@@ -1,5 +1,9 @@
 const cds = require("@sap/cds");
 const { recalcAmountsByType } = require("./utils/recalc-total-logic");
+const {
+  applyApproverPlan,
+  resolveApprovalAmount,
+} = require("./utils/apply-approver-plan");
 
 const LOG = cds.log("requests-drafts-calculateValues-logic");
 
@@ -40,7 +44,7 @@ module.exports = async function (request) {
     LOG.info("Request params:", JSON.stringify(request.params || []));
 
     const tx = cds.tx(request);
-    const { Requests } = cds.entities(SERVICE_NAMESPACE);
+    const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
     const RequestsDraft = Requests.drafts;
 
     // 1. Resolve the Request ID from the action params.
@@ -71,6 +75,25 @@ module.exports = async function (request) {
     );
 
     LOG.info("Recalculated amounts:", JSON.stringify(amounts));
+
+    // 4. Preview the CAP-owned approvers (e.g. Supplement + Non
+    //    Project -> JKEW Officer (BCM); Return + Non Project -> a
+    //    JKEW Officer role tiered by returnAmount) so the requestor
+    //    can see who will approve before they submit. SAP Build no
+    //    longer decides these cases itself - it reads the assignment
+    //    back from the Request once submitted.
+    const requestTypeCode = draftRequest.requestType_code;
+
+    await applyApproverPlan({
+      tx,
+      RequestApproversTarget: RequestApprovers.drafts,
+      requestId,
+      requestTypeCode,
+      budgetTypeCode: draftRequest.budgetType_code,
+      amount: resolveApprovalAmount(requestTypeCode, amounts),
+      draftUUID: draftRequest.DraftAdministrativeData_DraftUUID,
+    });
+
     LOG.info("--- ON calculateValues Requests.drafts ended successfully ---");
 
     // 4. Return the freshly updated draft Request

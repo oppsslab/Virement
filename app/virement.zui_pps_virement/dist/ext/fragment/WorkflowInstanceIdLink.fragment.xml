@@ -1,0 +1,20 @@
+<!--
+    Workflow Instance ID link, injected into the Workflow header field
+    group as a custom field. It is registered in manifest.json under
+    controlConfiguration > "@com.sap.vocabularies.UI.v1.FieldGroup#WorkflowInfo"
+    > fields, which is where Fiori elements looks up custom form fields.
+
+    A plain UI.DataFieldWithUrl annotation renders as a sap.m.Link with
+    no way to set target="_blank", so this field is rendered as its own
+    Link control instead, opening the SAP Build monitoring page in a
+    new tab rather than navigating away from this app.
+-->
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Link
+        id="workflowInstanceIdLink"
+        text="{workflowInstanceId}"
+        href="{= 'https://epf-ent-cf-ap11-dev.ap11.build.cloud.sap/monitoring/workflow-instances/' + %{workflowInstanceId} }"
+        target="_blank" />
+</core:FragmentDefinition>

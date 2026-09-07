@@ -1,0 +1,16 @@
+<core:FragmentDefinition xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:u="sap.ui.unified">
+    <Dialog id="glGroupingUploadDialog" title="{i18n>UploadTemplate}" contentWidth="420px">
+        <VBox class="sapUiTinyMargin">
+            <Text text="{i18n>UploadGLGroupingHint}" />
+            <u:FileUploader id="glGroupingFileUploader" name="glGroupingUpload" fileType="xlsx" placeholder="{i18n>ChooseFile}" class="sapUiSmallMarginTop" width="100%" />
+        </VBox>
+        <beginButton>
+            <Button id="confirmGLGroupingUploadBtn" text="{i18n>Upload}" type="Emphasized" />
+        </beginButton>
+        <endButton>
+            <Button id="cancelGLGroupingUploadBtn" text="{i18n>Cancel}" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

@@ -8,8 +8,12 @@ const LOG = cds.log("workflow-utils");
 
 const WORKFLOW_DESTINATION = "sap_process_automation_service";
 
+// V1 workflow - commented out while switching to V2 below.
+// const WORKFLOW_DEFINITION_ID =
+//   "ap11.epf-ent-cf-ap11-dev.virementapprovalworkflow.approvalWorkflow";
+
 const WORKFLOW_DEFINITION_ID =
-  "ap11.epf-ent-cf-ap11-dev.virementapprovalworkflow.approvalWorkflow";
+  "ap11.epf-ent-cf-ap11-dev.virementapprovalworkflowv2.approvalWorkflow";
 
 const WORKFLOW_START_PATH =
   "/workflow/rest/v1/workflow-instances?environmentId=nonprd";
@@ -18,6 +22,22 @@ const TASK_INSTANCES_PATH = "/workflow/rest/v1/task-instances";
 
 const TASK_INSTANCE_PATH = (taskId) =>
   `/workflow/rest/v1/task-instances/${taskId}`;
+
+const WORKFLOW_INSTANCE_PATH = (workflowInstanceId) =>
+  `/workflow/rest/v1/workflow-instances/${workflowInstanceId}`;
+
+const WORKFLOW_INSTANCE_ERROR_MESSAGES_PATH = (workflowInstanceId) =>
+  `/workflow/rest/v1/workflow-instances/${workflowInstanceId}/error-messages`;
+
+const WORKFLOW_INSTANCE_EXECUTION_LOGS_PATH = (workflowInstanceId) =>
+  `/workflow/rest/v1/workflow-instances/${workflowInstanceId}/execution-logs`;
+
+/*
+ * Workflow instance statuses that indicate an execution error, worth
+ * fetching error-messages for. Different API versions have been
+ * observed to use either of these values.
+ */
+const ERROR_WORKFLOW_STATUSES = ["ERRONEOUS", "ERROR"];
 
 const ENVIRONMENT_ID = "nonprd";
 
@@ -217,6 +237,55 @@ async function getProcessAutomationDestination() {
  * @param {string} options.requestLink
  * @returns {Promise<object>}
  */
+/*
+ * The workflow's Configure Process Inputs exposes approvallevel1/2/3,
+ * plus lettered overflow parameters per level (approvallevel1a..1e,
+ * etc.) for INDEPENDENT parallel approvers at that level - e.g.
+ * Virement's "Head of Transfer-out Cost Center", resolved once per
+ * transfer-out line item (see utils/virement-scenario.js), sent as
+ * "1A" for line 1, "1B" for line 2, and so on. Despite the "String"
+ * type shown in the workflow's own input configuration screen, the
+ * actual runtime schema requires every one of these as an ARRAY
+ * (confirmed via a live "must be of array type" validation error) -
+ * so each level/sub-level's approver email(s) go into their own
+ * array-valued field. Field names are intentionally all-lowercase to
+ * exactly match the workflow's own technical parameter names.
+ */
+const MAX_APPROVAL_LEVEL = 3;
+
+/**
+ * Builds the approvallevel1/2/3 (and, where the plan has them,
+ * lettered approvallevel1a/1b/... sub-level) workflow input fields
+ * from the CAP-owned approval plan applied at submit time (see
+ * utils/apply-approver-plan.js), so the workflow receives the
+ * already-resolved approver email(s) directly at start, instead of
+ * looking them up itself mid-process for the levels CAP now owns.
+ *
+ * The 3 base numeric levels are always present (even empty), since
+ * the workflow's schema requires them; a request type CAP doesn't own
+ * routing for yet (or a level/sub-level a rule doesn't use) simply
+ * leaves its field as an empty array - the workflow's own decision
+ * tables + assignApprovers callback remain fully responsible for it.
+ *
+ * @param {{level: string, emails: string[]}[]} appliedApproverPlan
+ * @returns {object} e.g. {approvallevel1: [], approvallevel1a: ["a@x.com"], approvallevel1b: ["b@x.com"], approvallevel2: ["c@x.com"], approvallevel3: []}
+ */
+function buildApprovalLevelFields(appliedApproverPlan) {
+  const fields = {};
+
+  for (let level = 1; level <= MAX_APPROVAL_LEVEL; level++) {
+    fields[`approvallevel${level}`] = [];
+  }
+
+  for (const entry of appliedApproverPlan || []) {
+    const fieldName = `approvallevel${String(entry.level || "").toLowerCase()}`;
+
+    fields[fieldName] = entry.emails || [];
+  }
+
+  return fields;
+}
+
 async function startApprovalWorkflow({
   requestId,
   requestType,
@@ -226,7 +295,25 @@ async function startApprovalWorkflow({
   lineitemCostCenter,
   transferOutCostCenter,
   projectType,
-  requestAmount
+  requestAmount,
+  creationDate,
+  appliedApproverPlan,
+  // V2 fields below. See callers for how each is derived.
+  isAuthorisedFunctionalDept,
+  isDifferentGlGroup,
+  isSameRegion,
+  isDifferentBranch,
+  transferOutGl,
+  transferInCostCenter1,
+  transferInCostCenter2,
+  transferInCostCenter3,
+  transferInCostCenter4,
+  transferInCostCenter5,
+  transferInGl1,
+  transferInGl2,
+  transferInGl3,
+  transferInGl4,
+  transferInGl5,
 }) {
   if (!requestId) {
     const error = new Error(
@@ -249,14 +336,21 @@ async function startApprovalWorkflow({
   const payload = {
     definitionId: WORKFLOW_DEFINITION_ID,
 
-    context: {
-      requestId,
+    // V1 context shape - commented out while switching to V2 below.
+    // context: {
+    //   requestId,
+    //   requesttype: normalizedRequestType,
+    //   requestNumber: requestNumber || "",
+    //   requestor: requestor || "",
+    //   requestLink: requestLink || "",
+    //   lineitemCostCenter: lineitemCostCenter || "",
+    //   transferOutCostCenter: transferOutCostCenter,
+    //   projectType: projectType || "",
+    //   requestAmount: requestAmount || 0
+    // },
 
-      /*
-       * Keep this as requesttype if that is the exact name
-       * configured in the workflow context.
-       */
-      requesttype: normalizedRequestType,
+    context: {
+      requestType: normalizedRequestType,
 
       requestNumber: requestNumber || "",
 
@@ -264,13 +358,56 @@ async function startApprovalWorkflow({
 
       requestLink: requestLink || "",
 
-      lineitemCostCenter: lineitemCostCenter || "",
+      requestId,
 
-      transferOutCostCenter: transferOutCostCenter,
+      creationDate: creationDate || "",
+
+      transferOutCostCenter: transferOutCostCenter || "",
 
       projectType: projectType || "",
 
-      requestAmount: requestAmount || 0
+      requestAmount: requestAmount || 0,
+
+      /*
+       * TODO: no existing business logic computes these four flags
+       * anywhere in the codebase yet (confirmed via full-repo
+       * search). Defaulting to false until the actual approval
+       * routing rule for each is confirmed - do not rely on these
+       * for real approval decisions until they are wired up
+       * correctly, since getting them wrong could misroute an
+       * approval.
+       */
+      isAuthorisedFunctionalDept: Boolean(isAuthorisedFunctionalDept),
+
+      isDifferentGlGroup: Boolean(isDifferentGlGroup),
+
+      isSameRegion: Boolean(isSameRegion),
+
+      isDifferentBranch: Boolean(isDifferentBranch),
+
+      transferOutGl: transferOutGl || "",
+
+      transferInCostCenter1: transferInCostCenter1 || "",
+
+      transferInCostCenter2: transferInCostCenter2 || "",
+
+      transferInCostCenter3: transferInCostCenter3 || "",
+
+      transferInCostCenter4: transferInCostCenter4 || "",
+
+      transferInCostCenter5: transferInCostCenter5 || "",
+
+      transferInGl1: transferInGl1 || "",
+
+      transferInGl2: transferInGl2 || "",
+
+      transferInGl3: transferInGl3 || "",
+
+      transferInGl4: transferInGl4 || "",
+
+      transferInGl5: transferInGl5 || "",
+
+      ...buildApprovalLevelFields(appliedApproverPlan),
     },
   };
 
@@ -454,6 +591,222 @@ async function fetchTaskInstances(workflowInstanceId) {
 }
 
 /**
+ * Fetches the current status of a single workflow instance directly
+ * from SAP Build Process Automation, for live-refreshing
+ * Requests.workflowStatus when a request is opened (rather than
+ * relying on the last snapshot CAP happened to persist).
+ *
+ * Confirmed via direct testing (Postman, then curl) that this
+ * endpoint - unlike task-instances and starting a workflow - expects
+ * the header name "api-key", not "irpa-api-key". Sending the wrong
+ * header name is what actually produced the persistent
+ * "insufficient privileges" 403 seen here previously; the
+ * client-credentials destination and API key were fine all along.
+ *
+ * @param {string} workflowInstanceId
+ * @returns {Promise<string|null>} the current status (e.g. "RUNNING",
+ *   "COMPLETED"), or null if it could not be determined
+ */
+async function getWorkflowInstanceStatus(workflowInstanceId) {
+  if (!workflowInstanceId) {
+    return null;
+  }
+
+  try {
+    const { destination, apiKey } = await getProcessAutomationDestination();
+
+    const response = await executeHttpRequest(
+      destination,
+      {
+        method: "GET",
+
+        url: WORKFLOW_INSTANCE_PATH(workflowInstanceId),
+
+        params: {
+          environmentId: ENVIRONMENT_ID,
+        },
+
+        headers: {
+          Accept: "application/json",
+
+          "api-key": apiKey,
+        },
+      },
+      { fetchCsrfToken: false },
+    );
+
+    const status = response?.data?.status || null;
+
+    LOG.info(
+      "Workflow instance status fetched.",
+      JSON.stringify({ workflowInstanceId, status }),
+    );
+
+    return status;
+  } catch (error) {
+    const status = error.response?.status || error.statusCode;
+
+    LOG.error(
+      "Failed to fetch workflow instance status.",
+      JSON.stringify({
+        workflowInstanceId,
+        status,
+        message: error.response?.data?.message || error.message,
+        responseData: error.response?.data || null,
+      }),
+    );
+
+    return null;
+  }
+}
+
+/**
+ * Fetches the execution error message(s) for a workflow instance
+ * that has failed (e.g. status "ERRONEOUS"), for display as a
+ * tooltip on Requests.workflowStatus (see Common.QuickInfo on
+ * workflowStatus in annotations.cds).
+ *
+ * @param {string} workflowInstanceId
+ * @returns {Promise<string|null>} the joined error message(s), or
+ *   null if there are none or they could not be fetched
+ */
+async function getWorkflowInstanceErrorMessages(workflowInstanceId) {
+  if (!workflowInstanceId) {
+    return null;
+  }
+
+  try {
+    const { destination, apiKey } = await getProcessAutomationDestination();
+
+    const response = await executeHttpRequest(
+      destination,
+      {
+        method: "GET",
+
+        url: WORKFLOW_INSTANCE_ERROR_MESSAGES_PATH(workflowInstanceId),
+
+        params: {
+          environmentId: ENVIRONMENT_ID,
+        },
+
+        headers: {
+          Accept: "application/json",
+
+          "api-key": apiKey,
+        },
+      },
+      { fetchCsrfToken: false },
+    );
+
+    const errorMessages = Array.isArray(response?.data) ? response.data : [];
+
+    if (!errorMessages.length) {
+      return null;
+    }
+
+    const joined = errorMessages
+      .map((entry) =>
+        entry.activityName
+          ? `${entry.activityName}: ${entry.message}`
+          : entry.message,
+      )
+      .filter(Boolean)
+      .join("\n");
+
+    LOG.info(
+      "Workflow instance error messages fetched.",
+      JSON.stringify({ workflowInstanceId, count: errorMessages.length }),
+    );
+
+    return joined || null;
+  } catch (error) {
+    const status = error.response?.status || error.statusCode;
+
+    LOG.error(
+      "Failed to fetch workflow instance error messages.",
+      JSON.stringify({
+        workflowInstanceId,
+        status,
+        message: error.response?.data?.message || error.message,
+      }),
+    );
+
+    return null;
+  }
+}
+
+/**
+ * Fetches the full execution log for a workflow instance from SAP
+ * Build Process Automation, for display as a read-only table on the
+ * Request's Object Page (see WorkflowLogs in service.cds).
+ *
+ * Log entries vary in shape by "type" (WORKFLOW_STARTED,
+ * SERVICETASK_CREATED, USERTASK_CLAIMED, ...); only the fields common
+ * enough to be useful across all of them are surfaced here. "message"
+ * is populated only for entries that carry an error (mirrors what
+ * getWorkflowInstanceErrorMessages shows), left blank otherwise.
+ *
+ * @param {string} workflowInstanceId
+ * @returns {Promise<object[]>} rows shaped for the WorkflowLogs
+ *   entity: {logId, workflowInstanceId, timestamp, type,
+ *   activityName, message}
+ */
+async function getWorkflowInstanceExecutionLogs(workflowInstanceId) {
+  if (!workflowInstanceId) {
+    return [];
+  }
+
+  try {
+    const { destination, apiKey } = await getProcessAutomationDestination();
+
+    const response = await executeHttpRequest(
+      destination,
+      {
+        method: "GET",
+
+        url: WORKFLOW_INSTANCE_EXECUTION_LOGS_PATH(workflowInstanceId),
+
+        headers: {
+          Accept: "application/json",
+
+          "api-key": apiKey,
+        },
+      },
+      { fetchCsrfToken: false },
+    );
+
+    const entries = Array.isArray(response?.data) ? response.data : [];
+
+    LOG.info(
+      "Workflow instance execution logs fetched.",
+      JSON.stringify({ workflowInstanceId, count: entries.length }),
+    );
+
+    return entries.map((entry) => ({
+      logId: String(entry.id ?? ""),
+      workflowInstanceId,
+      timestamp: entry.timestamp || null,
+      type: entry.type || "",
+      activityName: entry.subject || entry.activityId || "",
+      message: (entry.error && entry.error.message) || "",
+    }));
+  } catch (error) {
+    const status = error.response?.status || error.statusCode;
+
+    LOG.error(
+      "Failed to fetch workflow instance execution logs.",
+      JSON.stringify({
+        workflowInstanceId,
+        status,
+        message: error.response?.data?.message || error.message,
+      }),
+    );
+
+    return [];
+  }
+}
+
+/**
  * Queries SAP Build Process Automation for task instances matching
  * the given workflow instance ID, and returns the first task that
  * is still open (awaiting a decision).
@@ -634,5 +987,9 @@ module.exports = {
   getDestinationProperty,
   getOpenTaskForWorkflowInstance,
   hasCompletedTaskForWorkflowInstance,
+  getWorkflowInstanceStatus,
+  getWorkflowInstanceErrorMessages,
+  getWorkflowInstanceExecutionLogs,
+  ERROR_WORKFLOW_STATUSES,
   completeTask,
 };

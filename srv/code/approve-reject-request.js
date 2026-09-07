@@ -387,12 +387,19 @@ async function approveRequest(request) {
   console.log("nextLevel:", nextLevel)
 
   // Stop Update
-  let remainingParallelApproval = false; 
-  if ( currentLevel === 2 && remainingPendingApproval.length > 0) {
-    nextLevel = 2;
+  //
+  // Generalized from a level-2-only check: lettered parallel
+  // sub-levels (e.g. "1A"/"1B"/"1C" - CAP-owned Virement routing's
+  // per-transfer-out-cost-center approvers) need the exact same
+  // "don't advance until every sibling has acted" behavior this
+  // already provided for level 2, at whatever level is currently
+  // active.
+  let remainingParallelApproval = false;
+  if (remainingPendingApproval.length > 0) {
+    nextLevel = currentLevel;
     remainingParallelApproval = true;
   }
-  
+
   const tx = cds.tx(request);
 
   const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
@@ -427,7 +434,8 @@ async function approveRequest(request) {
       UPDATE(Requests)
         .set({
           status_code: newStatusCode,
-          currentApprovalLevel: nextLevel 
+          currentApprovalLevel: nextLevel,
+          workflowStatus: newStatusCode === REQUEST_STATUS.APPROVED ? "COMPLETED" : "RUNNING",
         })
         .where({ ID: requestId })
     );
@@ -630,6 +638,7 @@ async function rejectRequest(request) {
         .set({
           status_code: REQUEST_STATUS.REJECTED,
           approverComment: comment || null,
+          workflowStatus: "REJECTED",
         })
         .where({ ID: requestId }),
     );

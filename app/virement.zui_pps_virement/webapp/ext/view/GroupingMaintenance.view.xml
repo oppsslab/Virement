@@ -1,0 +1,49 @@
+<mvc:View xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:l="sap.ui.layout"
+    xmlns:f="sap.f" controllerName="virement.zuippsvirement.ext.view.GroupingMaintenance"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">
+    <f:DynamicPage id="groupingMaintenanceDynamicPageId" headerExpanded="true" class="epfCustomBackground dynamicPagePadding">
+        <f:title>
+            <f:DynamicPageTitle backgroundDesign="Transparent" class="sapUiLargeMarginTop dynamicPageText">
+                <f:heading>
+                    <Title text="Grouping Maintenance"/>
+                </f:heading>
+                <f:expandedContent>
+                    <Title text="Select a grouping to maintain"/>
+                </f:expandedContent>
+            </f:DynamicPageTitle>
+        </f:title>
+        <f:content>
+            <l:VerticalLayout width="100%" class="gridWrapper">
+                <l:Grid containerQuery="true">
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/glGroupingIcon}" frameType="TwoByOne" press=".onNavigate" app:route="GLGrouping">
+                        <TileContent>
+                            <NewsContent contentText="GL Grouping" subheader="Maintain GL account groupings" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/departmentGroupingIcon}" frameType="TwoByOne" press=".onNavigate" app:route="DepartmentGrouping">
+                        <TileContent>
+                            <NewsContent contentText="Department Grouping" subheader="Maintain cost centre departments" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/functionalDepartmentGroupingIcon}" frameType="TwoByOne" press=".onNavigate" app:route="FunctionalDepartmentGrouping">
+                        <TileContent>
+                            <NewsContent contentText="Functional Department Grouping" subheader="Maintain functional department GL scope" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/buildingGroupingIcon}" frameType="TwoByOne" press=".onNavigate" app:route="BuildingGrouping">
+                        <TileContent>
+                            <NewsContent contentText="Building Grouping" subheader="Maintain cost centre states" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/regionBranchGroupingIcon}" frameType="TwoByOne" press=".onNavigate" app:route="RegionBranchGrouping">
+                        <TileContent>
+                            <NewsContent contentText="Region &amp; Branch Grouping" subheader="Maintain cost centre regions and branches" />
+                        </TileContent>
+                    </GenericTile>
+                </l:Grid>
+            </l:VerticalLayout>
+        </f:content>
+    </f:DynamicPage>
+</mvc:View>

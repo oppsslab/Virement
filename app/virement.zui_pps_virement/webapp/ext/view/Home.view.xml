@@ -61,6 +61,11 @@
                             <NewsContent contentText="Approver Matrix" subheader="Maintain workflow approver" />
                         </TileContent>
                     </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/groupingMaintenanceIcon}" frameType="TwoByOne" press=".onNavigate" app:route="GroupingMaintenance">
+                        <TileContent>
+                            <NewsContent contentText="Grouping Maintenance" subheader="Maintain GL, Department, Functional Department, Building, and Region &amp; Branch groupings" />
+                        </TileContent>
+                    </GenericTile>
                 </l:Grid>
             </l:VerticalLayout>
         </f:content>

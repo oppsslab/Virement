@@ -55,29 +55,29 @@ function resolveRole(roles, userRole) {
 }
 
 /**
- * Serves getApprovers(userRole, departmentBranch) for SAP Build
- * Process Automation: the current, valid approver(s) for a role.
+ * Core lookup: the current, valid Approver Matrix approver(s) for a
+ * role, optionally narrowed to a department/branch. Shared by the
+ * getApprovers OData function (for SAP Build) and any in-process CAP
+ * caller (e.g. requests-calculateValues-logic.js's approver preview),
+ * so both always resolve approvers identically.
  *
- * @param {cds.Request} request
- * @returns {Promise<object[]>}
+ * @param {object} options
+ * @param {object} options.tx - an active cds.tx()
+ * @param {string} options.userRole - role code or display name
+ * @param {string} [options.departmentBranch]
+ * @returns {Promise<object[]>} {emailAddress, name, userRole, departmentBranch}
  */
-module.exports = async function getApprovers(request) {
-  const userRole = request.data?.userRole;
-  const departmentBranch = request.data?.departmentBranch;
-
-  if (!userRole) {
-    return request.error(400, "userRole is required.");
-  }
-
-  const tx = cds.tx(request);
-  const { ApproverMatrix, UserRoles } = cds.entities("ZSVC_PPS_VIREMENT");
+async function resolveApprovers({ tx, userRole, departmentBranch }) {
+  const { ApproverMatrix, ApproverDelegation, UserRoles } = cds.entities(
+    "ZSVC_PPS_VIREMENT",
+  );
 
   const roles = await tx.run(SELECT.from(UserRoles).columns("code", "descr"));
 
   const role = resolveRole(roles, userRole);
 
   if (!role) {
-    LOG.warn(`getApprovers: no matching User Role for "${userRole}".`);
+    LOG.warn(`resolveApprovers: no matching User Role for "${userRole}".`);
 
     return [];
   }
@@ -85,6 +85,7 @@ module.exports = async function getApprovers(request) {
   const rows = await tx.run(
     SELECT.from(ApproverMatrix)
       .columns(
+        "ID",
         "emailAddress",
         "name",
         "departmentBranch",
@@ -116,14 +117,66 @@ module.exports = async function getApprovers(request) {
     return true;
   });
 
+  /*
+   * Substitute each approver with their active delegate, if one is
+   * currently scheduled (see db/schema.cds ApproverDelegation). This
+   * only affects approvers resolved from this point forward - it
+   * does not touch a request already Pending Approval, which was
+   * assigned before the delegation began.
+   */
+  let delegatesByApproverMatrixId = new Map();
+
+  if (approvers.length) {
+    const delegationRows = await tx.run(
+      SELECT.from(ApproverDelegation)
+        .columns("approverMatrix_ID", "delegateEmail", "delegateName")
+        .where({
+          approverMatrix_ID: { in: approvers.map((row) => row.ID) },
+          startDate: { "<=": today },
+          endDate: { ">=": today },
+        }),
+    );
+
+    delegatesByApproverMatrixId = new Map(
+      delegationRows.map((row) => [row.approverMatrix_ID, row]),
+    );
+  }
+
   LOG.info(
-    `getApprovers: role="${userRole}" departmentBranch="${departmentBranch || ""}" -> ${approvers.length} approver(s).`,
+    `resolveApprovers: role="${userRole}" departmentBranch="${departmentBranch || ""}" -> ${approvers.length} approver(s), ${delegatesByApproverMatrixId.size} delegated.`,
   );
 
-  return approvers.map((row) => ({
-    emailAddress: row.emailAddress,
-    name: row.name,
-    userRole: role.descr,
-    departmentBranch: row.departmentBranch,
-  }));
-};
+  return approvers.map((row) => {
+    const delegation = delegatesByApproverMatrixId.get(row.ID);
+
+    return {
+      emailAddress: delegation?.delegateEmail || row.emailAddress,
+      name: delegation?.delegateName || row.name,
+      userRole: role.descr,
+      departmentBranch: row.departmentBranch,
+    };
+  });
+}
+
+/**
+ * Serves getApprovers(userRole, departmentBranch) for SAP Build
+ * Process Automation: the current, valid approver(s) for a role.
+ *
+ * @param {cds.Request} request
+ * @returns {Promise<object[]>}
+ */
+async function getApprovers(request) {
+  const userRole = request.data?.userRole;
+  const departmentBranch = request.data?.departmentBranch;
+
+  if (!userRole) {
+    return request.error(400, "userRole is required.");
+  }
+
+  const tx = cds.tx(request);
+
+  return resolveApprovers({ tx, userRole, departmentBranch });
+}
+
+module.exports = getApprovers;
+module.exports.resolveApprovers = resolveApprovers;

@@ -2,6 +2,12 @@ const cds = require("@sap/cds");
 
 const { applyAgingToRows } = require("./utils/request-aging");
 
+const {
+  getWorkflowInstanceStatus,
+  getWorkflowInstanceErrorMessages,
+  ERROR_WORKFLOW_STATUSES,
+} = require("./utils/workflow-utils");
+
 const LOG = cds.log("requests-drafts-after-read-logic");
 
 // =============================================================================
@@ -10,6 +16,15 @@ const LOG = cds.log("requests-drafts-after-read-logic");
 
 const ROLE_JKEW = "MASS_UPLOAD_ALL";
 const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
+
+const REQUESTS_DATABASE_ENTITY = "ZDB_PPS_VIREMENT.Requests";
+
+/*
+ * workflowStatus values that mean the workflow instance is done and
+ * will never change again - no point calling out to SAP Build to
+ * refresh it once a request reaches one of these.
+ */
+const TERMINAL_WORKFLOW_STATUSES = ["COMPLETED", "REJECTED"];
 
 // =============================================================================
 //  HELPERS
@@ -201,6 +216,106 @@ function applyRoleFlags(row, roleFlags) {
   );
 }
 
+/**
+ * Live-refreshes workflowStatus from SAP Build Process Automation
+ * for a single-entity (Object Page) read, instead of relying on
+ * whatever snapshot CAP last happened to persist. Skipped for list
+ * reads (to avoid one BPA call per row) and for requests already in
+ * a terminal workflow state.
+ *
+ * @param {Object|Object[]} results
+ * @param {cds.Request} request
+ */
+async function refreshLiveWorkflowStatus(results, request) {
+  try {
+    const isSingleEntityRead = Boolean(
+      request.params && request.params.length,
+    );
+
+    if (!isSingleEntityRead) {
+      return;
+    }
+
+    const rows = (Array.isArray(results) ? results : [results]).filter(
+      function (row) {
+        return row && row.ID;
+      },
+    );
+
+    for (const row of rows) {
+      if (!row.workflowInstanceId) {
+        continue;
+      }
+
+      if (TERMINAL_WORKFLOW_STATUSES.includes(row.workflowStatus)) {
+        continue;
+      }
+
+      const liveStatus = await getWorkflowInstanceStatus(
+        row.workflowInstanceId,
+      );
+
+      if (!liveStatus) {
+        continue;
+      }
+
+      const statusChanged = liveStatus !== row.workflowStatus;
+      const isErrorStatus = ERROR_WORKFLOW_STATUSES.includes(liveStatus);
+      const needsErrorFetch = isErrorStatus && !row.workflowError;
+
+      if (!statusChanged && !needsErrorFetch) {
+        continue;
+      }
+
+      const updates = {};
+
+      if (statusChanged) {
+        row.workflowStatus = liveStatus;
+        updates.workflowStatus = liveStatus;
+
+        if (!isErrorStatus && row.workflowError) {
+          row.workflowError = null;
+          updates.workflowError = null;
+        }
+      }
+
+      if (needsErrorFetch) {
+        const workflowError = await getWorkflowInstanceErrorMessages(
+          row.workflowInstanceId,
+        );
+
+        if (workflowError) {
+          row.workflowError = workflowError;
+          updates.workflowError = workflowError;
+        }
+      }
+
+      if (Object.keys(updates).length) {
+        try {
+          await cds.db.run(
+            UPDATE(REQUESTS_DATABASE_ENTITY)
+              .set(updates)
+              .where({ ID: row.ID }),
+          );
+        } catch (error) {
+          LOG.error("Failed to persist refreshed workflow status/error.", {
+            requestId: row.ID,
+            message: error.message,
+          });
+        }
+      }
+    }
+  } catch (error) {
+    /*
+     * Never let a live-status refresh failure disturb the rest of
+     * the read response.
+     */
+    LOG.error("Error refreshing live workflow status (drafts):", {
+      message: error.message,
+    });
+  }
+}
+
 // =============================================================================
 //  MAIN HANDLER
 //
@@ -236,6 +351,14 @@ module.exports = async function (results, request) {
   } catch (error) {
     LOG.error("Error computing request aging on drafts read:", error);
   }
+
+  /*
+   * Live-refresh workflowStatus from SAP Build when a single request
+   * is opened (Object Page), rather than showing whatever snapshot
+   * was last persisted. Self-contained (never throws), independent
+   * of the role-flag/aging logic above and below.
+   */
+  await refreshLiveWorkflowStatus(results, request);
 
   try {
     const roleFlags = getUserRoleFlags(request.user);

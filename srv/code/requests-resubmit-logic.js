@@ -164,19 +164,54 @@ module.exports = async function (request) {
     const lineitemCostCenter = createdRequestItems?.[0]?.costCentre || "";
 
     // Add filter for Transfer Out Items
-    // const transferOutCostCenter = createdRequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || [];
-    const transferOutCostCenter = [
-      ...new Set(
-        createdRequestItems?.filter(x => Number(x.transferOutAmount))
-          ?.map(x => x.costCentre) || []
-      )
-    ];
+    // V2: single transfer-out line item's Cost Centre (1st line only).
+    const transferOutCostCenter =
+      createdRequestItems?.find(x => Number(x.transferOutAmount))?.costCentre || "";
 
     const projectType = createdRequest.budgetType_code || "";
 
-    const requestAmount = Number(createdRequest.transferOutAmount) || 0;
+    // Supplement (S) and Return (R) requests report their total via
+    // supplementAmount / returnAmount instead of transferOutAmount
+    // when calling the approval workflow.
+    let requestAmount;
+    if (requestType === "S") {
+      requestAmount = Number(createdRequest.supplementAmount) || 0;
+    } else if (requestType === "R") {
+      requestAmount = Number(createdRequest.returnAmount) || 0;
+    } else {
+      requestAmount = Number(createdRequest.transferOutAmount) || 0;
+    }
 
     const requestor = resolveRequestor(createdRequest, request);
+
+    const creationDate =
+      createdRequest.submissionDate ||
+      createdRequest.createdAt ||
+      new Date().toISOString();
+
+    // V2: single transfer-out line item's GL account.
+    const transferOutGl =
+      createdRequestItems?.find(x => Number(x.transferOutAmount))?.glAccount || "";
+
+    // V2: up to 5 transfer-in line items, indexed into fixed slots.
+    const transferInItems =
+      createdRequestItems?.filter(x => Number(x.transferInAmount)) || [];
+
+    const [
+      transferInCostCenter1,
+      transferInCostCenter2,
+      transferInCostCenter3,
+      transferInCostCenter4,
+      transferInCostCenter5,
+    ] = [0, 1, 2, 3, 4].map(i => transferInItems[i]?.costCentre || "");
+
+    const [
+      transferInGl1,
+      transferInGl2,
+      transferInGl3,
+      transferInGl4,
+      transferInGl5,
+    ] = [0, 1, 2, 3, 4].map(i => transferInItems[i]?.glAccount || "");
 
     const workFlowInstanceId = createdRequestItems.workflowInstanceId;
     LOG.info(
@@ -190,7 +225,19 @@ module.exports = async function (request) {
         lineitemCostCenter,
         transferOutCostCenter,
         projectType,
-        requestAmount
+        requestAmount,
+        transferOutGl,
+        transferInCostCenter1,
+        transferInCostCenter2,
+        transferInCostCenter3,
+        transferInCostCenter4,
+        transferInCostCenter5,
+        transferInGl1,
+        transferInGl2,
+        transferInGl3,
+        transferInGl4,
+        transferInGl5,
+        creationDate,
       }),
     );
 
@@ -233,7 +280,19 @@ module.exports = async function (request) {
       lineitemCostCenter,
       transferOutCostCenter,
       projectType,
-      requestAmount
+      requestAmount,
+      transferOutGl,
+      transferInCostCenter1,
+      transferInCostCenter2,
+      transferInCostCenter3,
+      transferInCostCenter4,
+      transferInCostCenter5,
+      transferInGl1,
+      transferInGl2,
+      transferInGl3,
+      transferInGl4,
+      transferInGl5,
+      creationDate,
     });
 
     const workflowInstanceId =
@@ -256,7 +315,13 @@ module.exports = async function (request) {
 
     if (workflowInstanceId) {
       await tx.run(
-        UPDATE(Requests).set({ workflowInstanceId, status_code: REQUEST_STATUS.PENDING_APPROVAL }).where({ ID: requestId }),
+        UPDATE(Requests)
+          .set({
+            workflowInstanceId,
+            workflowStatus: workflowInstance.status || null,
+            status_code: REQUEST_STATUS.PENDING_APPROVAL,
+          })
+          .where({ ID: requestId }),
       );
 
       await tx.run(

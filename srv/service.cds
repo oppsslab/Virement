@@ -64,13 +64,14 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         ]},
 
         /*
-         * Only the assigned approver can approve/reject a pending approval request.
+         * Only the assigned approver can approve/reject/delegate a pending approval request.
          */
         {
             grant: [
                 'approveRequest',
                 'rejectRequest',
-                'postToS4'
+                'postToS4',
+                'delegateApproval'
             ],
             to   : 'REQUEST_APPROVE',
             where: 'status_code = 2 and exists RequestApprovers[emailAddress = $user]'
@@ -82,7 +83,17 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             *,
             virtual isPendingApprover : Boolean default false,
             virtual isJKEW            : Boolean,
-            virtual isFunctional      : Boolean
+            virtual isFunctional      : Boolean,
+            /*
+             * Live workflow execution log, read straight from SAP Build
+             * Process Automation (see WorkflowLogs below) rather than
+             * stored - this is an unmanaged association purely so the
+             * Object Page can show it as a facet; workflow-logs-read-logic.js
+             * resolves the actual rows for whichever workflowInstanceId
+             * this filters on.
+             */
+            WorkflowLogs              : Association to many WorkflowLogs
+                                             on WorkflowLogs.workflowInstanceId = workflowInstanceId
         }
         actions {
             action calculateValues()                 returns Requests;
@@ -96,6 +107,11 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             action rejectRequest(
                                  @title: 'Reason'
                                  comment: String)    returns Requests;
+
+            @requires: ['REQUEST_APPROVE']
+            action delegateApproval(
+                                 @title: 'Delegate To'
+                                 delegateEmail: String) returns Requests;
 
             action uploadItems(content: LargeString) returns Requests;
 
@@ -224,6 +240,29 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             fullName     : String(200);
     }
 
+    /*
+     * Workflow execution log, read live from SAP Build Process
+     * Automation's GET /workflow-instances/{id}/execution-logs, for
+     * display as an Object Page facet on Requests (see the
+     * WorkflowLogs association there). Not persisted: every read is
+     * a call to SAP Build, scoped to whichever workflowInstanceId
+     * the incoming request filters on (workflow-logs-read-logic.js).
+     */
+    @readonly
+    @cds.persistence.skip
+    @cds.redirection.target: false
+    entity WorkflowLogs {
+        key logId              : String(50);
+            workflowInstanceId : String(36);
+            // Timestamp (not DateTime): SAP Build's execution log
+            // entries carry millisecond precision ("...046Z"), which
+            // DateTime's second-only precision cannot round-trip.
+            timestamp          : Timestamp;
+            type               : String(100);
+            activityName       : String(200);
+            message            : String(1000);
+    }
+
     action assignApprovers(requestId: UUID,
                            level: String,
                            approvers: array of {
@@ -250,6 +289,12 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
     @odata.draft.enabled
     entity ApproverMatrix as projection on my.ApproverMatrix;
 
+    /*
+     * Access follows the parent ApproverMatrix row (same pattern as
+     * RequestItems under Requests): no separate restrict block here.
+     */
+    entity ApproverDelegation as projection on my.ApproverDelegation;
+
     @requires: ['VR_ADMIN']
     action downloadApproverMatrixTemplate() returns TemplateFile;
 
@@ -263,6 +308,159 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             isActive         : Boolean;
             startDate        : Date;
             endDate          : Date;
+        };
+    };
+
+    /*
+     * GL Grouping - reference data maintained by admins mapping each
+     * GL Account to its GL Group, for Virement approval routing.
+     * Reading is open to any authenticated user; maintaining it
+     * (create/update/delete) is restricted to VR_ADMIN, same as the
+     * Approver Matrix above.
+     */
+    @(restrict: [
+        {grant: 'READ'},
+        {
+            grant: ['CREATE', 'UPDATE', 'DELETE'],
+            to   : 'VR_ADMIN'
+        },
+    ])
+    @odata.draft.enabled
+    entity GLGrouping as projection on my.GLGrouping;
+
+    @requires: ['VR_ADMIN']
+    action downloadGLGroupingTemplate() returns TemplateFile;
+
+    @requires: ['VR_ADMIN']
+    action uploadGLGrouping(content: LargeString) returns {
+        rows : array of {
+            expenditureGroup     : String;
+            glGroup              : String;
+            glAccount            : String;
+            glAccountDescription : String;
+            assetType            : String;
+            functional           : String;
+        };
+    };
+
+    /*
+     * Department Grouping - reference data maintained by admins
+     * mapping each Cost Centre to its Department, for Virement
+     * approval routing. Reading is open to any authenticated user;
+     * maintaining it (create/update/delete) is restricted to
+     * VR_ADMIN, same as the Approver Matrix / GL Grouping above.
+     */
+    @(restrict: [
+        {grant: 'READ'},
+        {
+            grant: ['CREATE', 'UPDATE', 'DELETE'],
+            to   : 'VR_ADMIN'
+        },
+    ])
+    @odata.draft.enabled
+    entity DepartmentGrouping as projection on my.DepartmentGrouping;
+
+    @requires: ['VR_ADMIN']
+    action downloadDepartmentGroupingTemplate() returns TemplateFile;
+
+    @requires: ['VR_ADMIN']
+    action uploadDepartmentGrouping(content: LargeString) returns {
+        rows : array of {
+            department            : String;
+            costCentre            : String;
+            costCentreDescription : String;
+        };
+    };
+
+    /*
+     * Functional Department Grouping - reference data maintained by
+     * admins listing each functional department, the GL Accounts it
+     * covers, and its Fund Centre scope, for Virement approval
+     * routing. Reading is open to any authenticated user; maintaining
+     * it (create/update/delete) is restricted to VR_ADMIN, same as
+     * the Approver Matrix / GL Grouping / Department Grouping above.
+     */
+    @(restrict: [
+        {grant: 'READ'},
+        {
+            grant: ['CREATE', 'UPDATE', 'DELETE'],
+            to   : 'VR_ADMIN'
+        },
+    ])
+    @odata.draft.enabled
+    entity FunctionalDepartmentGrouping as projection on my.FunctionalDepartmentGrouping;
+
+    @requires: ['VR_ADMIN']
+    action downloadFunctionalDepartmentGroupingTemplate() returns TemplateFile;
+
+    @requires: ['VR_ADMIN']
+    action uploadFunctionalDepartmentGrouping(content: LargeString) returns {
+        rows : array of {
+            functionalDepartment : String;
+            itemType             : String;
+            glAccounts           : String;
+            fundCentreScope      : String;
+            remarks              : String;
+        };
+    };
+
+    /*
+     * Building Grouping - reference data maintained by admins mapping
+     * each Cost Centre to its State, for Virement approval routing.
+     * Reading is open to any authenticated user; maintaining it
+     * (create/update/delete) is restricted to VR_ADMIN, same as the
+     * other grouping tables above.
+     */
+    @(restrict: [
+        {grant: 'READ'},
+        {
+            grant: ['CREATE', 'UPDATE', 'DELETE'],
+            to   : 'VR_ADMIN'
+        },
+    ])
+    @odata.draft.enabled
+    entity BuildingGrouping as projection on my.BuildingGrouping;
+
+    @requires: ['VR_ADMIN']
+    action downloadBuildingGroupingTemplate() returns TemplateFile;
+
+    @requires: ['VR_ADMIN']
+    action uploadBuildingGrouping(content: LargeString) returns {
+        rows : array of {
+            state                 : String;
+            costCentre            : String;
+            costCentreDescription : String;
+        };
+    };
+
+    /*
+     * Region & Branch Grouping - reference data maintained by admins
+     * mapping each Cost Centre to its Region, State, and Branch, for
+     * Virement approval routing. Reading is open to any authenticated
+     * user; maintaining it (create/update/delete) is restricted to
+     * VR_ADMIN, same as the other grouping tables above.
+     */
+    @(restrict: [
+        {grant: 'READ'},
+        {
+            grant: ['CREATE', 'UPDATE', 'DELETE'],
+            to   : 'VR_ADMIN'
+        },
+    ])
+    @odata.draft.enabled
+    entity RegionBranchGrouping as projection on my.RegionBranchGrouping;
+
+    @requires: ['VR_ADMIN']
+    action downloadRegionBranchGroupingTemplate() returns TemplateFile;
+
+    @requires: ['VR_ADMIN']
+    action uploadRegionBranchGrouping(content: LargeString) returns {
+        rows : array of {
+            region                : String;
+            state                 : String;
+            branch                : String;
+            costCentre            : String;
+            costCentreDescription : String;
         };
     };
 
@@ -288,5 +486,23 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         name             : String;
         userRole         : String;
         departmentBranch : String;
+    };
+
+    /*
+     * For SAP Build Process Automation: reads back the approver
+     * email address(es) CAP has already assigned to a request at a
+     * given level, instead of the workflow deciding them itself via
+     * its own decision table. Used for (requestType, budgetType)
+     * combinations already migrated into CAP (see
+     * srv/code/utils/approver-routing.js) - e.g. Supplement + Non
+     * Project, where CAP assigns the Level 1 approver before the
+     * workflow even starts, so the requestor can see it before
+     * submitting.
+     */
+    function getRequestApprovers(
+        requestId : UUID,
+        level     : String
+    ) returns array of {
+        emailAddress : String;
     };
 }

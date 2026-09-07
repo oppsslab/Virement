@@ -60,6 +60,14 @@ const BUDGET_TYPE_PROJECT = "P";
  */
 const MATERIAL_GL_MATCH_LENGTH = 6;
 
+/*
+ * Maximum amount allowed on Project budget type requests:
+ *   - Virement (T): total Transfer Out Amount
+ *   - Supplement (S): total Supplement Amount
+ * Non Project requests of either type are unaffected.
+ */
+const MAX_PROJECT_BUDGET_AMOUNT = 5000000;
+
 /* ------------------------------------------------------------------ *
  * Role helpers
  * ------------------------------------------------------------------ */
@@ -335,6 +343,7 @@ async function fetchRequestItems({ tx, RequestItems, request, requestId }) {
         // utils/earmarked-funds.js). Harmless for the WBS / Material-GL
         // validations, which read only the fields above.
         "costCentre",
+        "transferInAmount",
         "transferOutAmount",
         "description",
       )
@@ -524,6 +533,225 @@ async function validateCostCentresExist(request, { items }) {
       400,
       `Cost Centre ${invalidCodes} is not valid. Please select a Cost ` +
         "Centre from the search help.",
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validates that no Request Item carries both a Transfer In Amount
+ * and a Transfer Out Amount at the same time. Applies to Virement
+ * (T) requests only.
+ *
+ * @param {cds.Request} request
+ * @param {object} options
+ * @param {object[]} options.items
+ * @param {string} options.requestTypeCode
+ * @returns {boolean}
+ */
+function validateVirementTransferInOutExclusivity(
+  request,
+  { items, requestTypeCode },
+) {
+  const type = String(requestTypeCode || "").trim().toUpperCase();
+
+  if (type !== REQUEST_TYPE_TRANSFER) {
+    return true;
+  }
+
+  const conflictingItems = (items || []).filter(function (item) {
+    return Number(item.transferInAmount) > 0 && Number(item.transferOutAmount) > 0;
+  });
+
+  if (conflictingItems.length > 0) {
+    const conflictingItemIds = conflictingItems
+      .map(function (item, index) {
+        return item.ID || `#${index + 1}`;
+      })
+      .join(", ");
+
+    LOG.error(
+      "Transfer In Amount and Transfer Out Amount are both filled on " +
+        "items:",
+      conflictingItemIds,
+    );
+
+    request.error(
+      400,
+      "Transfer In Amount and Transfer Out Amount cannot both be filled " +
+        "on the same Request Item.",
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validates the number of Request Items carrying a Transfer In
+ * Amount (min 1, max 5) and Transfer Out Amount (min 1, max 5) on
+ * Virement (T) requests. Up to 5 distinct Transfer Out cost centers
+ * matches the "Head of Transfer-out Cost Center" approver being
+ * resolved per cost center in the approval routing (see
+ * utils/virement-scenario.js).
+ *
+ * @param {cds.Request} request
+ * @param {object} options
+ * @param {object[]} options.items
+ * @param {string} options.requestTypeCode
+ * @returns {boolean}
+ */
+function validateVirementItemCounts(request, { items, requestTypeCode }) {
+  const type = String(requestTypeCode || "").trim().toUpperCase();
+
+  if (type !== REQUEST_TYPE_TRANSFER) {
+    return true;
+  }
+
+  const transferInCount = (items || []).filter(function (item) {
+    return Number(item.transferInAmount) > 0;
+  }).length;
+
+  const transferOutCount = (items || []).filter(function (item) {
+    return Number(item.transferOutAmount) > 0;
+  }).length;
+
+  if (transferInCount < 1 || transferInCount > 5) {
+    LOG.error(
+      "Invalid Transfer In line item count for Virement request:",
+      transferInCount,
+    );
+
+    request.error(
+      400,
+      "A Virement request must have between 1 and 5 Request Items with " +
+        "a Transfer In Amount.",
+    );
+
+    return false;
+  }
+
+  if (transferOutCount < 1 || transferOutCount > 5) {
+    LOG.error(
+      "Invalid Transfer Out line item count for Virement request:",
+      transferOutCount,
+    );
+
+    request.error(
+      400,
+      "A Virement request must have between 1 and 5 Request Items with " +
+        "a Transfer Out Amount.",
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validates that the total Transfer Out Amount equals the total
+ * Transfer In Amount across all Request Items. Applies to Virement
+ * (T) requests only.
+ *
+ * @param {cds.Request} request
+ * @param {object} options
+ * @param {object[]} options.items
+ * @param {string} options.requestTypeCode
+ * @returns {boolean}
+ */
+function validateVirementAmountsBalance(request, { items, requestTypeCode }) {
+  const type = String(requestTypeCode || "").trim().toUpperCase();
+
+  if (type !== REQUEST_TYPE_TRANSFER) {
+    return true;
+  }
+
+  const totalTransferIn = (items || []).reduce(function (sum, item) {
+    return sum + Number(item.transferInAmount || 0);
+  }, 0);
+
+  const totalTransferOut = (items || []).reduce(function (sum, item) {
+    return sum + Number(item.transferOutAmount || 0);
+  }, 0);
+
+  if (Math.abs(totalTransferIn - totalTransferOut) > 0.01) {
+    LOG.error(
+      "Transfer In / Out totals do not balance for Virement request:",
+      JSON.stringify({ totalTransferIn, totalTransferOut }),
+    );
+
+    request.error(
+      400,
+      "Total Transfer Out Amount must equal Total Transfer In Amount.",
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validates that the request-type-relevant total does not exceed
+ * MAX_PROJECT_BUDGET_AMOUNT when Budget Type is Project (P):
+ *   - Virement (T): total Transfer Out Amount
+ *   - Supplement (S): total Supplement Amount
+ *
+ * Non Project requests, and request types other than Virement/
+ * Supplement, are unaffected. Must run after the amounts have been
+ * calculated (calculateAmountsByType), since it needs the final
+ * totals rather than raw per-item values.
+ *
+ * @param {cds.Request} request
+ * @param {object} options
+ * @param {string} options.requestTypeCode
+ * @param {string} options.budgetTypeCode
+ * @param {object} options.amounts - the object returned by
+ *   calculateAmountsByType ({supplementAmount, transferOutAmount, ...})
+ * @returns {boolean}
+ */
+function validateMaxAmountForProjectBudget(
+  request,
+  { requestTypeCode, budgetTypeCode, amounts },
+) {
+  const type = String(requestTypeCode || "").trim().toUpperCase();
+
+  const budgetType = String(budgetTypeCode || "").trim().toUpperCase();
+
+  if (budgetType !== BUDGET_TYPE_PROJECT) {
+    return true;
+  }
+
+  let total;
+
+  let amountLabel;
+
+  if (type === REQUEST_TYPE_TRANSFER) {
+    total = Number(amounts.transferOutAmount) || 0;
+
+    amountLabel = "Total Transfer Out Amount";
+  } else if (type === REQUEST_TYPE_SUPPLEMENT) {
+    total = Number(amounts.supplementAmount) || 0;
+
+    amountLabel = "Total Supplement Amount";
+  } else {
+    return true;
+  }
+
+  if (total > MAX_PROJECT_BUDGET_AMOUNT) {
+    LOG.error(
+      `${amountLabel} exceeds the maximum allowed for Project budget type:`,
+      total,
+    );
+
+    request.error(
+      400,
+      `${amountLabel} cannot exceed ${MAX_PROJECT_BUDGET_AMOUNT.toLocaleString("en-US")} for Project budget type.`,
     );
 
     return false;
@@ -1179,6 +1407,53 @@ module.exports = async function (request) {
     }
 
     /*
+     * Validate that no item has both Transfer In and Transfer Out
+     * Amounts filled. Applies to Virement (T) requests only.
+     */
+    const isTransferExclusivityValid = validateVirementTransferInOutExclusivity(
+      request,
+      { items: requestItems, requestTypeCode },
+    );
+
+    if (!isTransferExclusivityValid) {
+      LOG.error(
+        "Request failed Transfer In / Out mutual exclusivity validation.",
+      );
+
+      return;
+    }
+
+    /*
+     * Validate the number of Transfer In (1-5) and Transfer Out
+     * (exactly 1) line items. Applies to Virement (T) requests only.
+     */
+    const isVirementItemCountValid = validateVirementItemCounts(request, {
+      items: requestItems,
+      requestTypeCode,
+    });
+
+    if (!isVirementItemCountValid) {
+      LOG.error("Request failed Virement line item count validation.");
+
+      return;
+    }
+
+    /*
+     * Validate that total Transfer Out Amount equals total Transfer
+     * In Amount. Applies to Virement (T) requests only.
+     */
+    const isVirementBalanceValid = validateVirementAmountsBalance(request, {
+      items: requestItems,
+      requestTypeCode,
+    });
+
+    if (!isVirementBalanceValid) {
+      LOG.error("Request failed Virement Transfer In / Out balance validation.");
+
+      return;
+    }
+
+    /*
      * 1. Set request status to Pending Approval.
      */
     request.data.status_code = REQUEST_STATUS.PENDING_APPROVAL;
@@ -1239,6 +1514,23 @@ module.exports = async function (request) {
     request.data.transferOutAmount = amounts.transferOutAmount;
 
     LOG.info("Calculated amounts:", JSON.stringify(amounts));
+
+    /*
+     * 5. Validate that the Project budget type amount cap is not
+     * exceeded (Virement: Transfer Out Amount; Supplement: Supplement
+     * Amount). Must run after amounts are calculated above.
+     */
+    const isMaxAmountValid = validateMaxAmountForProjectBudget(request, {
+      requestTypeCode,
+      budgetTypeCode,
+      amounts,
+    });
+
+    if (!isMaxAmountValid) {
+      LOG.error("Request failed Project budget type maximum amount validation.");
+
+      return;
+    }
 
     /*
      * 6. Generate the request number when it is not

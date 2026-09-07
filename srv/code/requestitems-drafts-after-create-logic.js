@@ -1,7 +1,10 @@
 const cds = require("@sap/cds");
 const { recalcAmountsByType } = require("./utils/recalc-total-logic");
+const { refreshDraftApproverPreview } = require("./utils/apply-approver-plan");
 
 const LOG = cds.log("requestitems-drafts-after-create-logic");
+
+const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
 /* ------------------------------------------------------------------ *
  * Parent resolution helper
@@ -27,6 +30,11 @@ function resolveParentRequestId(data) {
  *
  * Calculates (independent sums, not combined):
  *   - supplementAmount, returnAmount, transferInAmount, transferOutAmount
+ *
+ * Also refreshes the CAP-owned approver preview (see
+ * utils/apply-approver-plan.js) using the freshly recalculated
+ * amount, so requestors see the resolved approver as soon as they add
+ * a line item - without needing to press the Calculate button.
  *
  * @param {object} data - the created item (carries request_ID)
  * @param {cds.Request} request
@@ -59,6 +67,19 @@ module.exports = async function (data, request) {
       "Recalculation completed for request",
       `${requestId}: ${JSON.stringify(amounts)}`,
     );
+
+    // 3. Refresh the CAP-owned approver preview against the new totals.
+    const tx = cds.tx(request);
+
+    const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
+
+    await refreshDraftApproverPreview({
+      tx,
+      RequestsDraft: Requests.drafts,
+      RequestApproversDraft: RequestApprovers.drafts,
+      requestId,
+      amounts,
+    });
 
     LOG.info("--- AFTER CREATE RequestItems.drafts ended successfully ---");
   } catch (error) {

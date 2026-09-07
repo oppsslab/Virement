@@ -9,6 +9,8 @@ const {
 
 const { startApprovalWorkflow } = require("./utils/workflow-utils");
 
+const { applyApproverPlan } = require("./utils/apply-approver-plan");
+
 const { REQUEST_STATUS } = require("./utils/request-status");
 
 const LOG = cds.log("requests-after-create-logic");
@@ -116,9 +118,19 @@ function getWorkflowErrorStatus(error) {
  * 2. Inserts the SUBMITTED history entry.
  * 3. Starts the SAP Build Process Automation workflow.
  *
- * IMPORTANT: This handler does NOT retrieve or persist Level 1
- * approvers. Polling the workflow instance context REST API was
- * attempted, but SAP Build Process Automation rejected it with:
+ * IMPORTANT: For the request types covered by utils/approver-routing.js
+ * (currently: all Supplement requests, and all Return requests,
+ * regardless of Project vs Non Project budget type), this handler
+ * resolves and persists the Level 1 approver(s) itself (see
+ * applyApproverPlan below), and SAP Build's workflow reads that
+ * assignment back from the Request instead of deciding it via its own
+ * decision table - so the workflow must NOT also call assignApprovers
+ * for those cases, to avoid a duplicate/conflicting Level 1 row.
+ *
+ * For every other combination (not yet migrated into CAP), this
+ * handler does NOT retrieve or persist approvers. Polling the
+ * workflow instance context REST API was attempted, but SAP Build
+ * Process Automation rejected it with:
  *
  *   bpm.workflowruntime.rest.user.not.sufficient.privileges
  *
@@ -183,21 +195,69 @@ module.exports = async function (results, request) {
         createdRequest.RequestItems?.[0]?.costCentre || request.data?.RequestItems?.[0]?.costCentre || "";
 
     // Add filter for Transfer Out Items
+    // V2: single transfer-out line item's Cost Centre (1st line only).
     const transferOutCostCenter =
-      // createdRequest.RequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || request.data?.RequestItems?.filter(x => Number(x.transferOutAmount))?.map(x => x.costCentre) || [];
-      [...new Set(
-        createdRequest.RequestItems?.filter(x => Number(x.transferOutAmount)).map(x => x.costCentre)
-          || request.data?.RequestItems?.filter(x => Number(x.transferOutAmount)).map(x => x.costCentre)
-          || []
-      )];
+      createdRequest.RequestItems?.find(x => Number(x.transferOutAmount))?.costCentre
+        || request.data?.RequestItems?.find(x => Number(x.transferOutAmount))?.costCentre
+        || "";
 
-    const projectType = 
+    const projectType =
       createdRequest.budgetType_code || request.data?.budgetType_code || "";
 
-    const requestAmount = 
-      Number(createdRequest.transferOutAmount) || Number(request.data?.transferOutAmount) || 0;
+    // Supplement (S) and Return (R) requests report their total via
+    // supplementAmount / returnAmount instead of transferOutAmount
+    // when calling the approval workflow.
+    let requestAmount;
+    if (requestType === "S") {
+      requestAmount =
+        Number(createdRequest.supplementAmount) || Number(request.data?.supplementAmount) || 0;
+    } else if (requestType === "R") {
+      requestAmount =
+        Number(createdRequest.returnAmount) || Number(request.data?.returnAmount) || 0;
+    } else {
+      requestAmount =
+        Number(createdRequest.transferOutAmount) || Number(request.data?.transferOutAmount) || 0;
+    }
+
+    // request.data.submissionDate is set explicitly just above in
+    // requests-before-create-logic.js, so it's reliably present here -
+    // unlike createdAt, which this draft-activate flow's AFTER CREATE
+    // results do not reliably carry.
+    const creationDate =
+      request.data?.submissionDate ||
+      createdRequest.createdAt ||
+      request.data?.createdAt ||
+      new Date().toISOString();
 
     const requestor = resolveRequestor(createdRequest, request);
+
+    // V2: single transfer-out line item's GL account.
+    const transferOutGl =
+      createdRequest.RequestItems?.find(x => Number(x.transferOutAmount))?.glAccount
+        || request.data?.RequestItems?.find(x => Number(x.transferOutAmount))?.glAccount
+        || "";
+
+    // V2: up to 5 transfer-in line items, indexed into fixed slots.
+    const transferInItems =
+      createdRequest.RequestItems?.filter(x => Number(x.transferInAmount))
+        || request.data?.RequestItems?.filter(x => Number(x.transferInAmount))
+        || [];
+
+    const [
+      transferInCostCenter1,
+      transferInCostCenter2,
+      transferInCostCenter3,
+      transferInCostCenter4,
+      transferInCostCenter5,
+    ] = [0, 1, 2, 3, 4].map(i => transferInItems[i]?.costCentre || "");
+
+    const [
+      transferInGl1,
+      transferInGl2,
+      transferInGl3,
+      transferInGl4,
+      transferInGl5,
+    ] = [0, 1, 2, 3, 4].map(i => transferInItems[i]?.glAccount || "");
 
     LOG.info(
       "Resolved created request:",
@@ -210,7 +270,19 @@ module.exports = async function (results, request) {
         lineitemCostCenter,
         transferOutCostCenter,
         projectType,
-        requestAmount
+        requestAmount,
+        transferOutGl,
+        transferInCostCenter1,
+        transferInCostCenter2,
+        transferInCostCenter3,
+        transferInCostCenter4,
+        transferInCostCenter5,
+        transferInGl1,
+        transferInGl2,
+        transferInGl3,
+        transferInGl4,
+        transferInGl5,
+        creationDate,
       }),
     );
 
@@ -253,6 +325,77 @@ module.exports = async function (results, request) {
     }
 
     /*
+     * 2b. Apply the CAP-owned approval plan, when this request's
+     * (requestType, budgetType) matches a rule already migrated from
+     * SAP Build's decision tables (see utils/approver-routing.js).
+     * Must happen before the workflow starts, since the workflow's
+     * own Supplement branch now reads the Level 1 approver(s) back
+     * from the Request rather than deciding them itself.
+     */
+    const tx = cds.tx(request);
+
+    const { Requests, RequestApprovers, RequestItems } =
+      cds.entities(SERVICE_NAMESPACE);
+
+    /*
+     * Only Virement (Transfer) routing needs the full item list (see
+     * utils/virement-scenario.js) - fetched fresh from the DB rather
+     * than off createdRequest/request.data, since either may omit a
+     * deep-insert's items depending on how Fiori Elements shaped the
+     * activation payload.
+     */
+    let approvalPlanItems;
+
+    if (requestType === "T") {
+      approvalPlanItems = await tx.run(
+        SELECT.from(RequestItems)
+          .columns(
+            "costCentre",
+            "glGroup",
+            "department",
+            "region",
+            "branch",
+            "functionalDepartment",
+            "transferInAmount",
+            "transferOutAmount",
+          )
+          .where({ request_ID: requestId })
+          .orderBy("srNo"),
+      );
+    }
+
+    const appliedApproverPlan = await applyApproverPlan({
+      tx,
+      RequestApproversTarget: RequestApprovers,
+      requestId,
+      requestTypeCode: requestType,
+      budgetTypeCode: projectType,
+      amount: requestAmount,
+      items: approvalPlanItems,
+    });
+
+    for (const { level, emails } of appliedApproverPlan) {
+      if (level.startsWith("1")) {
+        await tx.run(
+          UPDATE(Requests)
+            .set({ currentApprovalLevel: 1 })
+            .where({ ID: requestId }),
+        );
+      }
+
+      await insertRequestHistory(
+        request,
+        requestId,
+        `Level ${level} approvers assigned: ${emails.join(", ")}`,
+      );
+    }
+
+    LOG.info(
+      "CAP-owned approval plan applied at submit:",
+      JSON.stringify(appliedApproverPlan),
+    );
+
+    /*
      * 3. Start the approval workflow.
      *
      * This is intentionally awaited inside the current handler.
@@ -277,7 +420,20 @@ module.exports = async function (results, request) {
       lineitemCostCenter,
       transferOutCostCenter,
       projectType,
-      requestAmount
+      requestAmount,
+      transferOutGl,
+      transferInCostCenter1,
+      transferInCostCenter2,
+      transferInCostCenter3,
+      transferInCostCenter4,
+      transferInCostCenter5,
+      transferInGl1,
+      transferInGl2,
+      transferInGl3,
+      transferInGl4,
+      transferInGl5,
+      creationDate,
+      appliedApproverPlan,
     });
 
     const workflowInstanceId =
@@ -297,12 +453,13 @@ module.exports = async function (results, request) {
     );
 
     if (workflowInstanceId) {
-      const tx = cds.tx(request);
-
-      const { Requests } = cds.entities(SERVICE_NAMESPACE);
-
       await tx.run(
-        UPDATE(Requests).set({ workflowInstanceId }).where({ ID: requestId }),
+        UPDATE(Requests)
+          .set({
+            workflowInstanceId,
+            workflowStatus: workflowInstance.status || null,
+          })
+          .where({ ID: requestId }),
       );
     } else {
       LOG.warn(
@@ -313,10 +470,12 @@ module.exports = async function (results, request) {
     }
 
     /*
-     * Level 1 approvers are NOT assigned here. They will arrive
-     * later via the assignApprovers action, called by the
-     * workflow's own Service/Script Task once the Level 1
-     * decision table resolves.
+     * For (requestType, budgetType) combinations not covered by
+     * utils/approver-routing.js, Level 1 (and other level) approvers
+     * are NOT assigned here. They arrive later via the assignApprovers
+     * action, called by the workflow's own Service/Script Task once
+     * its decision table resolves. Combinations that ARE covered were
+     * already handled above, at step 2b, before the workflow started.
      */
 
     LOG.info("--- AFTER CREATE Requests ended successfully ---");

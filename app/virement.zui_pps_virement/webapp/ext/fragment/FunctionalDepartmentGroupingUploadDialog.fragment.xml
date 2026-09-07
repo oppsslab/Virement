@@ -1,0 +1,16 @@
+<core:FragmentDefinition xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:u="sap.ui.unified">
+    <Dialog id="functionalDepartmentGroupingUploadDialog" title="{i18n>UploadTemplate}" contentWidth="420px">
+        <VBox class="sapUiTinyMargin">
+            <Text text="{i18n>UploadFunctionalDepartmentGroupingHint}" />
+            <u:FileUploader id="functionalDepartmentGroupingFileUploader" name="functionalDepartmentGroupingUpload" fileType="xlsx" placeholder="{i18n>ChooseFile}" class="sapUiSmallMarginTop" width="100%" />
+        </VBox>
+        <beginButton>
+            <Button id="confirmFunctionalDepartmentGroupingUploadBtn" text="{i18n>Upload}" type="Emphasized" />
+        </beginButton>
+        <endButton>
+            <Button id="cancelFunctionalDepartmentGroupingUploadBtn" text="{i18n>Cancel}" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

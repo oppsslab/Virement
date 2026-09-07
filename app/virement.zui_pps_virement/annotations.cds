@@ -209,15 +209,13 @@ annotate service.Requests with @(
     ],
 
     /*
-     * Default sort for the list reports: newest request number first.
-     * Request numbers are issued in sequence, so descending order puts
-     * the most recent requests at the top.
+     * Default sort for the list reports: latest submission date first.
      */
     UI.PresentationVariant: {
         $Type         : 'UI.PresentationVariantType',
         SortOrder     : [{
             $Type     : 'Common.SortOrderType',
-            Property  : requestNumber,
+            Property  : submissionDate,
             Descending: true
         }],
         Visualizations: ['@UI.LineItem']
@@ -347,6 +345,25 @@ annotate service.Requests with @(
                 ]}
             ]}}
         },
+        {
+            $Type        : 'UI.DataFieldForAction',
+            Action       : 'service.delegateApproval',
+            Label        : '{i18n>Delegate}',
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Ne: [
+                    {$Path: 'status_code'},
+                    2
+                ]},
+                {$Eq: [
+                    {$Path: 'isPendingApprover'},
+                    false
+                ]},
+                {$Eq: [
+                    {$Path: 'IsActiveEntity'},
+                    false
+                ]}
+            ]}}
+        },
     ],
     UI.UpdateHidden   : {$edmJson: {$And: [
         {$Ne: [
@@ -417,6 +434,24 @@ annotate service.Requests with @(
     UI.DataPoint #FiscalYear       : {
         Title: '{i18n>FiscalYear}',
         Value: fiscalYear
+    },
+
+    /*
+     * The workflowInstanceId field itself is rendered via a custom
+     * fragment (see manifest.json controlConfiguration for this
+     * FieldGroup), so it can open the SAP Build monitoring page in a
+     * new tab - a plain UI.DataFieldWithUrl has no way to express
+     * target="_blank". It is injected positioned Before the
+     * workflowStatus DataField below, so no annotation entry for it
+     * is declared here.
+     */
+    UI.FieldGroup #WorkflowInfo    : {
+        $Type: 'UI.FieldGroupType',
+        Data : [{
+            $Type: 'UI.DataField',
+            Value: workflowStatus,
+            Label: '{i18n>Status}'
+        }]
     },
 
     UI.HeaderFacets                : [
@@ -509,37 +544,19 @@ annotate service.Requests with @(
             ID           : 'TransferOutAmountHeaderFacet',
             Label        : '{i18n>TransferOutAmount}',
             Target       : '@UI.DataPoint#TransferOutAmount',
-            ![@UI.Hidden]: {$edmJson: {$Or: [
-                {$Ne: [
-                    {$Path: 'requestType_code'},
-                    'T'
-                ]},
-                {$And: [
-                    {$Ne: [
-                        {$Path: 'transferCategory'},
-                        'J'
-                    ]},
-                    {$Ne: [
-                        {$Path: 'transferCategory'},
-                        'F'
-                    ]},
-                    {$Or: [
-                        {$Ne: [
-                            {$Path: 'transferCategory'},
-                            null
-                        ]},
-                        {$And: [
-                            {$Ne: [
-                                {$Path: 'isFunctional'},
-                                true
-                            ]},
-                            {$Ne: [
-                                {$Path: 'isJKEW'},
-                                true
-                            ]}
-                        ]}
-                    ]}
-                ]}
+            ![@UI.Hidden]: {$edmJson: {$Ne: [
+                {$Path: 'requestType_code'},
+                'T'
+            ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            ID           : 'WorkflowInfoHeaderFacet',
+            Label        : '{i18n>Workflow}',
+            Target       : '@UI.FieldGroup#WorkflowInfo',
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'workflowInstanceId'},
+                null
             ]}}
         }
     ],
@@ -728,6 +745,16 @@ annotate service.Requests with @(
                 {$Path: 'status_code'},
                 0
             ]}}
+        },
+        {
+            $Type        : 'UI.ReferenceFacet',
+            Label        : '{i18n>WorkflowLog}',
+            ID           : 'WorkflowLog',
+            Target       : 'WorkflowLogs/@UI.LineItem',
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'workflowInstanceId'},
+                null
+            ]}}
         }
     ],
 
@@ -879,21 +906,33 @@ annotate service.Requests with @(
 // =============================================================================
 
 annotate service.Requests actions {
-    calculateValues @(Common.SideEffects: {TargetProperties: [
-        'in/supplementAmount',
-        'in/returnAmount',
-        'in/transferInAmount',
-        'in/transferOutAmount'
-    ]})
+    calculateValues @(Common.SideEffects: {
+        TargetProperties: [
+            'in/supplementAmount',
+            'in/returnAmount',
+            'in/transferInAmount',
+            'in/transferOutAmount'
+        ],
+        // Calculate may resolve and persist a CAP-owned approver preview
+        // (see apply-approver-plan.js) - refresh the Approvers facet so the
+        // requestor sees it immediately, without needing to navigate away
+        // and back.
+        TargetEntities  : [RequestApprovers]
+    })
 };
 
 // Header amounts are recalculated server-side whenever the item collection
 // changes (after-CREATE / after-UPDATE on RequestItems.drafts), so refresh
 // them alongside the items themselves. Without TargetProperties the table
 // refreshes but the header keeps showing stale totals.
+//
+// The same handlers also refresh the CAP-owned approver preview (see
+// utils/apply-approver-plan.js) using the new totals, so the Approvers
+// facet is a target too - the requestor sees the resolved approver as
+// soon as an item is added, without needing to press Calculate.
 annotate service.Requests with @Common.SideEffects #RefreshItemsAfterItemChange: {
     SourceEntities  : [RequestItems],
-    TargetEntities  : [RequestItems],
+    TargetEntities  : [RequestItems, RequestApprovers],
     TargetProperties: [
         'supplementAmount',
         'returnAmount',
@@ -903,9 +942,10 @@ annotate service.Requests with @Common.SideEffects #RefreshItemsAfterItemChange:
 };
 
 // When a line item amount changes, the after-UPDATE handler on
-// RequestItems.drafts recalculates the parent header amounts. Declare the
-// header fields as side-effect targets so the object page refetches them
-// instead of showing stale totals until Calculate is pressed.
+// RequestItems.drafts recalculates the parent header amounts and refreshes
+// the CAP-owned approver preview. Declare the header fields and the
+// Approvers facet as side-effect targets so the object page refetches them
+// instead of showing stale data until Calculate is pressed.
 annotate service.RequestItems with @Common.SideEffects #RecalcHeaderOnAmountChange: {
     SourceProperties: [
         supplementAmount,
@@ -918,7 +958,20 @@ annotate service.RequestItems with @Common.SideEffects #RecalcHeaderOnAmountChan
         'request/returnAmount',
         'request/transferInAmount',
         'request/transferOutAmount'
-    ]
+    ],
+    TargetEntities  : ['request/RequestApprovers']
+};
+
+// Changing Request Type or Budget Type directly on the header (e.g.
+// correcting it after items already exist) re-resolves the CAP-owned
+// approver preview server-side (requests-drafts-after-update-logic.js) -
+// refresh the Approvers facet to match.
+annotate service.Requests with @Common.SideEffects #RefreshApproversOnTypeChange: {
+    SourceProperties: [
+        requestType_code,
+        budgetType_code
+    ],
+    TargetEntities  : [RequestApprovers]
 };
 
 annotate service.Requests actions {
@@ -945,6 +998,18 @@ annotate service.Requests actions {
             'in/returnDocNumber',
             'in/transferInDocNumber',
             'in/transferOutDocNumber'
+        ],
+        TargetEntities  : [
+            RequestApprovers,
+            RequestHistory
+        ]
+    })
+};
+
+annotate service.Requests actions {
+    delegateApproval @(Common.SideEffects: {
+        TargetProperties: [
+            'in/status_code'
         ],
         TargetEntities  : [
             RequestApprovers,
@@ -1008,6 +1073,29 @@ annotate service.RequestItems with {
             ]
         }
     );
+    /*
+     * System-derived from Department Grouping master data whenever
+     * costCentre is set/changed (requestitems-drafts-before-create/
+     * update-logic.js) - never user-settable. Plain scalar field, no
+     * association: same reasoning as glGroup below.
+     */
+    department        @(
+        title              : 'Department',
+        Common.FieldControl: #ReadOnly
+    );
+    /*
+     * System-derived from Region & Branch Grouping master data
+     * whenever costCentre is set/changed - never user-settable. Same
+     * plain-scalar-field reasoning as department above.
+     */
+    region            @(
+        title              : 'Region',
+        Common.FieldControl: #ReadOnly
+    );
+    branch            @(
+        title              : 'Branch',
+        Common.FieldControl: #ReadOnly
+    );
     glAccount         @(
         title                : '{i18n>GL}',
         Common.FieldControl  : #Mandatory,
@@ -1037,6 +1125,27 @@ annotate service.RequestItems with {
                 }
             ]
         }
+    );
+    /*
+     * System-derived from GL Grouping master data whenever glAccount
+     * is set/changed (requestitems-drafts-before-create/update-logic.js)
+     * - never user-settable. Plain scalar field, no association: kept
+     * deliberately simple after RequestApprovers.status showed that
+     * binding a table column to an assoc/property navigation makes
+     * Fiori Elements try to edit the ASSOCIATED entity on user input.
+     */
+    glGroup           @(
+        title              : 'GL Group',
+        Common.FieldControl: #ReadOnly
+    );
+    /*
+     * System-derived from Functional Department Grouping master data
+     * whenever glAccount is set/changed - never user-settable. Same
+     * plain-scalar-field reasoning as glGroup above.
+     */
+    functionalDepartment @(
+        title              : 'Functional Department',
+        Common.FieldControl: #ReadOnly
     );
     material          @(
         title                : '{i18n>Material}',
@@ -1251,7 +1360,32 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: department,
+            Label: 'Department'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: region,
+            Label: 'Region'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: branch,
+            Label: 'Branch'
+        },
+        {
+            $Type: 'UI.DataField',
             Value: glAccount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glGroup,
+            Label: 'GL Group'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: functionalDepartment,
+            Label: 'Functional Department'
         },
         {
             $Type: 'UI.DataField',
@@ -1309,7 +1443,32 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: department,
+            Label: 'Department'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: region,
+            Label: 'Region'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: branch,
+            Label: 'Branch'
+        },
+        {
+            $Type: 'UI.DataField',
             Value: glAccount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glGroup,
+            Label: 'GL Group'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: functionalDepartment,
+            Label: 'Functional Department'
         },
         {
             $Type: 'UI.DataField',
@@ -1370,7 +1529,32 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: department,
+            Label: 'Department'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: region,
+            Label: 'Region'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: branch,
+            Label: 'Branch'
+        },
+        {
+            $Type: 'UI.DataField',
             Value: glAccount
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glGroup,
+            Label: 'GL Group'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: functionalDepartment,
+            Label: 'Functional Department'
         },
         {
             $Type: 'UI.DataField',
@@ -1571,6 +1755,39 @@ annotate service.RequestHistory with @(
 
 
 // =============================================================================
+// Workflow Log - read live from SAP Build Process Automation
+// =============================================================================
+
+annotate service.WorkflowLogs with @(
+    UI.LineItem                    : [
+        {
+            $Type: 'UI.DataField',
+            Value: timestamp,
+            Label: '{i18n>Timestamp}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: type,
+            Label: '{i18n>Type}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: activityName,
+            Label: '{i18n>Activity}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: message,
+            Label: '{i18n>Message}'
+        }
+    ],
+    Capabilities.SearchRestrictions: {Searchable: false},
+    Capabilities.UpdateRestrictions: {Updatable: false},
+    UI.CreateHidden,
+    UI.DeleteHidden
+);
+
+// =============================================================================
 // Request Attachments
 // =============================================================================
 
@@ -1579,6 +1796,36 @@ annotate service.Requests.RequestAttachments with @(Capabilities.SearchRestricti
 // =============================================================================
 // RequestApprovers - List Report
 // =============================================================================
+
+// Approvers is entirely system-assigned (CAP-owned routing plus the
+// existing SAP Build / assignApprovers path) - Status is never something
+// a user picks, so render it as plain text rather than an editable-looking
+// control, on top of the entity already being read-only at the protocol
+// level (Capabilities.UpdateRestrictions below).
+//
+// The LineItem below binds Value: status_code (the local, genuinely
+// read-only property), NOT status.descr - binding directly to a navigated
+// property on the associated ApproverStatus entity made the generated UI
+// try to PATCH ApproverStatus itself on edit (rejected with "Entity
+// ApproverStatus is explicitly exposed as readonly"), since descr
+// physically lives there, not on RequestApprovers. Common.Text below
+// makes status_code display as its descr text automatically.
+//
+// ApproverStatus's built-in CodeList aspect also turns on
+// @cds.odata.valuelist for every association pointing to it, which alone
+// would still render status_code as a value-help-enabled input regardless
+// of FieldControl - disabled here since RequestApprovers is the only
+// place this codelist is used, and status there is entirely system-assigned.
+annotate service.ApproverStatus with @cds.odata.valuelist: false;
+
+annotate service.RequestApprovers with {
+    status   @readonly @(
+        Common.Text                    : status.descr,
+        Common.Text.@UI.TextArrangement: #TextOnly,
+        Common.FieldControl            : #ReadOnly
+    );
+    userRole @readonly @(Common.FieldControl: #ReadOnly);
+};
 
 annotate service.RequestApprovers with @(
     UI.LineItem #Approvers         : [
@@ -1589,12 +1836,17 @@ annotate service.RequestApprovers with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: userRole,
+            Label: '{i18n>UserRoleName}'
+        },
+        {
+            $Type: 'UI.DataField',
             Value: level,
             Label: 'Level'
         },
         {
             $Type: 'UI.DataField',
-            Value: status.descr,
+            Value: status_code,
             Label: '{i18n>Status}'
         },
         {
@@ -1676,7 +1928,7 @@ annotate service.WBSElements with {
 annotate service.UserRoles with {
     code  @(
         Common.Text                    : descr,
-        Common.Text.@UI.TextArrangement: #TextOnly
+        Common.Text.@UI.TextArrangement: #TextFirst
     );
     descr @(title: '{i18n>UserRoleName}');
 };
@@ -1786,6 +2038,19 @@ annotate service.ApproverMatrix with @(
         }
     ],
 
+    /*
+     * Default sort: User Role Name ascending.
+     */
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : userRole.descr,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem']
+    },
+
     UI.HeaderInfo: {
         TypeName      : '{i18n>ApproverMatrixEntry}',
         TypeNamePlural: '{i18n>ApproverMatrixTitle}',
@@ -1799,14 +2064,24 @@ annotate service.ApproverMatrix with @(
     ],
 
     /*
-     * Object Page form: one section with all seven fields.
+     * Object Page: the main form, plus a Delegations sub-table so an
+     * approver's future cover (see db/schema.cds ApproverDelegation)
+     * can be scheduled directly on their own Approver Matrix row.
      */
-    UI.Facets: [{
-        $Type : 'UI.ReferenceFacet',
-        ID    : 'ApproverMatrixDetails',
-        Label : '{i18n>ApproverMatrixEntry}',
-        Target: '@UI.FieldGroup#Details'
-    }],
+    UI.Facets: [
+        {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'ApproverMatrixDetails',
+            Label : '{i18n>ApproverMatrixEntry}',
+            Target: '@UI.FieldGroup#Details'
+        },
+        {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'Delegations',
+            Label : 'Delegations',
+            Target: 'Delegations/@UI.LineItem'
+        }
+    ],
 
     UI.FieldGroup #Details: {
         $Type: 'UI.FieldGroupType',
@@ -1824,6 +2099,528 @@ annotate service.ApproverMatrix with @(
             {$Type: 'UI.DataField', Value: isActive},
             {$Type: 'UI.DataField', Value: startDate},
             {$Type: 'UI.DataField', Value: endDate}
+        ]
+    },
+
+    Capabilities.InsertRestrictions.Insertable: true,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : true
+);
+
+// =============================================================================
+// Approver Delegation - schedule an approver's cover for a date range,
+// maintained as a sub-table on their own Approver Matrix row
+// =============================================================================
+annotate service.ApproverDelegation with {
+    delegateEmail @(
+        title              : 'Delegate Email',
+        Common.FieldControl: #Mandatory
+    );
+    delegateName  @(title: 'Delegate Name');
+    startDate     @(
+        title              : 'Start Date',
+        Common.FieldControl: #Mandatory
+    );
+    endDate       @(
+        title              : 'End Date',
+        Common.FieldControl: #Mandatory
+    );
+};
+
+annotate service.ApproverDelegation with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: delegateEmail,
+            Label: 'Delegate Email'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: delegateName,
+            Label: 'Delegate Name'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: startDate,
+            Label: 'Start Date'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: endDate,
+            Label: 'End Date'
+        }
+    ],
+
+    UI.HeaderInfo: {
+        TypeName      : 'Delegation',
+        TypeNamePlural: 'Delegations',
+        Title         : {Value: delegateEmail}
+    },
+
+    Capabilities.InsertRestrictions.Insertable: true,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : true
+);
+
+// =============================================================================
+// GL Grouping - maintain GL Account to GL Group mapping for Virement
+// approval routing
+// =============================================================================
+annotate service.GLGrouping with {
+    expenditureGroup     @(
+        title              : 'Expenditure Group',
+        Common.FieldControl: #Mandatory
+    );
+    glGroup              @(
+        title              : 'GL Group',
+        Common.FieldControl: #Mandatory
+    );
+    glAccount            @(
+        title              : 'GL Account',
+        Common.FieldControl: #Mandatory
+    );
+    glAccountDescription @(title: 'GL Account Description');
+    assetType            @(title: 'Asset Type');
+    functional           @(title: 'Functional');
+};
+
+annotate service.GLGrouping with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: expenditureGroup,
+            Label: 'Expenditure Group'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glGroup,
+            Label: 'GL Group'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glAccount,
+            Label: 'GL Account'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glAccountDescription,
+            Label: 'GL Account Description'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: assetType,
+            Label: 'Asset Type'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: functional,
+            Label: 'Functional'
+        }
+    ],
+
+    /*
+     * Default sort: Expenditure Group, then GL Group, both ascending.
+     */
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [
+            {
+                $Type     : 'Common.SortOrderType',
+                Property  : expenditureGroup,
+                Descending: false
+            },
+            {
+                $Type     : 'Common.SortOrderType',
+                Property  : glGroup,
+                Descending: false
+            }
+        ],
+        Visualizations: ['@UI.LineItem']
+    },
+
+    UI.HeaderInfo: {
+        TypeName      : 'GL Grouping Entry',
+        TypeNamePlural: 'GL Grouping',
+        Title         : {Value: glAccount}
+    },
+
+    UI.SelectionFields: [
+        expenditureGroup,
+        glGroup,
+        glAccount
+    ],
+
+    UI.Facets: [{
+        $Type : 'UI.ReferenceFacet',
+        ID    : 'GLGroupingDetails',
+        Label : 'GL Grouping Entry',
+        Target: '@UI.FieldGroup#Details'
+    }],
+
+    UI.FieldGroup #Details: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: expenditureGroup},
+            {$Type: 'UI.DataField', Value: glGroup},
+            {$Type: 'UI.DataField', Value: glAccount},
+            {$Type: 'UI.DataField', Value: glAccountDescription},
+            {$Type: 'UI.DataField', Value: assetType},
+            {$Type: 'UI.DataField', Value: functional}
+        ]
+    },
+
+    Capabilities.InsertRestrictions.Insertable: true,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : true
+);
+
+// =============================================================================
+// Department Grouping - maintain Cost Centre to Department mapping for
+// Virement approval routing
+// =============================================================================
+annotate service.DepartmentGrouping with {
+    department            @(
+        title              : 'Department',
+        Common.FieldControl: #Mandatory
+    );
+    costCentre            @(
+        title              : 'Cost Centre',
+        Common.FieldControl: #Mandatory
+    );
+    costCentreDescription @(title: 'Cost Centre Description');
+};
+
+annotate service.DepartmentGrouping with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: department,
+            Label: 'Department'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentre,
+            Label: 'Cost Centre'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentreDescription,
+            Label: 'Cost Centre Description'
+        }
+    ],
+
+    /*
+     * Default sort: Department ascending.
+     */
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : department,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem']
+    },
+
+    UI.HeaderInfo: {
+        TypeName      : 'Department Grouping Entry',
+        TypeNamePlural: 'Department Grouping',
+        Title         : {Value: costCentre}
+    },
+
+    UI.SelectionFields: [
+        department,
+        costCentre
+    ],
+
+    UI.Facets: [{
+        $Type : 'UI.ReferenceFacet',
+        ID    : 'DepartmentGroupingDetails',
+        Label : 'Department Grouping Entry',
+        Target: '@UI.FieldGroup#Details'
+    }],
+
+    UI.FieldGroup #Details: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: department},
+            {$Type: 'UI.DataField', Value: costCentre},
+            {$Type: 'UI.DataField', Value: costCentreDescription}
+        ]
+    },
+
+    Capabilities.InsertRestrictions.Insertable: true,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : true
+);
+
+// =============================================================================
+// Functional Department Grouping - maintain functional department to GL
+// Accounts / Fund Centre scope mapping for Virement approval routing
+// =============================================================================
+annotate service.FunctionalDepartmentGrouping with {
+    functionalDepartment @(
+        title              : 'Functional Department',
+        Common.FieldControl: #Mandatory
+    );
+    itemType             @(title: 'Item Type');
+    glAccounts           @(title: 'GL Accounts');
+    fundCentreScope      @(title: 'Fund Centre Scope');
+    remarks              @(title: 'Remarks');
+};
+
+annotate service.FunctionalDepartmentGrouping with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: functionalDepartment,
+            Label: 'Functional Department'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: itemType,
+            Label: 'Item Type'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glAccounts,
+            Label: 'GL Accounts'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: fundCentreScope,
+            Label: 'Fund Centre Scope'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: remarks,
+            Label: 'Remarks'
+        }
+    ],
+
+    /*
+     * Default sort: Functional Department ascending.
+     */
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : functionalDepartment,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem']
+    },
+
+    UI.HeaderInfo: {
+        TypeName      : 'Functional Department Grouping Entry',
+        TypeNamePlural: 'Functional Department Grouping',
+        Title         : {Value: functionalDepartment}
+    },
+
+    UI.SelectionFields: [
+        functionalDepartment
+    ],
+
+    UI.Facets: [{
+        $Type : 'UI.ReferenceFacet',
+        ID    : 'FunctionalDepartmentGroupingDetails',
+        Label : 'Functional Department Grouping Entry',
+        Target: '@UI.FieldGroup#Details'
+    }],
+
+    UI.FieldGroup #Details: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: functionalDepartment},
+            {$Type: 'UI.DataField', Value: itemType},
+            {$Type: 'UI.DataField', Value: glAccounts},
+            {$Type: 'UI.DataField', Value: fundCentreScope},
+            {$Type: 'UI.DataField', Value: remarks}
+        ]
+    },
+
+    Capabilities.InsertRestrictions.Insertable: true,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : true
+);
+
+// =============================================================================
+// Building Grouping - maintain Cost Centre to State (building/property
+// location) mapping for Virement approval routing
+// =============================================================================
+annotate service.BuildingGrouping with {
+    state                 @(
+        title              : 'State',
+        Common.FieldControl: #Mandatory
+    );
+    costCentre            @(
+        title              : 'Cost Centre',
+        Common.FieldControl: #Mandatory
+    );
+    costCentreDescription @(title: 'Cost Centre Description');
+};
+
+annotate service.BuildingGrouping with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: state,
+            Label: 'State'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentre,
+            Label: 'Cost Centre'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentreDescription,
+            Label: 'Cost Centre Description'
+        }
+    ],
+
+    /*
+     * Default sort: State ascending.
+     */
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : state,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem']
+    },
+
+    UI.HeaderInfo: {
+        TypeName      : 'Building Grouping Entry',
+        TypeNamePlural: 'Building Grouping',
+        Title         : {Value: costCentre}
+    },
+
+    UI.SelectionFields: [
+        state,
+        costCentre
+    ],
+
+    UI.Facets: [{
+        $Type : 'UI.ReferenceFacet',
+        ID    : 'BuildingGroupingDetails',
+        Label : 'Building Grouping Entry',
+        Target: '@UI.FieldGroup#Details'
+    }],
+
+    UI.FieldGroup #Details: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: state},
+            {$Type: 'UI.DataField', Value: costCentre},
+            {$Type: 'UI.DataField', Value: costCentreDescription}
+        ]
+    },
+
+    Capabilities.InsertRestrictions.Insertable: true,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : true
+);
+
+// =============================================================================
+// Region & Branch Grouping - maintain Cost Centre to Region / State /
+// Branch mapping for Virement approval routing
+// =============================================================================
+annotate service.RegionBranchGrouping with {
+    region                @(
+        title              : 'Region',
+        Common.FieldControl: #Mandatory
+    );
+    state                 @(title: 'State');
+    branch                @(
+        title              : 'Branch',
+        Common.FieldControl: #Mandatory
+    );
+    costCentre            @(
+        title              : 'Cost Centre',
+        Common.FieldControl: #Mandatory
+    );
+    costCentreDescription @(title: 'Cost Centre Description');
+};
+
+annotate service.RegionBranchGrouping with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: region,
+            Label: 'Region'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: state,
+            Label: 'State'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: branch,
+            Label: 'Branch'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentre,
+            Label: 'Cost Centre'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: costCentreDescription,
+            Label: 'Cost Centre Description'
+        }
+    ],
+
+    /*
+     * Default sort: Region ascending, then Branch ascending.
+     */
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [
+            {
+                $Type     : 'Common.SortOrderType',
+                Property  : region,
+                Descending: false
+            },
+            {
+                $Type     : 'Common.SortOrderType',
+                Property  : branch,
+                Descending: false
+            }
+        ],
+        Visualizations: ['@UI.LineItem']
+    },
+
+    UI.HeaderInfo: {
+        TypeName      : 'Region & Branch Grouping Entry',
+        TypeNamePlural: 'Region & Branch Grouping',
+        Title         : {Value: costCentre}
+    },
+
+    UI.SelectionFields: [
+        region,
+        branch,
+        costCentre
+    ],
+
+    UI.Facets: [{
+        $Type : 'UI.ReferenceFacet',
+        ID    : 'RegionBranchGroupingDetails',
+        Label : 'Region & Branch Grouping Entry',
+        Target: '@UI.FieldGroup#Details'
+    }],
+
+    UI.FieldGroup #Details: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: region},
+            {$Type: 'UI.DataField', Value: state},
+            {$Type: 'UI.DataField', Value: branch},
+            {$Type: 'UI.DataField', Value: costCentre},
+            {$Type: 'UI.DataField', Value: costCentreDescription}
         ]
     },
 

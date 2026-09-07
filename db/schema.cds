@@ -61,7 +61,38 @@ entity RequestItems : cuid, managed {
     request           : Association to Requests;
     srNo              : String(3);
     costCentre        : String(10);
+    /*
+     * Read-only, system-derived from Department Grouping master data
+     * (see DepartmentGrouping below) whenever costCentre is set/
+     * changed - never client-writable. Used for Virement approval
+     * routing (Same/Different Department).
+     */
+    department        : String(150) @readonly;
+    /*
+     * Read-only, system-derived from Region & Branch Grouping master
+     * data (see RegionBranchGrouping below) whenever costCentre is
+     * set/changed - never client-writable. Used for Virement approval
+     * routing (Same/Different Region, Same/Different Branch).
+     */
+    region            : String(150) @readonly;
+    branch            : String(150) @readonly;
     glAccount         : String;
+    /*
+     * Read-only, system-derived from GL Grouping master data (see
+     * GLGrouping below) whenever glAccount is set/changed - never
+     * client-writable. Used for Virement approval routing (Same/
+     * Different GL Group).
+     */
+    glGroup           : String(100) @readonly;
+    /*
+     * Read-only, system-derived from Functional Department Grouping
+     * master data (see FunctionalDepartmentGrouping below) whenever
+     * glAccount is set/changed - never client-writable. Matches
+     * glAccount against each row's (multi-value) glAccounts list.
+     * Used for Virement approval routing ("authorized functional
+     * department" scenario).
+     */
+    functionalDepartment : String(200) @readonly;
     material          : String;
     wbs               : String;
     assetStatus       : Association to AssetStatus;
@@ -83,6 +114,7 @@ entity RequestHistory : cuid, managed {
 entity RequestApprovers : cuid, managed {
     request      : Association to Requests;
     emailAddress : String;
+    userRole     : String;
     level        : String;
     status       : Association to ApproverStatus default 0;
     taskId       : String;
@@ -177,4 +209,100 @@ entity ApproverMatrix : cuid, managed {
     isActive         : Boolean default true;
     startDate        : Date;
     endDate          : Date;
+    Delegations      : Composition of many ApproverDelegation
+                            on Delegations.approverMatrix = $self;
+};
+
+/*
+ * Approver Delegation - lets an approver (an Approver Matrix row)
+ * schedule ahead of time who covers for them, and for which date
+ * range. Whenever getApprovers/resolveApprovers resolves this row and
+ * today falls within an active delegation's start/end date, the
+ * delegate's email/name is returned instead of the row's own
+ * emailAddress/name - so any request routed to this approver during
+ * that window is assigned straight to the delegate.
+ *
+ * This only affects approvers assigned FROM this point forward (a
+ * fresh Calculate/Submit, or SAP Build's own getApprovers). It does
+ * NOT retroactively reassign a request that was already Pending
+ * Approval before the delegation started - use the per-request
+ * "Delegate Approval" action for that (delegate-approval-logic.js).
+ */
+entity ApproverDelegation : cuid, managed {
+    approverMatrix : Association to ApproverMatrix;
+    delegateEmail  : String(100) @mandatory;
+    delegateName   : String(100);
+    startDate      : Date        @mandatory;
+    endDate        : Date        @mandatory;
+};
+
+/*
+ * GL Grouping - reference data maintained by admins mapping each GL
+ * Account to its GL Group (and the wider Expenditure Group above
+ * that). Used to determine "Same GL Group" vs "Different GL Group"
+ * for Virement approval routing. Master data only: maintained here,
+ * not sourced from S/4.
+ */
+entity GLGrouping : cuid, managed {
+    expenditureGroup     : String(100) @mandatory;
+    glGroup              : String(100) @mandatory;
+    glAccount            : String(10)  @mandatory;
+    glAccountDescription : String(200);
+    assetType            : String(10);
+    functional           : String(20);
+};
+
+/*
+ * Department Grouping - reference data maintained by admins mapping
+ * each Cost Centre to its Department. Used to determine "Same/
+ * Different Department" for Virement approval routing. Master data
+ * only: maintained here, not sourced from S/4.
+ */
+entity DepartmentGrouping : cuid, managed {
+    department            : String(150) @mandatory;
+    costCentre            : String(10)  @mandatory;
+    costCentreDescription : String(200);
+};
+
+/*
+ * Functional Department Grouping - reference data maintained by
+ * admins listing each functional department, the GL Accounts it
+ * covers for Virement, and the Fund Centre scope it can transfer
+ * into. Used for the "authorized functional department" Virement
+ * approval routing scenario. Master data only: maintained here, not
+ * sourced from S/4.
+ */
+entity FunctionalDepartmentGrouping : cuid, managed {
+    functionalDepartment : String(200)  @mandatory;
+    itemType             : String(500);
+    glAccounts           : String(2000);
+    fundCentreScope      : String(200);
+    remarks              : String(1000);
+};
+
+/*
+ * Building Grouping - reference data maintained by admins mapping
+ * each Cost Centre to its State (building/property location). Used
+ * to determine "Same/Different Region" for Virement approval
+ * routing. Master data only: maintained here, not sourced from S/4.
+ */
+entity BuildingGrouping : cuid, managed {
+    state                 : String(50)  @mandatory;
+    costCentre            : String(10)  @mandatory;
+    costCentreDescription : String(200);
+};
+
+/*
+ * Region & Branch Grouping - reference data maintained by admins
+ * mapping each Cost Centre to its Region, State, and Branch. Used to
+ * determine "Same/Different Region" and "Same/Different Branch" for
+ * Virement approval routing. Master data only: maintained here, not
+ * sourced from S/4.
+ */
+entity RegionBranchGrouping : cuid, managed {
+    region                : String(150) @mandatory;
+    state                 : String(50);
+    branch                : String(150) @mandatory;
+    costCentre            : String(10)  @mandatory;
+    costCentreDescription : String(200);
 };

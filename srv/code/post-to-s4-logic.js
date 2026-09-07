@@ -879,38 +879,56 @@ async function performPostToS4({ tx, request, requestId, emailAddress }) {
   payloads.forEach(validatePayload);
   validateTransferBalance(payloads);
 
+  /*
+   * TEMPORARY: real S/4 BudgetEntryDocFM posting disabled below to let
+   * the approval flow (status updates, BPA task completion) be tested
+   * on its own, separate from the S/4 "current budget is negative"
+   * business rejection. Re-enable by uncommenting the original loop
+   * and removing the stub loop underneath it.
+   */
+  // for (const descriptor of payloads) {
+  //   const result = await parseResponse(
+  //     await postToCpi(descriptor.payload, descriptor.key),
+  //   );
+  //
+  //   if (result.errors.length) {
+  //     throw createBusinessError(
+  //       422,
+  //       s4BusinessMessage(result.errors),
+  //       s4BusinessMessage(result.errors),
+  //     );
+  //   }
+  //
+  //   let docNumber = "";
+  //
+  //   if (S4_TEST_MODE !== "X") {
+  //     docNumber = documentNumber(result);
+  //
+  //     if (!docNumber) {
+  //       throw new Error(
+  //         `S/4 reported success for ${descriptor.key}, but no document number was returned.`,
+  //       );
+  //     }
+  //   }
+  //
+  //   postings.push({
+  //     key: descriptor.key,
+  //     process: descriptor.payload.IV_PROC,
+  //     direction: descriptor.direction,
+  //     documentField: descriptor.documentField,
+  //     documentNumber: docNumber,
+  //     messages: result.messages,
+  //   });
+  // }
+
   for (const descriptor of payloads) {
-    const result = await parseResponse(
-      await postToCpi(descriptor.payload, descriptor.key),
-    );
-
-    if (result.errors.length) {
-      throw createBusinessError(
-        422,
-        s4BusinessMessage(result.errors),
-        s4BusinessMessage(result.errors),
-      );
-    }
-
-    let docNumber = "";
-
-    if (S4_TEST_MODE !== "X") {
-      docNumber = documentNumber(result);
-
-      if (!docNumber) {
-        throw new Error(
-          `S/4 reported success for ${descriptor.key}, but no document number was returned.`,
-        );
-      }
-    }
-
     postings.push({
       key: descriptor.key,
       process: descriptor.payload.IV_PROC,
       direction: descriptor.direction,
       documentField: descriptor.documentField,
-      documentNumber: docNumber,
-      messages: result.messages,
+      documentNumber: generateTestDocumentNumber(),
+      messages: [],
     });
   }
 

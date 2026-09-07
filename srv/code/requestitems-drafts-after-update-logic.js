@@ -1,5 +1,6 @@
 const cds = require("@sap/cds");
 const { recalcAmountsByType } = require("./utils/recalc-total-logic");
+const { refreshDraftApproverPreview } = require("./utils/apply-approver-plan");
 
 const LOG = cds.log("requestitems-drafts-after-update-logic");
 
@@ -61,6 +62,11 @@ async function resolveParentRequestId(data, request) {
  * items, and resequencing would issue pointless writes on every
  * keystroke-sized PATCH.
  *
+ * Also refreshes the CAP-owned approver preview (see
+ * utils/apply-approver-plan.js) using the freshly recalculated
+ * amount, so requestors see the resolved approver update as they edit
+ * a line item - without needing to press the Calculate button.
+ *
  * @param {object} data - the updated item
  * @param {cds.Request} request
  */
@@ -91,6 +97,19 @@ module.exports = async function (data, request) {
       "Recalculation completed for request",
       `${requestId}: ${JSON.stringify(amounts)}`,
     );
+
+    // 3. Refresh the CAP-owned approver preview against the new totals.
+    const tx = cds.tx(request);
+
+    const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
+
+    await refreshDraftApproverPreview({
+      tx,
+      RequestsDraft: Requests.drafts,
+      RequestApproversDraft: RequestApprovers.drafts,
+      requestId,
+      amounts,
+    });
 
     LOG.info("--- AFTER UPDATE RequestItems.drafts ended successfully ---");
   } catch (error) {
