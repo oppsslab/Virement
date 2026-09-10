@@ -1,6 +1,12 @@
 const { fetchValueHelp } = require("./value-help");
 
-const WBS_ELEMENT_PATH = "/sap/opu/odata/sap/API_WBS_ELEMENT_SRV/A_WBSElement";
+// Confirmed working (verified against the same S/4 system from the VR
+// portal) - note this is NOT the standard /sap/opu/odata/sap/ Gateway
+// prefix, and the service is "API_WBSELEMENT_SRV" (no underscore
+// between WBS and ELEMENT), unlike the previous
+// "/sap/opu/odata/sap/API_WBS_ELEMENT_SRV/..." path, which 404'd with
+// "No service found for namespace '', name 'API_WBS_ELEMENT_SRV'".
+const WBS_ELEMENT_PATH = "/sap/API_WBSELEMENT_SRV//A_WBSElement";
 
 const SELECT_FIELDS =
   "WBSElementInternalID,WBSElementExternalID,WBSElementIsBillingElement";

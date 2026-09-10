@@ -40,6 +40,14 @@ const BUDGET_TYPES = {
   N: "NONPROJ",
 };
 
+/*
+ * Supplement and Return each post as their own single-direction
+ * payload. Transfer (Virement) is handled separately, in
+ * buildPayloads below: transfer-out and transfer-in lines are both
+ * pushed into ONE combined IT_ITEM array (signed "-" and "+"
+ * respectively) under a single TRAN payload/posting, rather than two
+ * separate FMBB documents.
+ */
 const AMOUNT_CONFIGS = [
   {
     key: "SUPL",
@@ -57,21 +65,34 @@ const AMOUNT_CONFIGS = [
     direction: "OUT",
     documentField: "returnDocNumber",
   },
+];
+
+/*
+ * Budget Return to Central Fund (see resolveReturnProcess) additionally
+ * posts one extra line into the fund center/commitment item the
+ * central fund is held under, for the total of all of the request's
+ * Return line items, alongside the per-line items RETN already posts.
+ */
+const CENTRAL_FUND_COST_CENTRE = "100050500";
+const CENTRAL_FUND_GL_ACCOUNT = "760001";
+
+/*
+ * Every amount field/document-number pairing that can appear on a
+ * Request, grouped by posting key - including the combined Transfer
+ * one, which covers two fields/document-number columns at once. Used
+ * wherever "has this already been posted" needs to be checked without
+ * caring about the exact payload shape (see performPostToS4).
+ */
+const ALL_AMOUNT_DESCRIPTORS = [
+  ...AMOUNT_CONFIGS.map((config) => ({
+    key: config.key,
+    fields: [config.field],
+    documentFields: [config.documentField],
+  })),
   {
-    key: "TRAN_OUT",
-    process: "TRAN",
-    field: "transferOutAmount",
-    sign: "-",
-    direction: "OUT",
-    documentField: "transferOutDocNumber",
-  },
-  {
-    key: "TRAN_IN",
-    process: "TRAN",
-    field: "transferInAmount",
-    sign: "+",
-    direction: "IN",
-    documentField: "transferInDocNumber",
+    key: "TRAN",
+    fields: ["transferOutAmount", "transferInAmount"],
+    documentFields: ["transferOutDocNumber", "transferInDocNumber"],
   },
 ];
 
@@ -136,6 +157,22 @@ function getProcess(requestData) {
   }
 
   return process;
+}
+
+/**
+ * Return's IV_PROC depends on its Return Category, not just the
+ * request type: Budget Zerorise posts as a normal Return (RETN), but
+ * Budget Return to Central Fund posts as a Transfer (TRAN) instead -
+ * the funds are moving to another fund center (the central fund)
+ * rather than being released back into the same budget.
+ *
+ * @param {object} requestData
+ * @returns {string} "RETN" or "TRAN"
+ */
+function resolveReturnProcess(requestData) {
+  const category = associationCode(requestData, "returnCategory").toUpperCase();
+
+  return category === "C" ? "TRAN" : "RETN";
 }
 
 function getSupplyType(requestData) {
@@ -362,9 +399,9 @@ function buildHeader(requestData, process, supplyType) {
   };
 }
 
-function buildLineItem(requestData, item, config, amount) {
+function buildLineItem(requestData, item, sign, amount) {
   return {
-    SIGN: config.sign,
+    SIGN: sign,
     FUNDCTR: String(item.costCentre ?? "").trim(),
     CMMTITM: String(item.glAccount ?? "").trim(),
     MATKL: String(item.material ?? "").trim(),
@@ -377,6 +414,35 @@ function buildLineItem(requestData, item, config, amount) {
   };
 }
 
+/**
+ * Validates and returns one item's amount for a given field, or
+ * throws a business error labelled with the given key (e.g.
+ * "TRAN_OUT") for a clear per-line message.
+ *
+ * @returns {number}
+ */
+function readLineAmount(item, field, index, key) {
+  const amount = toAmount(item[field]);
+
+  if (!Number.isFinite(amount)) {
+    throw createBusinessError(
+      400,
+      `Line ${index + 1}: field '${field}' contains an invalid amount.`,
+      `Line ${index + 1} contains an invalid ${key} amount.`,
+    );
+  }
+
+  if (amount < 0) {
+    throw createBusinessError(
+      400,
+      `Line ${index + 1}: field '${field}' contains a negative amount.`,
+      `Line ${index + 1} contains a negative amount. Use the amount type to determine posting direction.`,
+    );
+  }
+
+  return amount;
+}
+
 function buildPayloads(requestData, items) {
   // Validate the request header, but inspect every amount type configured below.
   getProcess(requestData);
@@ -384,41 +450,118 @@ function buildPayloads(requestData, items) {
   const payloads = [];
 
   for (const config of AMOUNT_CONFIGS) {
-    const payload = buildHeader(requestData, config.process, supplyType);
+    // See resolveReturnProcess: Return's IV_PROC depends on its
+    // Return Category, not the static config value.
+    const process =
+      config.key === "RETN"
+        ? resolveReturnProcess(requestData)
+        : config.process;
+
+    const payload = buildHeader(requestData, process, supplyType);
+
+    let configTotal = 0;
+
+    /*
+     * Budget Return to Central Fund (this RETN config, but posted as
+     * TRAN - see resolveReturnProcess) is a genuine two-sided
+     * transfer: each original line moves OUT of its own cost centre
+     * ("-"), balanced by the single central fund line moving IN
+     * ("+", built below) for their combined total. A plain Return/
+     * Zerorise keeps its normal "+" sign.
+     */
+    const isCentralFundTransfer = config.key === "RETN" && process === "TRAN";
+    const itemSign = isCentralFundTransfer ? "-" : config.sign;
 
     items.forEach((item, index) => {
-      const amount = toAmount(item[config.field]);
-
-      if (!Number.isFinite(amount)) {
-        throw createBusinessError(
-          400,
-          `Line ${index + 1}: field '${config.field}' contains an invalid amount.`,
-          `Line ${index + 1} contains an invalid ${config.key} amount.`,
-        );
-      }
-
-      if (amount < 0) {
-        throw createBusinessError(
-          400,
-          `Line ${index + 1}: field '${config.field}' contains a negative amount.`,
-          `Line ${index + 1} contains a negative amount. Use the amount type to determine posting direction.`,
-        );
-      }
+      const amount = readLineAmount(item, config.field, index, config.key);
 
       if (amount > 0) {
-        payload.IT_ITEM.push(buildLineItem(requestData, item, config, amount));
+        payload.IT_ITEM.push(
+          buildLineItem(requestData, item, itemSign, amount),
+        );
+
+        configTotal += amount;
       }
     });
+
+    if (isCentralFundTransfer && configTotal > 0) {
+      payload.IT_ITEM.push(
+        buildLineItem(
+          requestData,
+          {
+            costCentre: CENTRAL_FUND_COST_CENTRE,
+            glAccount: CENTRAL_FUND_GL_ACCOUNT,
+            // S/4 rejects the posting ("Material Group first 6 chars
+            // not equal to Commitment Item") when MATKL is blank -
+            // same first-6-chars alignment this app's own
+            // validateMaterialGlAlignment enforces client-side (see
+            // requests-before-create-logic.js) for every
+            // user-entered line, but this line is generated here,
+            // not entered by the user.
+            material: "760001000",
+            description: "Return to Central Fund",
+          },
+          "+",
+          configTotal,
+        ),
+      );
+    }
 
     if (payload.IT_ITEM.length) {
       payloads.push({
         key: config.key,
-        process: config.process,
+        process,
         direction: config.direction,
         documentField: config.documentField,
         payload,
       });
     }
+  }
+
+  /*
+   * Transfer (Virement): one combined payload covering both
+   * directions - transfer-out lines signed "-", transfer-in lines
+   * signed "+" - in a single IT_ITEM array, rather than two separate
+   * FMBB documents.
+   */
+  const transferPayload = buildHeader(requestData, "TRAN", supplyType);
+
+  items.forEach((item, index) => {
+    const outAmount = readLineAmount(
+      item,
+      "transferOutAmount",
+      index,
+      "TRAN_OUT",
+    );
+
+    if (outAmount > 0) {
+      transferPayload.IT_ITEM.push(
+        buildLineItem(requestData, item, "-", outAmount),
+      );
+    }
+
+    const inAmount = readLineAmount(
+      item,
+      "transferInAmount",
+      index,
+      "TRAN_IN",
+    );
+
+    if (inAmount > 0) {
+      transferPayload.IT_ITEM.push(
+        buildLineItem(requestData, item, "+", inAmount),
+      );
+    }
+  });
+
+  if (transferPayload.IT_ITEM.length) {
+    payloads.push({
+      key: "TRAN",
+      process: "TRAN",
+      direction: "BOTH",
+      documentField: ["transferOutDocNumber", "transferInDocNumber"],
+      payload: transferPayload,
+    });
   }
 
   if (!payloads.length) {
@@ -459,24 +602,26 @@ function validatePayload({ key, payload }) {
 }
 
 function validateTransferBalance(payloads) {
-  const transferOut = payloads.find(({ key }) => key === "TRAN_OUT");
-  const transferIn = payloads.find(({ key }) => key === "TRAN_IN");
+  const transfer = payloads.find(({ key }) => key === "TRAN");
 
-  if (!transferOut && !transferIn) return;
+  if (!transfer) return;
 
-  if (!transferOut || !transferIn) {
+  const totalBySign = (sign) =>
+    transfer.payload.IT_ITEM.filter((item) => item.SIGN === sign).reduce(
+      (sum, item) => sum + Number(item.PRICE),
+      0,
+    );
+
+  const outTotal = totalBySign("-");
+  const inTotal = totalBySign("+");
+
+  if (!outTotal || !inTotal) {
     throw createBusinessError(
       400,
-      "A transfer requires both Transfer Out and Transfer In payloads.",
+      "A transfer requires both Transfer Out and Transfer In line items.",
       "A Transfer request must contain both Transfer Out and Transfer In amounts.",
     );
   }
-
-  const total = ({ payload }) =>
-    payload.IT_ITEM.reduce((sum, item) => sum + Number(item.PRICE), 0);
-
-  const outTotal = total(transferOut);
-  const inTotal = total(transferIn);
 
   if (Math.round(outTotal * 100) !== Math.round(inTotal * 100)) {
     throw createBusinessError(
@@ -692,10 +837,20 @@ async function updateSuccessfulRequest(tx, requestId, approvedBy, postings) {
       );
     }
 
-    changes[posting.documentField] = String(posting.documentNumber ?? "").slice(
-      0,
-      20,
-    );
+    const docNumber = String(posting.documentNumber ?? "").slice(0, 20);
+
+    /*
+     * TRAN's documentField is an array - transferOutDocNumber AND
+     * transferInDocNumber both get the same document number, since
+     * one combined FMBB document now covers both directions.
+     */
+    const fields = Array.isArray(posting.documentField)
+      ? posting.documentField
+      : [posting.documentField];
+
+    for (const field of fields) {
+      changes[field] = docNumber;
+    }
   }
 
   const affected = await tx.run(
@@ -838,14 +993,16 @@ async function performPostToS4({ tx, request, requestId, emailAddress }) {
 
   const { requestData, items } = await fetchRequestWithItems(requestId, tx);
 
-  const populatedConfigs = AMOUNT_CONFIGS.filter((config) =>
-    items.some((item) => toAmount(item[config.field]) > 0),
+  const populatedDescriptors = ALL_AMOUNT_DESCRIPTORS.filter((descriptor) =>
+    items.some((item) =>
+      descriptor.fields.some((field) => toAmount(item[field]) > 0),
+    ),
   );
 
   const alreadyPosted =
-    populatedConfigs.length > 0 &&
-    populatedConfigs.every((config) =>
-      Boolean(requestData[config.documentField]),
+    populatedDescriptors.length > 0 &&
+    populatedDescriptors.every((descriptor) =>
+      descriptor.documentFields.every((field) => Boolean(requestData[field])),
     );
 
   if (alreadyPosted) {
@@ -864,9 +1021,13 @@ async function performPostToS4({ tx, request, requestId, emailAddress }) {
     );
   }
 
-  const payloads = buildPayloads(requestData, items).filter(
-    (descriptor) => !requestData[descriptor.documentField],
-  );
+  const payloads = buildPayloads(requestData, items).filter((descriptor) => {
+    const fields = Array.isArray(descriptor.documentField)
+      ? descriptor.documentField
+      : [descriptor.documentField];
+
+    return fields.some((field) => !requestData[field]);
+  });
 
   if (!payloads.length) {
     throw createBusinessError(
@@ -879,62 +1040,40 @@ async function performPostToS4({ tx, request, requestId, emailAddress }) {
   payloads.forEach(validatePayload);
   validateTransferBalance(payloads);
 
-  /*
-   * TEMPORARY: real S/4 BudgetEntryDocFM posting disabled below to let
-   * the approval flow (status updates, BPA task completion) be tested
-   * on its own, separate from the S/4 "current budget is negative"
-   * business rejection. Re-enable by uncommenting the original loop
-   * and removing the stub loop underneath it.
-   */
-  // for (const descriptor of payloads) {
-  //   const result = await parseResponse(
-  //     await postToCpi(descriptor.payload, descriptor.key),
-  //   );
-  //
-  //   if (result.errors.length) {
-  //     throw createBusinessError(
-  //       422,
-  //       s4BusinessMessage(result.errors),
-  //       s4BusinessMessage(result.errors),
-  //     );
-  //   }
-  //
-  //   let docNumber = "";
-  //
-  //   if (S4_TEST_MODE !== "X") {
-  //     docNumber = documentNumber(result);
-  //
-  //     if (!docNumber) {
-  //       throw new Error(
-  //         `S/4 reported success for ${descriptor.key}, but no document number was returned.`,
-  //       );
-  //     }
-  //   }
-  //
-  //   postings.push({
-  //     key: descriptor.key,
-  //     process: descriptor.payload.IV_PROC,
-  //     direction: descriptor.direction,
-  //     documentField: descriptor.documentField,
-  //     documentNumber: docNumber,
-  //     messages: result.messages,
-  //   });
-  // }
-
   for (const descriptor of payloads) {
+    const result = await parseResponse(
+      await postToCpi(descriptor.payload, descriptor.key),
+    );
+
+    if (result.errors.length) {
+      throw createBusinessError(
+        422,
+        s4BusinessMessage(result.errors),
+        s4BusinessMessage(result.errors),
+      );
+    }
+
+    let docNumber = "";
+
+    if (S4_TEST_MODE !== "X") {
+      docNumber = documentNumber(result);
+
+      if (!docNumber) {
+        throw new Error(
+          `S/4 reported success for ${descriptor.key}, but no document number was returned.`,
+        );
+      }
+    } else {
+      docNumber = generateTestDocumentNumber();
+    }
+
     postings.push({
       key: descriptor.key,
       process: descriptor.payload.IV_PROC,
       direction: descriptor.direction,
       documentField: descriptor.documentField,
-      documentNumber: generateTestDocumentNumber(),
-      messages: [],
-    });
-  }
-
-  if (S4_TEST_MODE === "X") {
-    postings.forEach((posting) => {
-      posting.documentNumber = generateTestDocumentNumber();
+      documentNumber: docNumber,
+      messages: result.messages,
     });
   }
 
@@ -956,12 +1095,73 @@ async function performPostToS4({ tx, request, requestId, emailAddress }) {
     documentNumbers: Object.fromEntries(
       postings.map(({ key, documentNumber }) => [key, documentNumber]),
     ),
+    // For a Transfer posting, so the caller can mark the Earmarked
+    // Funds document complete once the combined Transfer document
+    // number above is durably set (see approve-reject-request.js).
+    earmarkedFundsDocNumber: requestData.earmarkedFundsDocNumber || null,
     statusCode: updated.status_code,
     postingDate: updated.postingDate,
     postingPeriod: updated.postingPeriod,
     postings,
     errors: [],
   };
+}
+
+/**
+ * Read-only S/4 posting simulation (IV_TEST = "X") - validates that
+ * ZFM_FI_FMBB_UPLOAD would accept this request's payload, WITHOUT
+ * persisting anything in S/4 or in this request (no document number,
+ * no approver/status update). Used at submission time (see
+ * requests-before-create-logic.js and requests-resubmit-logic.js) so
+ * a posting-time failure (missing/invalid Cost Center, GL account,
+ * etc.) is caught and surfaced to the requestor before the request
+ * ever reaches an approver, instead of only appearing when the final
+ * approver approves and the real posting runs.
+ *
+ * Reuses the exact same payload-building/validation/CPI-call path as
+ * the real posting (performPostToS4) so a passing simulation is a
+ * reliable predictor of the real posting - only IV_TEST differs.
+ *
+ * @param {object} options
+ * @param {object} options.requestData - same shape performPostToS4
+ *   reads (requestType_code, budgetType_code, returnCategory_code,
+ *   fiscalYear, requestor, reason, requestNumber, ...)
+ * @param {object[]} options.items
+ * @returns {Promise<void>}
+ * @throws {Error} a business error (see createBusinessError) if S/4
+ *   would reject the posting, or if the payload itself is invalid
+ */
+async function simulatePostToS4({ requestData, items }) {
+  if (!items || !items.length) {
+    return;
+  }
+
+  const payloads = buildPayloads(requestData, items);
+
+  if (!payloads.length) {
+    return;
+  }
+
+  payloads.forEach((descriptor) => {
+    descriptor.payload.IV_TEST = "X";
+  });
+
+  payloads.forEach(validatePayload);
+  validateTransferBalance(payloads);
+
+  for (const descriptor of payloads) {
+    const result = await parseResponse(
+      await postToCpi(descriptor.payload, descriptor.key),
+    );
+
+    if (result.errors.length) {
+      throw createBusinessError(
+        422,
+        s4BusinessMessage(result.errors),
+        s4BusinessMessage(result.errors),
+      );
+    }
+  }
 }
 
 /*
@@ -1005,3 +1205,4 @@ module.exports = async function postToS4(request) {
 
 module.exports.performPostToS4 = performPostToS4;
 module.exports.businessError = businessError;
+module.exports.simulatePostToS4 = simulatePostToS4;

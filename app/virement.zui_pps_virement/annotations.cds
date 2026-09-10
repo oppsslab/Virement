@@ -51,7 +51,18 @@ annotate service.Requests with {
                 LocalDataProperty: budgetType_code,
                 ValueListProperty: 'code'
             }]
-        }
+        },
+        // Once the request is Pending Approval, only Reason (and, on
+        // items, Asset Status) may still be edited - everything else
+        // that was writable in Draft locks to read-only.
+        Common.FieldControl             : {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'status_code'},
+                2
+            ]},
+            1,
+            3
+        ]}}
     );
 
     /*
@@ -97,6 +108,7 @@ annotate service.Requests with {
     fiscalYear           @(title: '{i18n>FiscalYear}');
     submissionPeriod     @(title: '{i18n>SubmissionPeriod}');
     submissionDate       @(title: '{i18n>SubmissionDate}');
+    submissionTime       @(title: '{i18n>SubmissionTime}');
     requestor            @(
         title              : '{i18n>Requestor}',
         Common.FieldControl: #ReadOnly
@@ -133,6 +145,8 @@ annotate service.Requests with {
     isPendingApprover    @(title: '{i18n>IsPendingApprover}');
     isJKEW               @(title: '{i18n>IsJKEW}');
     isFunctional         @(title: '{i18n>IsFunctional}');
+    isMyRequest          @(title: '{i18n>IsMyRequest}');
+    earmarkedFundsIsCompleted @(title: '{i18n>EarmarkedFundsIsCompleted}');
 
     requestLink          @UI.Hidden;
 };
@@ -154,8 +168,14 @@ annotate service.Requests with @(
                 Value: requestType.descr
             },
             {
-                $Type: 'UI.DataField',
-                Value: status.descr
+                $Type                     : 'UI.DataField',
+                Value                     : status.descr,
+                // RequestStatusCode's numeric values already line up with
+                // OData's own Criticality enum (0 Neutral/Draft, 1
+                // Negative/Rejected, 2 Critical/Pending Approval, 3
+                // Positive/Completed), so status_code can drive it directly.
+                Criticality               : status_code,
+                CriticalityRepresentation : #WithIcon
             },
             {
                 $Type: 'UI.DataField',
@@ -164,10 +184,6 @@ annotate service.Requests with @(
             {
                 $Type: 'UI.DataField',
                 Value: submissionPeriod
-            },
-            {
-                $Type: 'UI.DataField',
-                Value: submissionDate
             },
             {
                 $Type: 'UI.DataField',
@@ -209,13 +225,16 @@ annotate service.Requests with @(
     ],
 
     /*
-     * Default sort for the list reports: latest submission date first.
+     * Default sort for the list reports: latest Created On first.
+     * submissionDate/submissionTime were dropped from the LineItem
+     * above - they duplicated createdAt (managed aspect), which
+     * already captures the same moment.
      */
     UI.PresentationVariant: {
         $Type         : 'UI.PresentationVariantType',
         SortOrder     : [{
             $Type     : 'Common.SortOrderType',
-            Property  : submissionDate,
+            Property  : createdAt,
             Descending: true
         }],
         Visualizations: ['@UI.LineItem']
@@ -262,28 +281,47 @@ annotate service.Requests with @(
         PresentationVariant: ![@UI.PresentationVariant]
     },
 
+    /*
+     * Drives the My Requests list, via that target's
+     * defaultTemplateAnnotationPath. isMyRequest is virtual, same
+     * reasoning as isPendingApprover above: requests-list-scope-logic
+     * rewrites this into a real requestor restriction before the query
+     * reaches the database. Every status is shown - the whole point is
+     * to track your own request regardless of where it stands.
+     */
+    UI.SelectionVariant #MyRequests: {
+        $Type        : 'UI.SelectionVariantType',
+        SelectOptions: [{
+            $Type       : 'UI.SelectOptionType',
+            PropertyName: isMyRequest,
+            Ranges      : [{
+                $Type : 'UI.SelectionRangeType',
+                Sign  : #I,
+                Option: #EQ,
+                Low   : true
+            }]
+        }]
+    },
+
+    UI.SelectionPresentationVariant #MyRequests: {
+        $Type              : 'UI.SelectionPresentationVariantType',
+        SelectionVariant   : ![@UI.SelectionVariant#MyRequests],
+        PresentationVariant: ![@UI.PresentationVariant]
+    },
+
     UI.Identification : [
         {
             $Type        : 'UI.DataFieldForAction',
             Action       : 'service.calculateValues',
             Label        : '{i18n>Calculate}',
-            ![@UI.Hidden]: IsActiveEntity
+            ![@UI.Hidden]: true
         },
         {
             $Type        : 'UI.DataFieldForAction',
             Action       : 'service.resubmitRequest',
             Label        : '{i18n>resubmitRequest}',
             Criticality  : #Positive,
-            ![@UI.Hidden]: {$edmJson: {$Or: [
-                {$Ne: [
-                    {$Path: 'status_code'},
-                    1
-                ]},
-                {$Eq: [
-                    {$Path: 'IsActiveEntity'},
-                    false
-                ]}
-            ]}}
+            ![@UI.Hidden]: true
         },
         {
             $Type        : 'UI.DataFieldForAction',
@@ -349,30 +387,71 @@ annotate service.Requests with @(
             $Type        : 'UI.DataFieldForAction',
             Action       : 'service.delegateApproval',
             Label        : '{i18n>Delegate}',
-            ![@UI.Hidden]: {$edmJson: {$Or: [
-                {$Ne: [
-                    {$Path: 'status_code'},
-                    2
-                ]},
-                {$Eq: [
-                    {$Path: 'isPendingApprover'},
-                    false
-                ]},
-                {$Eq: [
-                    {$Path: 'IsActiveEntity'},
-                    false
-                ]}
-            ]}}
+            // Not in use for now - unconditionally hidden. Restore the
+            // condition below (status_code/isPendingApprover/
+            // IsActiveEntity) to bring the button back.
+            // ![@UI.Hidden]: {$edmJson: {$Or: [
+            //     {$Ne: [
+            //         {$Path: 'status_code'},
+            //         2
+            //     ]},
+            //     {$Eq: [
+            //         {$Path: 'isPendingApprover'},
+            //         false
+            //     ]},
+            //     {$Eq: [
+            //         {$Path: 'IsActiveEntity'},
+            //         false
+            //     ]}
+            // ]}}
+            ![@UI.Hidden]: true
+        },
+        /*
+         * Manual fallback for the best-effort Earmarked Funds
+         * completion attempted at approval time (see
+         * approve-reject-request.js) - shown only once there is
+         * something to retry: a Transfer with an Earmarked Funds
+         * document that S/4 still reports as not completed.
+         *
+         * Not in use for now - unconditionally hidden. Restore the
+         * condition below (requestType_code/earmarkedFundsDocNumber/
+         * earmarkedFundsIsCompleted/IsActiveEntity) to bring the
+         * button back.
+         */
+        {
+            $Type        : 'UI.DataFieldForAction',
+            Action       : 'service.retryEarmarkedFundsCompletion',
+            Label        : '{i18n>RetryEarmarkedFundsCompletion}',
+            // ![@UI.Hidden]: {$edmJson: {$Or: [
+            //     {$Ne: [
+            //         {$Path: 'requestType_code'},
+            //         'T'
+            //     ]},
+            //     {$Eq: [
+            //         {$Path: 'earmarkedFundsDocNumber'},
+            //         null
+            //     ]},
+            //     {$Eq: [
+            //         {$Path: 'earmarkedFundsIsCompleted'},
+            //         true
+            //     ]},
+            //     {$Eq: [
+            //         {$Path: 'IsActiveEntity'},
+            //         false
+            //     ]}
+            // ]}}
+            ![@UI.Hidden]: true
         },
     ],
+    // Edit is only ever shown for Draft(0) or Pending Approval(2).
+    // Rejected(1) uses the Resubmit action's own copy-to-new-request
+    // flow instead (now hidden too, see resubmitRequest above), and
+    // Completed(3) is already posted to S/4 - neither is meant to be
+    // reopened for editing.
     UI.UpdateHidden   : {$edmJson: {$And: [
         {$Ne: [
             {$Path: 'status_code'},
             2
-        ]},
-        {$Ne: [
-            {$Path: 'status_code'},
-            1
         ]},
         {$Ne: [
             {$Path: 'status_code'},
@@ -841,6 +920,44 @@ annotate service.Requests with @(
                 ]}}
             },
             {
+                // Also referenced by EarmarkedFundsDocNumberField.fragment.xml's
+                // icon (the tick shown next to the Document Number above) -
+                // a genuine UI.DataField for it is needed here regardless,
+                // so Fiori Elements includes it in $select (a property never
+                // referenced by any annotation is silently left out,
+                // confirmed with workflowError earlier in this file).
+                // Shown here too, as its own icon-coded status (green tick/
+                // red cross) rather than plain "Yes"/"No" text.
+                $Type        : 'UI.DataField',
+                Value        : earmarkedFundsIsCompleted,
+                Criticality  : {$edmJson: {$If: [
+                    {$Eq: [
+                        {$Path: 'earmarkedFundsIsCompleted'},
+                        true
+                    ]},
+                    3,
+                    1
+                ]}},
+                CriticalityRepresentation: #WithIcon,
+                // Hidden per request - the field/label is not shown, but
+                // the DataField record itself must stay (see the comment
+                // above) so earmarkedFundsIsCompleted remains in $select
+                // for EarmarkedFundsDocNumberField.fragment.xml's icon.
+                // Original conditional visibility kept here, commented
+                // out, in case this needs to be restored later:
+                // ![@UI.Hidden]: {$edmJson: {$Or: [
+                //     {$Ne: [
+                //         {$Path: 'requestType_code'},
+                //         'T'
+                //     ]},
+                //     {$Le: [
+                //         {$Path: 'transferOutAmount'},
+                //         0
+                //     ]}
+                // ]}}
+                ![@UI.Hidden]: true
+            },
+            {
                 $Type        : 'UI.DataField',
                 Value        : supplementDocNumber,
                 ![@UI.Hidden]: {$edmJson: {$Or: [
@@ -870,20 +987,11 @@ annotate service.Requests with @(
             },
             {
                 $Type        : 'UI.DataField',
-                Value        : transferInDocNumber,
-                ![@UI.Hidden]: {$edmJson: {$Or: [
-                    {$Ne: [
-                        {$Path: 'status_code'},
-                        3
-                    ]},
-                    {$Ne: [
-                        {$Path: 'requestType_code'},
-                        'T'
-                    ]}
-                ]}}
-            },
-            {
-                $Type        : 'UI.DataField',
+                Label        : '{i18n>TransferOutInDocNumber}',
+                // transferOutDocNumber and transferInDocNumber are now
+                // always the same value - post-to-s4-logic.js posts one
+                // combined FMBB document per Transfer (see IT_ITEM built
+                // from both directions) - so only one is shown here.
                 Value        : transferOutDocNumber,
                 ![@UI.Hidden]: {$edmJson: {$Or: [
                     {$Ne: [
@@ -981,7 +1089,12 @@ annotate service.Requests actions {
             'in/supplementDocNumber',
             'in/returnDocNumber',
             'in/transferInDocNumber',
-            'in/transferOutDocNumber'
+            'in/transferOutDocNumber',
+            // approve-reject-request.js sets the final workflowStatus
+            // (COMPLETED/RUNNING) in the very same transaction as the
+            // approval itself - refetch it so the Workflow facet stops
+            // showing the stale value it had before this action ran.
+            'in/workflowStatus'
         ],
         TargetEntities  : [
             RequestApprovers,
@@ -997,7 +1110,10 @@ annotate service.Requests actions {
             'in/supplementDocNumber',
             'in/returnDocNumber',
             'in/transferInDocNumber',
-            'in/transferOutDocNumber'
+            'in/transferOutDocNumber',
+            // See approveRequest above - rejectRequest sets
+            // workflowStatus to REJECTED in the same transaction.
+            'in/workflowStatus'
         ],
         TargetEntities  : [
             RequestApprovers,
@@ -1013,6 +1129,17 @@ annotate service.Requests actions {
         ],
         TargetEntities  : [
             RequestApprovers,
+            RequestHistory
+        ]
+    })
+};
+
+annotate service.Requests actions {
+    retryEarmarkedFundsCompletion @(Common.SideEffects: {
+        TargetProperties: [
+            'in/earmarkedFundsIsCompleted'
+        ],
+        TargetEntities  : [
             RequestHistory
         ]
     })
@@ -1045,7 +1172,18 @@ annotate service.RequestItems with {
     );
     costCentre        @(
         title                : '{i18n>CostCentre}',
-        Common.FieldControl  : #Mandatory,
+        // Once the parent request is Pending Approval, only Asset
+        // Status stays editable on items - this locks read-only at
+        // that point (request/status_code, since status lives on the
+        // parent), otherwise stays Mandatory as before.
+        Common.FieldControl  : {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            7
+        ]}},
 
         /*
          * Live search help against S/4, served by the CostCenters
@@ -1063,6 +1201,12 @@ annotate service.RequestItems with {
                     ValueListProperty: 'costCentre'
                 },
                 {
+                    // DisplayOnly, not InOut: costCentreDescription is
+                    // @readonly (Core.Computed) and server-resolved in
+                    // requestitems-drafts-before-create/update-logic.js
+                    // (utils/cost-centre-description-lookup.js) - this
+                    // only shows the Name as an extra column in the
+                    // value help dialog for context while searching.
                     $Type            : 'Common.ValueListParameterDisplayOnly',
                     ValueListProperty: 'costCentreName'
                 },
@@ -1072,6 +1216,14 @@ annotate service.RequestItems with {
                 }
             ]
         }
+    );
+    /*
+     * Read-only, system-derived from the Cost Centre search help
+     * (S/4) whenever costCentre is set/changed - never user-settable.
+     */
+    costCentreDescription @(
+        title              : 'Cost Centre Description',
+        Common.FieldControl: #ReadOnly
     );
     /*
      * System-derived from Department Grouping master data whenever
@@ -1097,8 +1249,16 @@ annotate service.RequestItems with {
         Common.FieldControl: #ReadOnly
     );
     glAccount         @(
-        title                : '{i18n>GL}',
-        Common.FieldControl  : #Mandatory,
+        title                : '{i18n>GLAccountLabel}',
+        // See costCentre above: read-only once Pending Approval.
+        Common.FieldControl  : {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            7
+        ]}},
 
         /*
          * Live search help against S/4, served by the GLAccounts
@@ -1116,6 +1276,12 @@ annotate service.RequestItems with {
                     ValueListProperty: 'glAccount'
                 },
                 {
+                    // DisplayOnly, not InOut: glAccountName is
+                    // @readonly (Core.Computed) and server-resolved in
+                    // requestitems-drafts-before-create/update-logic.js
+                    // (utils/gl-account-name-lookup.js) - this only
+                    // shows the Name as an extra column in the value
+                    // help dialog for context while searching.
                     $Type            : 'Common.ValueListParameterDisplayOnly',
                     ValueListProperty: 'glAccountName'
                 },
@@ -1125,6 +1291,14 @@ annotate service.RequestItems with {
                 }
             ]
         }
+    );
+    /*
+     * Read-only, system-derived from the GL Account search help (S/4)
+     * whenever glAccount is set/changed - never user-settable.
+     */
+    glAccountName     @(
+        title              : 'GL Account Name',
+        Common.FieldControl: #ReadOnly
     );
     /*
      * System-derived from GL Grouping master data whenever glAccount
@@ -1139,6 +1313,17 @@ annotate service.RequestItems with {
         Common.FieldControl: #ReadOnly
     );
     /*
+     * System-derived from GL Grouping master data whenever glAccount
+     * is set/changed - never user-settable. Drives whether Asset
+     * Status is shown/editable on this item (see assetStatus below
+     * and the UI.Hidden condition on each LineItem's assetStatus_code
+     * DataField).
+     */
+    assetType         @(
+        title              : 'Asset Type',
+        Common.FieldControl: #ReadOnly
+    );
+    /*
      * System-derived from Functional Department Grouping master data
      * whenever glAccount is set/changed - never user-settable. Same
      * plain-scalar-field reasoning as glGroup above.
@@ -1147,9 +1332,26 @@ annotate service.RequestItems with {
         title              : 'Functional Department',
         Common.FieldControl: #ReadOnly
     );
+    /*
+     * System-derived from Building Grouping master data whenever
+     * costCentre is set/changed - never user-settable. Same
+     * plain-scalar-field reasoning as department above.
+     */
+    buildingName      @(
+        title              : 'Building Name',
+        Common.FieldControl: #ReadOnly
+    );
     material          @(
         title                : '{i18n>Material}',
-        Common.FieldControl  : #Mandatory,
+        // See costCentre above: read-only once Pending Approval.
+        Common.FieldControl  : {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            7
+        ]}},
 
         /*
          * Live search help against S/4, served by the MaterialGroups
@@ -1166,14 +1368,38 @@ annotate service.RequestItems with {
                     ValueListProperty: 'materialGroup'
                 },
                 {
+                    // DisplayOnly, not InOut: materialGroupDescription
+                    // is @readonly (Core.Computed) and server-resolved
+                    // in requestitems-drafts-before-create/update-logic.js
+                    // (utils/material-group-description-lookup.js) -
+                    // this only shows the Description as an extra
+                    // column in the value help dialog for context
+                    // while searching.
                     $Type            : 'Common.ValueListParameterDisplayOnly',
                     ValueListProperty: 'materialGroupDescription'
                 }
             ]
         }
     );
+    /*
+     * Read-only, system-derived from the Material Group search help
+     * (S/4) whenever material is set/changed - never user-settable.
+     */
+    materialGroupDescription @(
+        title              : 'Material Group Description',
+        Common.FieldControl: #ReadOnly
+    );
     wbs               @(
         title           : '{i18n>WBS}',
+        // See costCentre above: read-only once Pending Approval.
+        Common.FieldControl: {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            3
+        ]}},
 
         /*
          * Live search help against S/4, served by the WBSElements
@@ -1201,6 +1427,18 @@ annotate service.RequestItems with {
         title                          : '{i18n>AssetStatus}',
         Common.Text                    : assetStatus.descr,
         Common.Text.@UI.TextArrangement: #TextOnly,
+        // Not editable once the item's GL Account resolves to a
+        // Non-Asset GL Group row (see assetType above) - it doesn't
+        // apply, and each LineItem below also hides the column
+        // entirely for the same rows (see the DataField's UI.Hidden).
+        Common.FieldControl            : {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'assetType'},
+                'NON ASSET'
+            ]},
+            1,
+            3
+        ]}},
         Common.ValueListWithFixedValues: true,
         Common.ValueList               : {
             $Type          : 'Common.ValueListType',
@@ -1213,23 +1451,68 @@ annotate service.RequestItems with {
             }]
         }
     );
+    // See costCentre above: all four amounts, and Description, lock
+    // to read-only once Pending Approval - only Asset Status (and,
+    // on the header, Reason) stay editable at that point.
     supplementAmount  @(
         title       : '{i18n>SupplementAmount}',
-        Common.Label: '{i18n>Amount}'
+        Common.Label: '{i18n>Amount}',
+        Common.FieldControl: {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            3
+        ]}}
     );
     returnAmount      @(
         title       : '{i18n>ReturnAmount}',
-        Common.Label: '{i18n>Amount}'
+        Common.Label: '{i18n>Amount}',
+        Common.FieldControl: {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            3
+        ]}}
     );
     transferInAmount  @(
         title       : '{i18n>TransferInAmount}',
-        Common.Label: '{i18n>TransferInAmount}'
+        Common.Label: '{i18n>TransferInAmount}',
+        Common.FieldControl: {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            3
+        ]}}
     );
     transferOutAmount @(
         title       : '{i18n>TransferOutAmount}',
-        Common.Label: '{i18n>TransferOutAmount}'
+        Common.Label: '{i18n>TransferOutAmount}',
+        Common.FieldControl: {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            3
+        ]}}
     );
-    description       @(title: '{i18n>Description}');
+    description       @(
+        title              : '{i18n>Description}',
+        Common.FieldControl: {$edmJson: {$If: [
+            {$Eq: [
+                {$Path: 'request/status_code'},
+                2
+            ]},
+            1,
+            3
+        ]}}
+    );
 };
 
 
@@ -1242,6 +1525,8 @@ annotate service.RequestItems with @(
     // Supplement Items Table (Type S)
     // =========================================================================
     UI.LineItem #SupplementItems              : [
+        // Editable fields first, then read-only/system-derived
+        // display fields.
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -1252,11 +1537,23 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: costCentreDescription
+        },
+        {
+            $Type: 'UI.DataField',
             Value: glAccount
         },
         {
             $Type: 'UI.DataField',
+            Value: glAccountName
+        },
+        {
+            $Type: 'UI.DataField',
             Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: materialGroupDescription
         },
         {
             $Type        : 'UI.DataField',
@@ -1270,8 +1567,15 @@ annotate service.RequestItems with @(
             ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: assetStatus_code
+            $Type        : 'UI.DataField',
+            Value        : assetStatus_code,
+            // Hidden entirely (not just read-only) once the item's GL
+            // Account resolves to a Non-Asset GL Group row - see
+            // assetType above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'assetType'},
+                'NON ASSET'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1296,6 +1600,8 @@ annotate service.RequestItems with @(
     // Return Items Table (Type R)
     // =========================================================================
     UI.LineItem #ReturnItems                  : [
+        // Editable fields first, then read-only/system-derived
+        // display fields.
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -1306,11 +1612,23 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: costCentreDescription
+        },
+        {
+            $Type: 'UI.DataField',
             Value: glAccount
         },
         {
             $Type: 'UI.DataField',
+            Value: glAccountName
+        },
+        {
+            $Type: 'UI.DataField',
             Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: materialGroupDescription
         },
         {
             $Type        : 'UI.DataField',
@@ -1324,8 +1642,15 @@ annotate service.RequestItems with @(
             ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: assetStatus_code
+            $Type        : 'UI.DataField',
+            Value        : assetStatus_code,
+            // Hidden entirely (not just read-only) once the item's GL
+            // Account resolves to a Non-Asset GL Group row - see
+            // assetType above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'assetType'},
+                'NON ASSET'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1350,6 +1675,8 @@ annotate service.RequestItems with @(
     // Transfer In Items Table (Type T)
     // =========================================================================
     UI.LineItem #TransferInOutItems              : [
+        // Editable fields first, then read-only/system-derived
+        // display fields.
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -1360,18 +1687,7 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: department,
-            Label: 'Department'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: region,
-            Label: 'Region'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: branch,
-            Label: 'Branch'
+            Value: costCentreDescription
         },
         {
             $Type: 'UI.DataField',
@@ -1379,17 +1695,15 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: glGroup,
-            Label: 'GL Group'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: functionalDepartment,
-            Label: 'Functional Department'
+            Value: glAccountName
         },
         {
             $Type: 'UI.DataField',
             Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: materialGroupDescription
         },
         {
             $Type        : 'UI.DataField',
@@ -1403,12 +1717,15 @@ annotate service.RequestItems with @(
             ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: assetStatus_code
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: transferInAmount
+            $Type        : 'UI.DataField',
+            Value        : assetStatus_code,
+            // Hidden entirely (not just read-only) once the item's GL
+            // Account resolves to a Non-Asset GL Group row - see
+            // assetType above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'assetType'},
+                'NON ASSET'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1416,7 +1733,65 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: transferInAmount
+        },
+        {
+            $Type: 'UI.DataField',
             Value: description
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isDepartment,
+            Label: 'Is Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: department,
+            Label: 'Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isRegionAndBranch,
+            Label: 'Is Region & Branch',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: region,
+            Label: 'Region',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: branch,
+            Label: 'Branch',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glGroup,
+            Label: 'GL Group',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: functionalDepartment,
+            Label: 'Functional Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isBuilding,
+            Label: 'Is Building',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: buildingName,
+            Label: 'Building Name',
+            ![@UI.Importance]: #Low
         }
     ],
 
@@ -1433,6 +1808,8 @@ annotate service.RequestItems with @(
     // Transfer Functional
     // =========================================================================
     UI.LineItem #TransferFunctional           : [
+        // Editable fields first, then read-only/system-derived
+        // display fields.
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -1443,18 +1820,7 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: department,
-            Label: 'Department'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: region,
-            Label: 'Region'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: branch,
-            Label: 'Branch'
+            Value: costCentreDescription
         },
         {
             $Type: 'UI.DataField',
@@ -1462,17 +1828,15 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: glGroup,
-            Label: 'GL Group'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: functionalDepartment,
-            Label: 'Functional Department'
+            Value: glAccountName
         },
         {
             $Type: 'UI.DataField',
             Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: materialGroupDescription
         },
         {
             $Type        : 'UI.DataField',
@@ -1486,13 +1850,15 @@ annotate service.RequestItems with @(
             ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: assetStatus_code
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: transferInAmount,
-            Label: '{i18n>TransferInAmount}',
+            $Type        : 'UI.DataField',
+            Value        : assetStatus_code,
+            // Hidden entirely (not just read-only) once the item's GL
+            // Account resolves to a Non-Asset GL Group row - see
+            // assetType above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'assetType'},
+                'NON ASSET'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1501,7 +1867,66 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
+            Value: transferInAmount,
+            Label: '{i18n>TransferInAmount}',
+        },
+        {
+            $Type: 'UI.DataField',
             Value: description
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isDepartment,
+            Label: 'Is Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: department,
+            Label: 'Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isRegionAndBranch,
+            Label: 'Is Region & Branch',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: region,
+            Label: 'Region',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: branch,
+            Label: 'Branch',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glGroup,
+            Label: 'GL Group',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: functionalDepartment,
+            Label: 'Functional Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isBuilding,
+            Label: 'Is Building',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: buildingName,
+            Label: 'Building Name',
+            ![@UI.Importance]: #Low
         }
     ],
 
@@ -1519,6 +1944,8 @@ annotate service.RequestItems with @(
     // Transfer JKEW
     // =========================================================================
     UI.LineItem #TransferJKEW                 : [
+        // Editable fields first, then read-only/system-derived
+        // display fields.
         {
             $Type: 'UI.DataField',
             Value: srNo
@@ -1529,18 +1956,7 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: department,
-            Label: 'Department'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: region,
-            Label: 'Region'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: branch,
-            Label: 'Branch'
+            Value: costCentreDescription
         },
         {
             $Type: 'UI.DataField',
@@ -1548,17 +1964,15 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: glGroup,
-            Label: 'GL Group'
-        },
-        {
-            $Type: 'UI.DataField',
-            Value: functionalDepartment,
-            Label: 'Functional Department'
+            Value: glAccountName
         },
         {
             $Type: 'UI.DataField',
             Value: material
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: materialGroupDescription
         },
         {
             $Type        : 'UI.DataField',
@@ -1572,8 +1986,15 @@ annotate service.RequestItems with @(
             ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: assetStatus_code
+            $Type        : 'UI.DataField',
+            Value        : assetStatus_code,
+            // Hidden entirely (not just read-only) once the item's GL
+            // Account resolves to a Non-Asset GL Group row - see
+            // assetType above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'assetType'},
+                'NON ASSET'
+            ]}}
         },
         {
             $Type: 'UI.DataField',
@@ -1587,17 +2008,71 @@ annotate service.RequestItems with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: transferInAmount,
-            Label: '{i18n>TransferInAmount}',
-        },
-        {
-            $Type: 'UI.DataField',
             Value: transferOutAmount,
             Label: '{i18n>TransferOutAmount}',
         },
         {
             $Type: 'UI.DataField',
+            Value: transferInAmount,
+            Label: '{i18n>TransferInAmount}',
+        },
+        {
+            $Type: 'UI.DataField',
             Value: description
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isDepartment,
+            Label: 'Is Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: department,
+            Label: 'Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isRegionAndBranch,
+            Label: 'Is Region & Branch',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: region,
+            Label: 'Region',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: branch,
+            Label: 'Branch',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: glGroup,
+            Label: 'GL Group',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: functionalDepartment,
+            Label: 'Functional Department',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isBuilding,
+            Label: 'Is Building',
+            ![@UI.Importance]: #Low
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: buildingName,
+            Label: 'Building Name',
+            ![@UI.Importance]: #Low
         }
     ],
 
@@ -1657,7 +2132,22 @@ annotate service.RequestItems with @(
     //     Visualizations: ['@UI.LineItem#TransferOutItems']
     // },
 
-    Capabilities.SearchRestrictions           : {Searchable: false}
+    Capabilities.SearchRestrictions           : {Searchable: false},
+    // Add/Delete are only for a request that has never been
+    // submitted (Draft, status_code 0). Once a request has gone
+    // through submit at least once (Rejected/Pending Approval/
+    // Completed) and is reopened for edit, the item SET is locked -
+    // only individual field values may still change, matching the
+    // Upload/Download Template buttons' visibility in manifest.json
+    // (grep "status_code} === 0" there).
+    Capabilities.InsertRestrictions.Insertable: {$edmJson: {$Eq: [
+        {$Path: 'request/status_code'},
+        0
+    ]}},
+    Capabilities.DeleteRestrictions.Deletable : {$edmJson: {$Eq: [
+        {$Path: 'request/status_code'},
+        0
+    ]}}
 );
 
 
@@ -1791,7 +2281,23 @@ annotate service.WorkflowLogs with @(
 // Request Attachments
 // =============================================================================
 
-annotate service.Requests.RequestAttachments with @(Capabilities.SearchRestrictions: {Searchable: false});
+// Upload/Delete are only for a request that has never been submitted
+// (Draft, status_code 0) - same rule and reasoning as RequestItems'
+// Insert/DeleteRestrictions above. up_ is the auto-generated
+// composition-parent navigation back to Requests (no explicit
+// association is declared on the reusable @cap-js/attachments
+// Attachments aspect this entity extends).
+annotate service.Requests.RequestAttachments with @(
+    Capabilities.SearchRestrictions           : {Searchable: false},
+    Capabilities.InsertRestrictions.Insertable: {$edmJson: {$Eq: [
+        {$Path: 'up_/status_code'},
+        0
+    ]}},
+    Capabilities.DeleteRestrictions.Deletable : {$edmJson: {$Eq: [
+        {$Path: 'up_/status_code'},
+        0
+    ]}}
+);
 
 // =============================================================================
 // RequestApprovers - List Report
@@ -2365,7 +2871,9 @@ annotate service.FunctionalDepartmentGrouping with {
     );
     itemType             @(title: 'Item Type');
     glAccounts           @(title: 'GL Accounts');
-    fundCentreScope      @(title: 'Fund Centre Scope');
+    isBuildingGrouping   @(title: 'Building Grouping');
+    isDepartment         @(title: 'Department');
+    isRegionAndBranch    @(title: 'Region & Branch');
     remarks              @(title: 'Remarks');
 };
 
@@ -2388,8 +2896,18 @@ annotate service.FunctionalDepartmentGrouping with @(
         },
         {
             $Type: 'UI.DataField',
-            Value: fundCentreScope,
-            Label: 'Fund Centre Scope'
+            Value: isBuildingGrouping,
+            Label: 'Building Grouping'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isDepartment,
+            Label: 'Department'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: isRegionAndBranch,
+            Label: 'Region & Branch'
         },
         {
             $Type: 'UI.DataField',
@@ -2434,7 +2952,9 @@ annotate service.FunctionalDepartmentGrouping with @(
             {$Type: 'UI.DataField', Value: functionalDepartment},
             {$Type: 'UI.DataField', Value: itemType},
             {$Type: 'UI.DataField', Value: glAccounts},
-            {$Type: 'UI.DataField', Value: fundCentreScope},
+            {$Type: 'UI.DataField', Value: isBuildingGrouping},
+            {$Type: 'UI.DataField', Value: isDepartment},
+            {$Type: 'UI.DataField', Value: isRegionAndBranch},
             {$Type: 'UI.DataField', Value: remarks}
         ]
     },

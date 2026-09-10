@@ -25,10 +25,22 @@ const TEMPLATE_COLUMNS = [
     width: 40,
   },
   {
-    key: "fundCentreScope",
-    header: "Fund Centre Scope",
-    example: "All region & branches",
-    width: 30,
+    key: "isBuildingGrouping",
+    header: "Building Grouping",
+    example: "FALSE",
+    width: 20,
+  },
+  {
+    key: "isDepartment",
+    header: "Department",
+    example: "FALSE",
+    width: 20,
+  },
+  {
+    key: "isRegionAndBranch",
+    header: "Region & Branch",
+    example: "FALSE",
+    width: 20,
   },
   {
     key: "remarks",

@@ -1,5 +1,11 @@
 "use strict";
 
+const cds = require("@sap/cds");
+
+const LOG = cds.log("virement-scenario");
+
+const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
+
 /**
  * Classifies a Non-Project Virement request's approval scenario from
  * its request items - each already carrying costCentre, glGroup,
@@ -8,12 +14,18 @@
  * - per the Virement (Non-Project) approval routing table.
  *
  * Priority order (first match wins), matching the table's row order:
+ *   0. Functional Department Grouping match (see
+ *      classifyByFunctionalDepartmentGrouping below) -> Head of
+ *      Functional Department. Checked BEFORE everything else below -
+ *      if it doesn't pass, falls through to the unchanged chain
+ *      starting at 1, including that chain's own (looser) Functional
+ *      Department scenario at 5.
  *   1. Different GL Group (transfer-out vs transfer-in) -> Head of
  *      Transfer-out Cost Center (one PER TRANSFER-OUT LINE ITEM, as
  *      its own parallel sub-level - "1A" for line 1, "1B" for line 2,
  *      etc., since each Head approves their own cost center's slice
  *      independently) -> Head of JKEW -> CEO/CFO
- *   2. Same GL Group AND same Cost Centre ("Same Fund Center") ->
+ *   2. Same GL Group AND same Department ("Same Department") ->
  *      Head of Department
  *   3. Same GL Group AND same Branch -> Head of Branch
  *   4. Same GL Group AND same Region (different Branch) -> Head of
@@ -70,6 +82,18 @@ function distinctValues(items, field) {
 }
 
 /**
+ * The one shared value a distinctValues(...).size === 1 check already
+ * confirmed every item has for the given field.
+ *
+ * @param {object[]} items
+ * @param {string} field
+ * @returns {string}
+ */
+function singleValue(items, field) {
+  return [...distinctValues(items, field)][0];
+}
+
+/**
  * Builds the Level 1 plan entries for "Head of Transfer-out Cost
  * Center", per transfer-out line item order.
  *
@@ -87,13 +111,20 @@ function buildTransferOutCostCentreEntries(transferOutItems) {
 /**
  * Builds the single, non-lettered Level 1 plan entry for scenarios
  * resolved by one flat role (Head of Department/Branch/Functional
- * Department) rather than per transfer-out cost center.
+ * Department) rather than per transfer-out cost center - scoped to
+ * the shared Department/Branch/Functional Department value every item
+ * matched on, so resolveApprovers (see get-approvers-logic.js) only
+ * returns the Approver Matrix row for THAT department/branch/etc,
+ * rather than every current approver for the role across all of them.
  *
  * @param {string} userRole
- * @returns {{level: string, userRole: string}[]}
+ * @param {string} departmentBranch - the single shared value (e.g.
+ *   distinctValues(allItems, "department")'s one member) items were
+ *   matched on for this scenario
+ * @returns {{level: string, userRole: string, departmentBranch: string}[]}
  */
-function buildSingleLevel1Entry(userRole) {
-  return [{ level: "1", userRole }];
+function buildSingleLevel1Entry(userRole, departmentBranch) {
+  return [{ level: "1", userRole, departmentBranch }];
 }
 
 /**
@@ -119,15 +150,126 @@ function resolveAmountTierRole(amount) {
   return "HOD_JKEW";
 }
 
+function hasText(value) {
+  return String(value ?? "").trim() !== "";
+}
+
 /**
+ * Priority-0 check: every item (transfer-out and transfer-in alike)
+ * must resolve, via its own GL Account, to the SAME Functional
+ * Department Grouping row - functionalDepartment is already
+ * auto-derived per item from that row's GL Accounts list (see
+ * utils/functional-department-grouping-lookup.js), so this is a plain
+ * equality check across all items, no extra GL lookup needed here.
+ *
+ * If that holds, EVERY Transfer In item's own Department / Region &
+ * Branch attributes (computed directly from its department/region/
+ * branch fields, the same way service.cds's isDepartment/
+ * isRegionAndBranch calculated columns do - not read from those
+ * columns themselves, since they are populated only by a live OData
+ * read and are not reliably present on a plain deep-insert payload
+ * item) must satisfy whichever of the matched row's isDepartment/
+ * isRegionAndBranch checkboxes are set - an OR across whichever of
+ * the two are checked, so a row with only one checked requires just
+ * that one to match (on every Transfer In item, not just one of
+ * them), and a row with neither checked can never pass this
+ * validation.
+ *
+ * @param {object} tx - an active cds.tx()
+ * @param {object[]} transferOutItems
+ * @param {object[]} transferInItems - 1 to 5 items (enforced at
+ *   submission - see requests-before-create-logic.js's
+ *   validateVirementItemCounts)
+ * @returns {Promise<object|null>} the classification, or null if
+ *   either validation fails - the caller then falls through to this
+ *   file's own (unchanged, looser) scenario chain
+ */
+async function classifyByFunctionalDepartmentGrouping(
+  tx,
+  transferOutItems,
+  transferInItems,
+) {
+  const allItems = [...transferOutItems, ...transferInItems];
+
+  const everyItemHasFunctionalDepartment = allItems.every((item) =>
+    hasText(item.functionalDepartment),
+  );
+
+  if (!everyItemHasFunctionalDepartment) {
+    return null;
+  }
+
+  if (distinctValues(allItems, "functionalDepartment").size !== 1) {
+    return null;
+  }
+
+  if (!transferInItems.length) {
+    return null;
+  }
+
+  const functionalDepartment = singleValue(allItems, "functionalDepartment");
+
+  const { FunctionalDepartmentGrouping } = cds.entities(SERVICE_NAMESPACE);
+
+  const groupingRow = await tx.run(
+    SELECT.one
+      .from(FunctionalDepartmentGrouping)
+      .columns("isDepartment", "isRegionAndBranch")
+      .where({ functionalDepartment }),
+  );
+
+  if (!groupingRow) {
+    LOG.warn(
+      "Functional Department matched on every item, but no " +
+        "Functional Department Grouping master row was found for it " +
+        "(deleted since?). Falling through to the standard scenario " +
+        "chain.",
+      JSON.stringify({ functionalDepartment }),
+    );
+
+    return null;
+  }
+
+  const transferInIsDepartment = transferInItems.every((item) =>
+    hasText(item.department),
+  );
+  const transferInIsRegionAndBranch = transferInItems.every(
+    (item) => hasText(item.region) && hasText(item.branch),
+  );
+
+  const secondValidationPassed =
+    (groupingRow.isDepartment && transferInIsDepartment) ||
+    (groupingRow.isRegionAndBranch && transferInIsRegionAndBranch);
+
+  if (!secondValidationPassed) {
+    return null;
+  }
+
+  const totalTransferOutAmount = transferOutItems.reduce(
+    (sum, item) => sum + (Number(item.transferOutAmount) || 0),
+    0,
+  );
+
+  return {
+    scenario: "Functional Department Grouping match",
+    level1Entries: buildSingleLevel1Entry("HOD_FUNC", functionalDepartment),
+    level2Role: null,
+    totalTransferOutAmount,
+  };
+}
+
+/**
+ * @param {object} tx - an active cds.tx(), needed to look up
+ *   Functional Department Grouping master data for the priority-0
+ *   check (see classifyByFunctionalDepartmentGrouping above)
  * @param {object[]} items - RequestItems rows: costCentre, glGroup,
  *   department, region, branch, functionalDepartment,
  *   transferInAmount, transferOutAmount
- * @returns {object|null} the approval plan classification, or null if
- *   items don't look like a Virement request with both transfer-out
- *   and transfer-in items
+ * @returns {Promise<object|null>} the approval plan classification, or
+ *   null if items don't look like a Virement request with both
+ *   transfer-out and transfer-in items
  */
-function classifyVirementNonProjectScenario(items) {
+async function classifyVirementNonProjectScenario(tx, items) {
   const transferOutItems = (items || []).filter(
     (item) => Number(item.transferOutAmount) > 0,
   );
@@ -137,6 +279,15 @@ function classifyVirementNonProjectScenario(items) {
   );
 
   if (!transferOutItems.length || !transferInItems.length) {
+    LOG.info(
+      "Not yet classifiable - missing a transfer-out or transfer-in " +
+        "item.",
+      JSON.stringify({
+        transferOutCount: transferOutItems.length,
+        transferInCount: transferInItems.length,
+      }),
+    );
+
     return null;
   }
 
@@ -146,6 +297,42 @@ function classifyVirementNonProjectScenario(items) {
     (sum, item) => sum + (Number(item.transferOutAmount) || 0),
     0,
   );
+
+  /*
+   * Logged unconditionally (not just on the fallback branch) so a
+   * mismatch is visible even when the classification looks right at
+   * a glance in the UI - e.g. two rows showing the same Department
+   * text that are actually different underlying values (trailing
+   * whitespace survives the Set dedup below via trim(), but a case or
+   * genuinely different Department Grouping master-data value would
+   * not).
+   */
+  LOG.info(
+    "Classifying scenario from items:",
+    JSON.stringify(
+      allItems.map((item) => ({
+        costCentre: item.costCentre,
+        glGroup: item.glGroup,
+        department: item.department,
+        region: item.region,
+        branch: item.branch,
+        functionalDepartment: item.functionalDepartment,
+        transferOutAmount: item.transferOutAmount,
+        transferInAmount: item.transferInAmount,
+      })),
+    ),
+  );
+
+  const functionalDepartmentGroupingMatch =
+    await classifyByFunctionalDepartmentGrouping(
+      tx,
+      transferOutItems,
+      transferInItems,
+    );
+
+  if (functionalDepartmentGroupingMatch) {
+    return functionalDepartmentGroupingMatch;
+  }
 
   const isSameGLGroup = distinctValues(allItems, "glGroup").size === 1;
 
@@ -159,10 +346,13 @@ function classifyVirementNonProjectScenario(items) {
     };
   }
 
-  if (distinctValues(allItems, "costCentre").size === 1) {
+  if (distinctValues(allItems, "department").size === 1) {
     return {
-      scenario: "Same Fund Center",
-      level1Entries: buildSingleLevel1Entry("HOD"),
+      scenario: "Same Department",
+      level1Entries: buildSingleLevel1Entry(
+        "HOD",
+        singleValue(allItems, "department"),
+      ),
       level2Role: null,
       totalTransferOutAmount,
     };
@@ -171,7 +361,10 @@ function classifyVirementNonProjectScenario(items) {
   if (distinctValues(allItems, "branch").size === 1) {
     return {
       scenario: "Same Branch",
-      level1Entries: buildSingleLevel1Entry("HOB"),
+      level1Entries: buildSingleLevel1Entry(
+        "HOB",
+        singleValue(allItems, "branch"),
+      ),
       level2Role: null,
       totalTransferOutAmount,
     };
@@ -182,6 +375,7 @@ function classifyVirementNonProjectScenario(items) {
       scenario: "Same Region, Different Branch",
       level1Entries: buildTransferOutCostCentreEntries(transferOutItems),
       level2Role: "REG_DIR",
+      level2DepartmentBranch: singleValue(allItems, "region"),
       totalTransferOutAmount,
     };
   }
@@ -189,7 +383,10 @@ function classifyVirementNonProjectScenario(items) {
   if (distinctValues(allItems, "functionalDepartment").size === 1) {
     return {
       scenario: "Authorized Functional Department",
-      level1Entries: buildSingleLevel1Entry("HOD_FUNC"),
+      level1Entries: buildSingleLevel1Entry(
+        "HOD_FUNC",
+        singleValue(allItems, "functionalDepartment"),
+      ),
       level2Role: null,
       totalTransferOutAmount,
     };

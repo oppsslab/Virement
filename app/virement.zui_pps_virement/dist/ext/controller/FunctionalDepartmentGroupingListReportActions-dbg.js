@@ -225,7 +225,9 @@ sap.ui.define(
               functionalDepartment: oRow.functionalDepartment,
               itemType: oRow.itemType,
               glAccounts: oRow.glAccounts,
-              fundCentreScope: oRow.fundCentreScope,
+              isBuildingGrouping: oRow.isBuildingGrouping,
+              isDepartment: oRow.isDepartment,
+              isRegionAndBranch: oRow.isRegionAndBranch,
               remarks: oRow.remarks,
             });
           });

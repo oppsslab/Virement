@@ -97,6 +97,24 @@ function toTrimmedString(value) {
   return String(value).trim();
 }
 
+const TRUE_VALUES = new Set(["true", "yes", "y", "1"]);
+
+/**
+ * Parses an uploaded cell into a boolean, matching TEMPLATE_COLUMNS'
+ * TRUE/FALSE example values - anything not recognizable as "true" is
+ * treated as false, so a blank cell defaults to unchecked.
+ *
+ * @param {*} value
+ * @returns {boolean}
+ */
+function toBoolean(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return TRUE_VALUES.has(String(value ?? "").trim().toLowerCase());
+}
+
 /**
  * Validates and normalizes one parsed row.
  *
@@ -110,7 +128,9 @@ function validateRow(row) {
   const functionalDepartment = toTrimmedString(row.functionalDepartment);
   const itemType = toTrimmedString(row.itemType);
   const glAccounts = toTrimmedString(row.glAccounts);
-  const fundCentreScope = toTrimmedString(row.fundCentreScope);
+  const isBuildingGrouping = toBoolean(row.isBuildingGrouping);
+  const isDepartment = toBoolean(row.isDepartment);
+  const isRegionAndBranch = toBoolean(row.isRegionAndBranch);
   const remarks = toTrimmedString(row.remarks);
 
   if (!functionalDepartment) {
@@ -130,7 +150,9 @@ function validateRow(row) {
       functionalDepartment,
       itemType,
       glAccounts,
-      fundCentreScope,
+      isBuildingGrouping,
+      isDepartment,
+      isRegionAndBranch,
       remarks,
     },
     errors: [],

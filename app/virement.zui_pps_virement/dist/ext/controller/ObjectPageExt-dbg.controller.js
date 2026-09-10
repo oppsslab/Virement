@@ -50,6 +50,32 @@ sap.ui.define(
         },
 
         /**
+         * Icon for EarmarkedFundsDocNumberField.fragment.xml's
+         * ObjectStatus - a green tick once the Earmarked Funds
+         * document has been checked as Completed against S/4, no
+         * icon otherwise. See formatWorkflowStatusIcon above for why
+         * this is a formatter rather than an expression binding.
+         *
+         * @param {boolean} bIsCompleted earmarkedFundsIsCompleted
+         * @returns {string} an icon URI, or "" for no icon
+         */
+        formatEarmarkedFundsIcon: function (bIsCompleted) {
+          return bIsCompleted ? "sap-icon://sys-enter-2" : "";
+        },
+
+        /**
+         * ValueState for EarmarkedFundsDocNumberField.fragment.xml's
+         * ObjectStatus - "Success" (green) once Completed, "None"
+         * otherwise.
+         *
+         * @param {boolean} bIsCompleted earmarkedFundsIsCompleted
+         * @returns {string} a sap.ui.core.ValueState name
+         */
+        formatEarmarkedFundsState: function (bIsCompleted) {
+          return bIsCompleted ? "Success" : "None";
+        },
+
+        /**
          * Writes the picked Return Category back to the draft.
          *
          * The radio group reads returnCategory_code through a one-way

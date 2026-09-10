@@ -10,6 +10,8 @@ const REQUEST_APPROVER_DATABASE_ENTITY = "ZDB_PPS_VIREMENT.RequestApprovers";
 
 const APPROVER_FLAG = "isPendingApprover";
 
+const MY_REQUEST_FLAG = "isMyRequest";
+
 /*
  * Well-formed UUID that cannot match a row, used to force an empty
  * result while still sending the database valid SQL.
@@ -138,12 +140,16 @@ async function loadMyPendingRequestIds(userEmail) {
 /**
  * Scopes collection reads of Requests.
  *
- * Two lists share this entity, so the incoming filter decides which
+ * Three lists share this entity, so the incoming filter decides which
  * rule applies:
  *
  *   Pending Approvals - sends isPendingApprover eq true. That field is
  *     virtual and cannot be filtered in SQL, so the comparison is
  *     stripped and replaced with the real ids the user must approve.
+ *
+ *   My Requests - sends isMyRequest eq true. Also virtual for the same
+ *     reason, stripped and replaced with a real WHERE on the requestor
+ *     column (which already stores the creating user's id).
  *
  *   Virement Requests - sends no such filter, and is left unscoped.
  *     The View All Requests tile shows every requestor's request, so
@@ -215,9 +221,32 @@ module.exports = async function scopeRequestsList(request) {
     return;
   }
 
+  const wantsMyRequests = whereReferences(where, MY_REQUEST_FLAG);
+
+  if (wantsMyRequests) {
+    select.where = neutralizeColumnComparisons(where, MY_REQUEST_FLAG);
+
+    if (!userEmail) {
+      request.query.where({ ID: NO_MATCH_ID });
+
+      return;
+    }
+
+    LOG.info(`My Requests for ${userEmail}.`);
+
+    request.query.where({ requestor: request.user.id });
+
+    return;
+  }
+
   /*
-   * View All Requests is deliberately unscoped: every user sees every
-   * requestor's request. Nothing further to narrow.
+   * View All Requests (Request Report) is otherwise unscoped - every
+   * user sees every requestor's request - except a Draft: it hasn't
+   * been submitted yet, so it isn't a real request to report on, and
+   * showing it here would surface another requestor's still-private,
+   * in-progress draft.
    */
-  LOG.info(`Virement Requests unscoped for ${userEmail || "unknown user"}.`);
+  request.query.where({ status_code: { "!=": REQUEST_STATUS.DRAFT } });
+
+  LOG.info(`Virement Requests unscoped (excluding Draft) for ${userEmail || "unknown user"}.`);
 };

@@ -1,6 +1,9 @@
 const cds = require("@sap/cds");
 
-const { resolveGLGroup } = require("./utils/gl-grouping-lookup");
+const {
+  resolveGLGroup,
+  resolveAssetType,
+} = require("./utils/gl-grouping-lookup");
 const { resolveDepartment } = require("./utils/department-grouping-lookup");
 const {
   resolveRegionBranch,
@@ -8,6 +11,14 @@ const {
 const {
   resolveFunctionalDepartment,
 } = require("./utils/functional-department-grouping-lookup");
+const { resolveBuildingName } = require("./utils/building-grouping-lookup");
+const {
+  resolveCostCentreDescription,
+} = require("./utils/cost-centre-description-lookup");
+const { resolveGLAccountName } = require("./utils/gl-account-name-lookup");
+const {
+  resolveMaterialGroupDescription,
+} = require("./utils/material-group-description-lookup");
 
 const LOG = cds.log("requestitems-drafts-before-create-logic");
 
@@ -100,12 +111,23 @@ module.exports = async function (request) {
         request.data.glAccount,
       );
 
+      request.data.glAccountName = await resolveGLAccountName(
+        request.data.glAccount,
+      );
+
+      request.data.assetType = await resolveAssetType(
+        tx,
+        request.data.glAccount,
+      );
+
       LOG.info(
-        "Auto-populated glGroup/functionalDepartment on create:",
+        "Auto-populated glGroup/functionalDepartment/glAccountName/assetType on create:",
         JSON.stringify({
           glAccount: request.data.glAccount,
           glGroup: request.data.glGroup,
           functionalDepartment: request.data.functionalDepartment,
+          glAccountName: request.data.glAccountName,
+          assetType: request.data.assetType,
         }),
       );
     }
@@ -128,13 +150,41 @@ module.exports = async function (request) {
       request.data.region = region;
       request.data.branch = branch;
 
+      request.data.buildingName = await resolveBuildingName(
+        tx,
+        request.data.costCentre,
+      );
+
+      request.data.costCentreDescription = await resolveCostCentreDescription(
+        request.data.costCentre,
+      );
+
       LOG.info(
-        "Auto-populated department/region/branch on create:",
+        "Auto-populated department/region/branch/buildingName/costCentreDescription on create:",
         JSON.stringify({
           costCentre: request.data.costCentre,
           department: request.data.department,
           region,
           branch,
+          buildingName: request.data.buildingName,
+          costCentreDescription: request.data.costCentreDescription,
+        }),
+      );
+    }
+
+    // 1c. Auto-populate the read-only Material Group Description
+    // whenever a Material Group is already provided at creation time.
+    // Client-provided values are always overwritten - this field is
+    // never user-settable.
+    if (request.data.material) {
+      request.data.materialGroupDescription =
+        await resolveMaterialGroupDescription(request.data.material);
+
+      LOG.info(
+        "Auto-populated materialGroupDescription on create:",
+        JSON.stringify({
+          material: request.data.material,
+          materialGroupDescription: request.data.materialGroupDescription,
         }),
       );
     }

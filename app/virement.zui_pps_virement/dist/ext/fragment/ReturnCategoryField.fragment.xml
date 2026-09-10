@@ -19,22 +19,62 @@
 
     selectedIndex is one-way, so the write back happens in
     onReturnCategorySelect on the ObjectPage controller extension.
+
+    Once Pending Approval (status_code 2), only Reason and Asset
+    Status stay editable - this locks with the rest of the header/item
+    fields (see annotations.cds), on top of the standard ui>/isEditable
+    edit-mode check.
+
+    A Project-budget Return is always Budget Zerorise - "Return to
+    Central Fund" only makes sense for Non Project - so for
+    budgetType_code 'P' the radio choice is replaced by a plain,
+    non-interactive "Budget Zerorise" label instead of the group. The
+    actual returnCategory_code value is force-set to 'Z' server-side
+    regardless (see requests-before-create-logic.js), this is purely
+    the display side of that same rule.
+
+    A custom form field template is expected to render as a SINGLE
+    control - the RadioButtonGroup and the Project-only Text label
+    below are therefore wrapped in one VBox rather than left as two
+    top-level siblings, which Fiori elements did not render at all
+    (neither control showed, for either Budget Type).
 -->
 <core:FragmentDefinition
     xmlns="sap.m"
-    xmlns:core="sap.ui.core">
-    <RadioButtonGroup
-        id="returnCategoryGroup"
-        columns="1"
-        visible="{= %{requestType_code} === 'R' }"
-        editable="{ui>/isEditable}"
-        selectedIndex="{= %{returnCategory_code} === 'Z' ? 0 : (%{returnCategory_code} === 'C' ? 1 : -1) }"
-        select=".extension.virement.zuippsvirement.ext.controller.ObjectPageExt.onReturnCategorySelect">
-        <RadioButton
-            id="returnCategoryZerorise"
-            text="{i18n>BudgetZerorise}" />
-        <RadioButton
-            id="returnCategoryCentralFund"
-            text="{i18n>BudgetReturnToCentralFund}" />
-    </RadioButtonGroup>
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <VBox>
+        <RadioButtonGroup
+            id="returnCategoryGroup"
+            columns="1"
+            width="100%"
+            visible="{= %{requestType_code} === 'R' &amp;&amp; %{budgetType_code} !== 'P' }"
+            editable="{= %{ui>/isEditable} === true &amp;&amp; %{status_code} !== 2 }"
+            selectedIndex="{= %{returnCategory_code} === 'Z' ? 0 : (%{returnCategory_code} === 'C' ? 1 : -1) }"
+            select=".extension.virement.zuippsvirement.ext.controller.ObjectPageExt.onReturnCategorySelect">
+            <!--
+                The Central Fund option's label is longer than this form's
+                default single-column width (it now carries the GL account
+                suffix), so both buttons wrap instead of being clipped, and
+                the group spans the full row width (see layoutData on the
+                VBox below) rather than just one column, to give that text
+                room.
+            -->
+            <RadioButton
+                id="returnCategoryZerorise"
+                text="{i18n>BudgetZerorise}"
+                wrapping="true" />
+            <RadioButton
+                id="returnCategoryCentralFund"
+                text="{i18n>BudgetReturnToCentralFund}"
+                wrapping="true" />
+        </RadioButtonGroup>
+        <Text
+            id="returnCategoryZeroriseOnly"
+            text="{i18n>BudgetZerorise}"
+            visible="{= %{requestType_code} === 'R' &amp;&amp; %{budgetType_code} === 'P' }" />
+        <layoutData>
+            <form:ColumnElementData cellsLarge="4" cellsSmall="4" />
+        </layoutData>
+    </VBox>
 </core:FragmentDefinition>

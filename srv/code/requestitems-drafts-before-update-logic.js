@@ -1,6 +1,9 @@
 const cds = require("@sap/cds");
 
-const { resolveGLGroup } = require("./utils/gl-grouping-lookup");
+const {
+  resolveGLGroup,
+  resolveAssetType,
+} = require("./utils/gl-grouping-lookup");
 const { resolveDepartment } = require("./utils/department-grouping-lookup");
 const {
   resolveFunctionalDepartment,
@@ -8,6 +11,14 @@ const {
 const {
   resolveRegionBranch,
 } = require("./utils/region-branch-grouping-lookup");
+const { resolveBuildingName } = require("./utils/building-grouping-lookup");
+const {
+  resolveCostCentreDescription,
+} = require("./utils/cost-centre-description-lookup");
+const { resolveGLAccountName } = require("./utils/gl-account-name-lookup");
+const {
+  resolveMaterialGroupDescription,
+} = require("./utils/material-group-description-lookup");
 
 const LOG = cds.log("requestitems-drafts-before-update-logic");
 
@@ -17,9 +28,12 @@ const LOG = cds.log("requestitems-drafts-before-update-logic");
  * Whenever a draft item's GL Account or Cost Centre is patched,
  * auto-populates the corresponding read-only field(s) (see
  * db/schema.cds RequestItems.glGroup / .functionalDepartment /
- * .department / .region / .branch) from GL Grouping / Functional
- * Department Grouping / Department Grouping / Region & Branch
- * Grouping master data, in the same patch - so the requestor never
+ * .glAccountName / .department / .region / .branch / .buildingName /
+ * .costCentreDescription / .materialGroupDescription) from GL
+ * Grouping / Functional Department Grouping / GL Account search help
+ * / Department Grouping / Region & Branch Grouping / Building
+ * Grouping / Cost Centre search help / Material Group search help, in
+ * the same patch - so the requestor never
  * has to (and, since all these fields are @readonly, cannot) set
  * them directly. Clearing the source field clears the derived one(s)
  * along with it.
@@ -34,7 +48,11 @@ module.exports = async function (request) {
   try {
     const patchedFields = request.data || {};
 
-    if (!("glAccount" in patchedFields) && !("costCentre" in patchedFields)) {
+    if (
+      !("glAccount" in patchedFields) &&
+      !("costCentre" in patchedFields) &&
+      !("material" in patchedFields)
+    ) {
       return;
     }
 
@@ -52,12 +70,22 @@ module.exports = async function (request) {
 
       request.data.functionalDepartment = functionalDepartment;
 
+      const glAccountName = await resolveGLAccountName(patchedFields.glAccount);
+
+      request.data.glAccountName = glAccountName;
+
+      const assetType = await resolveAssetType(tx, patchedFields.glAccount);
+
+      request.data.assetType = assetType;
+
       LOG.info(
-        "Auto-populated glGroup/functionalDepartment for patched glAccount:",
+        "Auto-populated glGroup/functionalDepartment/glAccountName/assetType for patched glAccount:",
         JSON.stringify({
           glAccount: patchedFields.glAccount,
           glGroup,
           functionalDepartment,
+          glAccountName,
+          assetType,
         }),
       );
     }
@@ -75,13 +103,44 @@ module.exports = async function (request) {
       request.data.region = region;
       request.data.branch = branch;
 
+      const buildingName = await resolveBuildingName(
+        tx,
+        patchedFields.costCentre,
+      );
+
+      request.data.buildingName = buildingName;
+
+      const costCentreDescription = await resolveCostCentreDescription(
+        patchedFields.costCentre,
+      );
+
+      request.data.costCentreDescription = costCentreDescription;
+
       LOG.info(
-        "Auto-populated department/region/branch for patched costCentre:",
+        "Auto-populated department/region/branch/buildingName/costCentreDescription for patched costCentre:",
         JSON.stringify({
           costCentre: patchedFields.costCentre,
           department,
           region,
           branch,
+          buildingName,
+          costCentreDescription,
+        }),
+      );
+    }
+
+    if ("material" in patchedFields) {
+      const materialGroupDescription = await resolveMaterialGroupDescription(
+        patchedFields.material,
+      );
+
+      request.data.materialGroupDescription = materialGroupDescription;
+
+      LOG.info(
+        "Auto-populated materialGroupDescription for patched material:",
+        JSON.stringify({
+          material: patchedFields.material,
+          materialGroupDescription,
         }),
       );
     }

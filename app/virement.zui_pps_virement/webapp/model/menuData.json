@@ -8,14 +8,32 @@
       "role": []
     },
     {
+      "titleI18nKey": "Navigation.Text.PendingApprovals",
+      "key": "PendingApprovals",
+      "visible": true,
+      "role": []
+    },
+    {
+      "titleI18nKey": "Navigation.Text.MyRequests",
+      "key": "MyRequests",
+      "visible": true,
+      "role": []
+    },
+    {
       "titleI18nKey": "Navigation.Text.VirementRequests",
       "key": "VirementRequests",
       "visible": true,
       "role": []
     },
     {
-      "titleI18nKey": "Navigation.Text.PendingApprovals",
-      "key": "PendingApprovals",
+      "titleI18nKey": "Navigation.Text.ApproverMatrix",
+      "key": "ApproverMatrix",
+      "visible": true,
+      "role": []
+    },
+    {
+      "titleI18nKey": "Navigation.Text.GroupingMaintenance",
+      "key": "GroupingMaintenance",
       "visible": true,
       "role": []
     }

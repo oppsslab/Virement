@@ -13,6 +13,10 @@ const {
 const postToS4Module = require("./post-to-s4-logic");
 const { performPostToS4, businessError } = postToS4Module;
 
+// TEMPORARY: unused while the Earmarked Funds completion call below is
+// disabled - see its own comment.
+// const { completeEarmarkedFundsDocument } = require("./utils/earmarked-funds");
+
 const insertRequestHistory = require("./insert-request-history");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
@@ -515,6 +519,8 @@ async function approveRequest(request) {
     return;
   }
 
+  let s4Result;
+
   if (newStatusCode === REQUEST_STATUS.APPROVED){
     try {
       const result = await performPostToS4({
@@ -523,6 +529,8 @@ async function approveRequest(request) {
         requestId,
         emailAddress: approverEmail,
       });
+
+      s4Result = result;
 
       LOG.info(
         "S/4 posting completed successfully.",
@@ -553,6 +561,48 @@ async function approveRequest(request) {
       return;
     }
   }
+
+  /*
+   * TEMPORARY: the actual S/4 completion call is disabled here -
+   * completeEarmarkedFundsDocument can flip the line item's own
+   * completion flag, but S/4 only exposes a plain field PATCH for the
+   * header, not the real completion business action, so
+   * EarmarkedFundsIsCompleted can never actually be set through it
+   * (confirmed live: S/4 silently keeps it false regardless of the
+   * payload sent). Until a proper backend action exists, the Object
+   * Page derives completion locally instead - see
+   * refreshEarmarkedFundsStatus in requests-after-read-logic.js -
+   * from whether the Transfer this reservation was covering has
+   * posted, which is exactly the condition below. Revisit together.
+   *
+  if (s4Result?.documentNumbers?.TRAN && s4Result?.earmarkedFundsDocNumber) {
+    try {
+      await completeEarmarkedFundsDocument({
+        documentNumber: s4Result.earmarkedFundsDocNumber,
+      });
+
+      LOG.info(
+        "Earmarked Funds document marked complete.",
+        JSON.stringify({
+          requestId,
+          earmarkedFundsDocNumber: s4Result.earmarkedFundsDocNumber,
+        }),
+      );
+    } catch (error) {
+      LOG.error(
+        "S/4 posting succeeded, but the Earmarked Funds document " +
+          "could not be marked complete. Manual follow-up may be " +
+          "required in S/4.",
+        JSON.stringify({
+          requestId,
+          earmarkedFundsDocNumber: s4Result.earmarkedFundsDocNumber,
+          message: error.message,
+          status: error.response?.status || error.statusCode,
+        }),
+      );
+    }
+  }
+  */
 
   try {
     for (const taskId of taskIds) {

@@ -4,7 +4,7 @@ const {
   calculateAmountsByType,
 } = require("./utils/requests-calculation-utils");
 
-const { getLocalDateParts } = require("./utils/date-utils");
+const { getLocalDateParts, formatLocalTime } = require("./utils/date-utils");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
@@ -14,9 +14,32 @@ const {
 
 const { findExistingCostCentres } = require("./utils/cost-centers");
 
+const {
+  previewApprovalPlanGaps,
+  resolveApprovalAmount,
+  resolveApprovalPlanWithApprovers,
+} = require("./utils/apply-approver-plan");
+
+const { normalizeUserId } = require("./utils/user-id");
+
+const { hasRole } = require("./utils/role-check");
+
+const { simulatePostToS4 } = require("./post-to-s4-logic");
+
 const LOG = cds.log("requests-before-create-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
+
+/*
+ * Test-only exemption from the same-person approver conflict checks
+ * below (Level 1 vs Level 2, Requestor vs any approver) - lets this
+ * identity submit/hold multiple roles on the same request while the
+ * Approver Matrix test data doesn't yet have distinct people for every
+ * role. Remove once test data is fleshed out.
+ */
+const CONFLICT_CHECK_EXEMPT_USER_IDS = new Set([
+  normalizeUserId("chun.leong.yeap@pwc.com"),
+]);
 
 const SEMANTIC_OBJECT_ACTION = "virementzuippsvirement-display";
 
@@ -33,6 +56,16 @@ const MAX_SEQUENCE = 999999;
  */
 const ROLE_JKEW = "MASS_UPLOAD_ALL";
 const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
+
+/*
+ * Only a BCM team member (see ams/dcl/cap/basePolicies.dcl POLICY
+ * "VR_BCM") may raise a Return request that ends up as Budget
+ * Zerorise ('Z') - whether the requestor explicitly chose it
+ * (Non Project) or it was system-forced (Project - see the
+ * returnCategory normalization below). "Return to Central Fund" ('C')
+ * is unrestricted.
+ */
+const ROLE_BCM = "BUDGET_ZERORISE";
 
 /*
  * Request type code for Supplement requests.
@@ -61,6 +94,14 @@ const BUDGET_TYPE_PROJECT = "P";
 const MATERIAL_GL_MATCH_LENGTH = 6;
 
 /*
+ * Budget Return to Central Fund's fixed Cost Centre (see
+ * post-to-s4-logic.js: CENTRAL_FUND_COST_CENTRE) - its Material/GL
+ * combination doesn't follow the normal alignment convention, so this
+ * line is exempted from validateMaterialGlAlignment below.
+ */
+const CENTRAL_FUND_COST_CENTRE = "100050500";
+
+/*
  * Maximum amount allowed on Project budget type requests:
  *   - Virement (T): total Transfer Out Amount
  *   - Supplement (S): total Supplement Amount
@@ -71,72 +112,6 @@ const MAX_PROJECT_BUDGET_AMOUNT = 5000000;
 /* ------------------------------------------------------------------ *
  * Role helpers
  * ------------------------------------------------------------------ */
-
-/**
- * Determines whether the logged-in user has the specified role.
- *
- * Supports:
- * - CAP user.is(...)
- * - user.roles as an array
- * - user.roles as an object
- *
- * @param {object} user
- * @param {string} roleName
- * @returns {boolean}
- */
-function hasRole(user, roleName) {
-  if (!user || !roleName) {
-    return false;
-  }
-
-  const normalizedRoleName = String(roleName).trim().toUpperCase();
-
-  /*
-   * Preferred CAP-style role check.
-   */
-  if (typeof user.is === "function" && user.is(normalizedRoleName)) {
-    return true;
-  }
-
-  /*
-   * Fallback: roles as array.
-   *
-   * Example:
-   * [
-   *   "MASS_UPLOAD_ALL",
-   *   "OTHER_ROLE"
-   * ]
-   */
-  if (Array.isArray(user.roles)) {
-    return user.roles.some(function (role) {
-      return (
-        String(role || "")
-          .trim()
-          .toUpperCase() === normalizedRoleName
-      );
-    });
-  }
-
-  /*
-   * Fallback: roles as object.
-   *
-   * Example:
-   * {
-   *   MASS_UPLOAD_ALL: true
-   * }
-   */
-  if (user.roles && typeof user.roles === "object") {
-    return Object.keys(user.roles).some(function (role) {
-      return (
-        String(role || "")
-          .trim()
-          .toUpperCase() === normalizedRoleName && user.roles[role] === true
-      );
-    });
-  }
-
-  return false;
-}
 
 /**
  * Returns role flags used for transfer classification.
@@ -429,6 +404,12 @@ function validateWbsForProjectBudget(
  */
 function validateMaterialGlAlignment(request, { items }) {
   const mismatchedItems = (items || []).filter(function (item) {
+    const costCentre = String(item.costCentre || "").trim();
+
+    if (costCentre === CENTRAL_FUND_COST_CENTRE) {
+      return false;
+    }
+
     const material = String(item.material || "").trim();
 
     const glAccount = String(item.glAccount || "").trim();
@@ -592,12 +573,12 @@ function validateVirementTransferInOutExclusivity(
 }
 
 /**
- * Validates the number of Request Items carrying a Transfer In
- * Amount (min 1, max 5) and Transfer Out Amount (min 1, max 5) on
- * Virement (T) requests. Up to 5 distinct Transfer Out cost centers
- * matches the "Head of Transfer-out Cost Center" approver being
- * resolved per cost center in the approval routing (see
- * utils/virement-scenario.js).
+ * Validates the number of Request Items carrying a Transfer In Amount
+ * (min 1, max 5) and Transfer Out Amount (min 1, max 5) on Virement
+ * (T) requests. Both sides allow up to 5 distinct cost centers - on
+ * the Transfer Out side, this matches the "Head of Transfer-out Cost
+ * Center" approver being resolved per cost center in the approval
+ * routing (see utils/virement-scenario.js, LEVEL_1_LETTERS "1A".."1E").
  *
  * @param {cds.Request} request
  * @param {object} options
@@ -1222,6 +1203,31 @@ module.exports = async function (request) {
   try {
     request.data = request.data || {};
 
+    /*
+     * draftActivate fires this same CREATE event both for a genuine
+     * first submission (Draft -> Pending Approval) AND for saving an
+     * edit of a request that was already submitted (Edit is allowed
+     * again once Pending Approval - see annotations.cds - to change
+     * Reason/Asset Status only). requestNumber is only ever assigned
+     * once, right here, on a real first submission (step 6 below), so
+     * its presence on the incoming draft reliably tells the two
+     * cases apart: everything below that only makes sense for a
+     * FIRST submission (resetting status/workflow tracking fields,
+     * re-stamping the submission date/time, reserving Earmarked
+     * Funds again) must not repeat on a later edit-save, or it would
+     * silently reset in-flight approval progress and start a
+     * duplicate SAP Build workflow instance every time the request is
+     * edited. requests-after-create-logic.js reads this same flag
+     * (see request._isFirstSubmission below) to skip its own
+     * submission-only work (approver plan, workflow start) the same
+     * way.
+     */
+    const isFirstSubmission = !request.data.requestNumber;
+
+    request._isFirstSubmission = isFirstSubmission;
+
+    LOG.info("isFirstSubmission:", isFirstSubmission);
+
     LOG.info("Event:", request.event);
 
     LOG.info("Target:", request.target?.name);
@@ -1292,15 +1298,47 @@ module.exports = async function (request) {
     /*
      * Return Category only applies to Return requests. Normalize it here so
      * a stale draft value cannot survive a change of request type.
+     *
+     * A Project-budget Return is always Budget Zerorise ('Z') - "Return
+     * to Central Fund" only applies to Non Project - so the choice is
+     * forced here regardless of whatever the client sent. The UI
+     * mirrors this by hiding the radio choice and showing a plain
+     * "Budget Zerorise" label instead for Project (see
+     * ReturnCategoryField.fragment.xml).
      */
     const returnCategory =
       normalizedRequestType === "R"
-        ? String(request.data.returnCategory_code || "")
-            .trim()
-            .toUpperCase() || null
+        ? budgetTypeCode === "P"
+          ? "Z"
+          : String(request.data.returnCategory_code || "")
+              .trim()
+              .toUpperCase() || null
         : null;
 
     request.data.returnCategory_code = returnCategory;
+
+    /*
+     * Budget Zerorise is restricted to the BCM team, regardless of
+     * whether it was explicitly chosen (Non Project) or system-forced
+     * (Project). Checked on every submission, not just first, so a
+     * previously-rejected request can't be edited into Zerorise and
+     * resubmitted by a non-BCM user (see requests-resubmit-logic.js
+     * for the same check on the resubmit path).
+     */
+    if (returnCategory === "Z" && !hasRole(request.user, ROLE_BCM)) {
+      LOG.error(
+        "Request failed submission validation - Budget Zerorise is " +
+          "restricted to the BCM team.",
+        JSON.stringify({ requestId, budgetTypeCode }),
+      );
+
+      request.error(
+        403,
+        "Only the BCM team can raise a Budget Zerorise return.",
+      );
+
+      return;
+    }
 
     LOG.info("requestId:", requestId);
 
@@ -1424,8 +1462,8 @@ module.exports = async function (request) {
     }
 
     /*
-     * Validate the number of Transfer In (1-5) and Transfer Out
-     * (exactly 1) line items. Applies to Virement (T) requests only.
+     * Validate the number of Transfer In (exactly 1) and Transfer Out
+     * (1-5) line items. Applies to Virement (T) requests only.
      */
     const isVirementItemCountValid = validateVirementItemCounts(request, {
       items: requestItems,
@@ -1453,47 +1491,60 @@ module.exports = async function (request) {
       return;
     }
 
-    /*
-     * 1. Set request status to Pending Approval.
-     */
-    request.data.status_code = REQUEST_STATUS.PENDING_APPROVAL;
+    if (isFirstSubmission) {
+      /*
+       * 1. Set request status to Pending Approval.
+       */
+      request.data.status_code = REQUEST_STATUS.PENDING_APPROVAL;
 
-    LOG.info("Set status_code to Pending Approval:", request.data.status_code);
+      LOG.info("Set status_code to Pending Approval:", request.data.status_code);
 
-    /*
-     * 2. Initialize optional workflow tracking fields.
-     *
-     * These fields are only assigned when they exist in the
-     * Requests CDS entity.
-     */
-    if (targetHasElement(request, "workflowStatus")) {
-      request.data.workflowStatus = "NOT_STARTED";
+      /*
+       * 2. Initialize optional workflow tracking fields.
+       *
+       * These fields are only assigned when they exist in the
+       * Requests CDS entity.
+       */
+      if (targetHasElement(request, "workflowStatus")) {
+        request.data.workflowStatus = "NOT_STARTED";
+      }
+
+      if (targetHasElement(request, "workflowInstanceId")) {
+        request.data.workflowInstanceId = null;
+      }
+
+      if (targetHasElement(request, "workflowError")) {
+        request.data.workflowError = null;
+      }
+
+      if (targetHasElement(request, "currentApprovalLevel")) {
+        request.data.currentApprovalLevel = null;
+      }
+
+      /*
+       * 3. Set submission date, time, and period.
+       */
+      const submissionMoment = new Date();
+
+      const dateParts = getLocalDateParts(submissionMoment);
+
+      request.data.submissionDate = dateParts.dateString;
+
+      request.data.submissionTime = formatLocalTime(submissionMoment);
+
+      request.data.submissionPeriod = Number(dateParts.period);
+
+      LOG.info("Set submissionDate:", request.data.submissionDate);
+
+      LOG.info("Set submissionTime:", request.data.submissionTime);
+
+      LOG.info("Set submissionPeriod:", request.data.submissionPeriod);
+    } else {
+      LOG.info(
+        "Not a first submission - leaving status, workflow tracking " +
+          "fields, and submission date/time/period untouched.",
+      );
     }
-
-    if (targetHasElement(request, "workflowInstanceId")) {
-      request.data.workflowInstanceId = null;
-    }
-
-    if (targetHasElement(request, "workflowError")) {
-      request.data.workflowError = null;
-    }
-
-    if (targetHasElement(request, "currentApprovalLevel")) {
-      request.data.currentApprovalLevel = null;
-    }
-
-    /*
-     * 3. Set submission date and period.
-     */
-    const dateParts = getLocalDateParts(new Date());
-
-    request.data.submissionDate = dateParts.dateString;
-
-    request.data.submissionPeriod = Number(dateParts.period);
-
-    LOG.info("Set submissionDate:", request.data.submissionDate);
-
-    LOG.info("Set submissionPeriod:", request.data.submissionPeriod);
 
     /*
      * 4. Calculate all amount fields.
@@ -1514,6 +1565,191 @@ module.exports = async function (request) {
     request.data.transferOutAmount = amounts.transferOutAmount;
 
     LOG.info("Calculated amounts:", JSON.stringify(amounts));
+
+    /*
+     * 4a. Reject a zero-amount submission - checked on every submit/
+     * resubmit (not just isFirstSubmission), since a resubmitted
+     * request could just as easily have had its amount cleared to
+     * zero as a first-time one. Which amount(s) matter depends on the
+     * request type: Supplement -> supplementAmount, Return ->
+     * returnAmount, Virement (Transfer) -> transferInAmount or
+     * transferOutAmount (at least one must be non-zero - a request
+     * with items on only one side of the transfer still submits).
+     */
+    const isZeroAmount =
+      (requestTypeCode === "S" && !amounts.supplementAmount) ||
+      (requestTypeCode === "R" && !amounts.returnAmount) ||
+      (requestTypeCode === "T" &&
+        !amounts.transferInAmount &&
+        !amounts.transferOutAmount);
+
+    if (isZeroAmount) {
+      LOG.error(
+        "Request failed submission validation - amount is zero.",
+        JSON.stringify({ requestId, requestTypeCode, amounts }),
+      );
+
+      request.error(
+        400,
+        "This request cannot be submitted with a zero amount. Please " +
+          "enter at least one item amount before submitting.",
+      );
+
+      return;
+    }
+
+    /*
+     * 4b. Warn (not block) when a CAP-owned approval level would
+     * resolve to zero Approver Matrix approvers. Only meaningful on a
+     * genuine first submission - re-checking on every edit-save of an
+     * already-submitted request would be pointless, since routing is
+     * never touched again after that point (see isFirstSubmission
+     * above).
+     */
+    if (isFirstSubmission) {
+      /*
+       * Deliberately NOT re-queried from the RequestItems table for
+       * Transfer requests (as this used to do): "before CREATE
+       * Requests" runs before ANY part of this deep-insert - header
+       * or nested items - is written to the database, so a SELECT
+       * against RequestItems here always comes back empty. That
+       * silently skipped this whole gap check for every Virement
+       * (classifyVirementNonProjectScenario saw zero items, so
+       * resolveApprovalPlan returned [] and previewApprovalPlanGaps
+       * had nothing to flag) - a request could submit with a
+       * CAP-owned level resolving to zero approvers and nobody would
+       * know until reviewing RequestApprovers directly. requestItems
+       * (the deep-insert payload's own nested rows, from
+       * fetchRequestItems above) already carries every field this
+       * needs - department/glGroup/etc. were derived and persisted
+       * onto the draft rows before submission, and the whole draft
+       * row carries over into this payload on activation - same
+       * source the amount calculation above already relies on.
+       */
+      const gaps = await previewApprovalPlanGaps({
+        tx,
+        requestTypeCode,
+        budgetTypeCode,
+        amount: resolveApprovalAmount(requestTypeCode, amounts),
+        items: requestItems,
+      });
+
+      if (gaps.length) {
+        const gapDescriptions = gaps
+          .map((gap) =>
+            gap.departmentBranch
+              ? `${gap.userRole} (${gap.departmentBranch})`
+              : gap.userRole,
+          )
+          .join(", ");
+
+        LOG.error(
+          "Request failed submission validation - CAP-owned approval " +
+            "plan has unresolved level(s), no current Approver Matrix " +
+            "approver found.",
+          JSON.stringify({ requestId, gaps }),
+        );
+
+        request.error(
+          400,
+          `No current Approver Matrix approver was found for: ${gapDescriptions}. ` +
+            "Please ask an admin to add the missing Approver Matrix " +
+            "entry before submitting this request.",
+        );
+
+        return;
+      }
+
+      /*
+       * 4a. Same-person conflict checks - both are maker-checker
+       * violations, the same class of Approver Matrix data problem as
+       * the zero-approver gap check above, just checked against real
+       * identities instead of counts. Reuses the same plan resolution
+       * (level/userRole/departmentBranch) but asks for the actual
+       * emails each level resolves to.
+       *
+       * - Level 1 (including per-transfer-out-line-item "1A".."1E")
+       *   vs Level 2: nothing in the routing rules ever intends the
+       *   same person to hold both roles on one request (see
+       *   virement-scenario.js) - any overlap means the Approver
+       *   Matrix mistakenly assigned one person to two levels.
+       * - Requestor vs any approver at any level: a requestor cannot
+       *   approve their own request.
+       *
+       * A role that resolves to more than one approver (Approver
+       * Matrix has more than one active row for it) is compared as a
+       * set, not a single value.
+       */
+      const plan = await resolveApprovalPlanWithApprovers({
+        tx,
+        requestTypeCode,
+        budgetTypeCode,
+        amount: resolveApprovalAmount(requestTypeCode, amounts),
+        items: requestItems,
+      });
+
+      const level1Emails = new Set();
+      const level2Emails = new Set();
+      const allEmails = new Set();
+
+      for (const { level, emails } of plan) {
+        for (const email of emails) {
+          const normalized = normalizeUserId(email);
+
+          if (!normalized || CONFLICT_CHECK_EXEMPT_USER_IDS.has(normalized)) {
+            continue;
+          }
+
+          allEmails.add(normalized);
+
+          if (level === "2") {
+            level2Emails.add(normalized);
+          } else if (level.startsWith("1")) {
+            level1Emails.add(normalized);
+          }
+        }
+      }
+
+      const level1And2Overlap = [...level1Emails].filter((email) =>
+        level2Emails.has(email),
+      );
+
+      if (level1And2Overlap.length) {
+        LOG.error(
+          "Request failed submission validation - the same person is " +
+            "assigned as both a Level 1 and the Level 2 approver.",
+          JSON.stringify({ requestId, overlap: level1And2Overlap }),
+        );
+
+        request.error(
+          400,
+          "The Level 1 approver and the Level 2 approver cannot be the " +
+            "same person. Please ask an admin to correct the Approver " +
+            "Matrix before submitting this request.",
+        );
+
+        return;
+      }
+
+      const requestorId = normalizeUserId(request.user?.id);
+
+      if (requestorId && allEmails.has(requestorId)) {
+        LOG.error(
+          "Request failed submission validation - the requestor is " +
+            "also an assigned approver on this request.",
+          JSON.stringify({ requestId, requestor: requestorId }),
+        );
+
+        request.error(
+          400,
+          "You cannot submit a request that you are also an approver " +
+            "on. Please ask an admin to correct the Approver Matrix, or " +
+            "have someone else submit this request.",
+        );
+
+        return;
+      }
+    }
 
     /*
      * 5. Validate that the Project budget type amount cap is not
@@ -1563,6 +1799,25 @@ module.exports = async function (request) {
     }
 
     /*
+     * 6a. Simulate the eventual S/4 posting (IV_TEST = "X" on
+     * ZFM_FI_FMBB_UPLOAD) before this request ever reaches an
+     * approver. Catches a posting-time failure (missing/invalid Cost
+     * Center, GL account, unbalanced Transfer, ...) at submission
+     * time instead of only surfacing it when the final approver
+     * approves and the real posting runs - by then the requestor has
+     * already waited through the whole approval chain for nothing.
+     * Only on first submission: once Pending Approval, items/amounts
+     * are locked (see the toolbar/Insert/Delete restrictions in
+     * annotations.cds), so a re-simulation on every edit-save would
+     * just repeat the same check against unchanged data.
+     */
+    if (isFirstSubmission) {
+      await simulatePostToS4({ requestData: request.data, items: requestItems });
+
+      LOG.info("S/4 posting simulation passed.");
+    }
+
+    /*
      * 7. Generate the full UI deep link.
      *
      * The link is saved with the request. The workflow retrieves
@@ -1588,6 +1843,7 @@ module.exports = async function (request) {
      * has been created successfully.
      */
     if (
+      isFirstSubmission &&
       normalizedRequestType === REQUEST_TYPE_TRANSFER &&
       Number(request.data.transferOutAmount) > 0
     ) {

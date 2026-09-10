@@ -180,6 +180,29 @@ module.exports = async function (results, request) {
       throw error;
     }
 
+    /*
+     * Set by requests-before-create-logic.js: this same CREATE event
+     * also fires when saving an edit of an already-submitted request
+     * (Edit is allowed again once Pending Approval, to change Reason/
+     * Asset Status only). None of the submission-only work below
+     * (SUBMITTED history entry, CAP-owned approver plan, starting the
+     * SAP Build workflow) may repeat in that case - it would reset
+     * in-flight approval progress and start a duplicate workflow
+     * instance every time the request is edited.
+     */
+    if (request._isFirstSubmission === false) {
+      LOG.info(
+        "Not a first submission - skipping submission-only " +
+          "post-processing (history entry, approver plan, workflow " +
+          "start).",
+        JSON.stringify({ requestId }),
+      );
+
+      LOG.info("--- AFTER CREATE Requests ended (edit, not a submission) ---");
+
+      return;
+    }
+
     const requestType =
       createdRequest.requestType_code || request.data?.requestType_code || "";
 

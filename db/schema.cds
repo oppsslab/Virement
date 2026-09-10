@@ -25,6 +25,7 @@ entity Requests : cuid, managed {
     fiscalYear           : FiscalYear                 @readonly;
     submissionPeriod     : Integer; // Month of submission date (1-12)
     submissionDate       : Date;
+    submissionTime       : Time    @readonly;
     requestor            : String                     @readonly;
     approvedBy           : String; // Last approver (summary)
     supplementAmount     : Decimal(15, 2) default 0   @readonly;
@@ -62,6 +63,15 @@ entity RequestItems : cuid, managed {
     srNo              : String(3);
     costCentre        : String(10);
     /*
+     * Read-only, system-derived from the Cost Centre search help (S/4,
+     * same lookup the value help itself uses - see
+     * utils/cost-centre-description-lookup.js) whenever costCentre is
+     * set/changed - never client-writable. Server-derived (not left to
+     * the value help's client-side write-back) so it survives the
+     * item's own SideEffects-triggered refresh instead of racing it.
+     */
+    costCentreDescription : String(100) @readonly;
+    /*
      * Read-only, system-derived from Department Grouping master data
      * (see DepartmentGrouping below) whenever costCentre is set/
      * changed - never client-writable. Used for Virement approval
@@ -78,12 +88,27 @@ entity RequestItems : cuid, managed {
     branch            : String(150) @readonly;
     glAccount         : String;
     /*
+     * Read-only, system-derived from the GL Account search help (S/4,
+     * same lookup the value help itself uses - see
+     * utils/gl-account-name-lookup.js) whenever glAccount is set/
+     * changed - never client-writable. Server-derived for the same
+     * reason as costCentreDescription above.
+     */
+    glAccountName     : String(100) @readonly;
+    /*
      * Read-only, system-derived from GL Grouping master data (see
      * GLGrouping below) whenever glAccount is set/changed - never
      * client-writable. Used for Virement approval routing (Same/
      * Different GL Group).
      */
     glGroup           : String(100) @readonly;
+    /*
+     * Read-only, system-derived from GL Grouping master data (see
+     * GLGrouping below) whenever glAccount is set/changed - never
+     * client-writable. Drives whether Asset Status is shown/editable
+     * on this item (hidden when 'NON ASSET' - see annotations.cds).
+     */
+    assetType         : String(10)  @readonly;
     /*
      * Read-only, system-derived from Functional Department Grouping
      * master data (see FunctionalDepartmentGrouping below) whenever
@@ -93,13 +118,33 @@ entity RequestItems : cuid, managed {
      * department" scenario).
      */
     functionalDepartment : String(200) @readonly;
+    /*
+     * Read-only, system-derived from Building Grouping master data
+     * (see BuildingGrouping below) whenever costCentre is set/
+     * changed - never client-writable. Holds the matched row's
+     * costCentreDescription.
+     */
+    buildingName      : String(200) @readonly;
     material          : String;
+    /*
+     * Read-only, system-derived from the Material Group search help
+     * (S/4, same lookup the value help itself uses - see
+     * utils/material-group-description-lookup.js) whenever material is
+     * set/changed - never client-writable. Server-derived for the same
+     * reason as costCentreDescription above.
+     */
+    materialGroupDescription : String(200) @readonly;
     wbs               : String;
     assetStatus       : Association to AssetStatus;
-    supplementAmount  : Decimal(15, 2) default 0;
-    returnAmount      : Decimal(15, 2) default 0;
-    transferInAmount  : Decimal(15, 2) default 0;
-    transferOutAmount : Decimal(15, 2) default 0;
+    // @assert.range rejects a negative entry both client-side (Fiori
+    // Elements shows an inline input error before save) and
+    // server-side (CAP rejects it even if the request bypasses the
+    // UI), and the upper bound matches this field's own Decimal(15,2)
+    // precision.
+    supplementAmount  : Decimal(15, 2) default 0 @assert.range: [0, 9999999999999.99];
+    returnAmount      : Decimal(15, 2) default 0 @assert.range: [0, 9999999999999.99];
+    transferInAmount  : Decimal(15, 2) default 0 @assert.range: [0, 9999999999999.99];
+    transferOutAmount : Decimal(15, 2) default 0 @assert.range: [0, 9999999999999.99];
     description       : String(500);
 }
 
@@ -276,7 +321,9 @@ entity FunctionalDepartmentGrouping : cuid, managed {
     functionalDepartment : String(200)  @mandatory;
     itemType             : String(500);
     glAccounts           : String(2000);
-    fundCentreScope      : String(200);
+    isBuildingGrouping   : Boolean default false;
+    isDepartment         : Boolean default false;
+    isRegionAndBranch    : Boolean default false;
     remarks              : String(1000);
 };
 

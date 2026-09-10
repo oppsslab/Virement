@@ -8,9 +8,23 @@ const { startApprovalWorkflow } = require("./utils/workflow-utils");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
+const { simulatePostToS4 } = require("./post-to-s4-logic");
+
+const { hasRole } = require("./utils/role-check");
+
 const LOG = cds.log("requests-resubmit-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
+
+/*
+ * Only a BCM team member (see ams/dcl/cap/basePolicies.dcl POLICY
+ * "VR_BCM") may resubmit a Return request that resolves to Budget
+ * Zerorise ('Z') - same restriction as first submission (see
+ * requests-before-create-logic.js), checked again here since a
+ * rejected request can be edited (including its Return Category, for
+ * Non Project) before resubmission.
+ */
+const ROLE_BCM = "BUDGET_ZERORISE";
 
 /* ------------------------------------------------------------------ *
  * Helpers
@@ -242,6 +256,45 @@ module.exports = async function (request) {
     );
 
     /*
+     * 0a. Budget Zerorise is restricted to the BCM team - checked
+     * again on resubmit since a rejected request can be edited
+     * (including its Return Category, for Non Project) before
+     * resubmission.
+     */
+    if (
+      createdRequest.returnCategory_code === "Z" &&
+      !hasRole(request.user, ROLE_BCM)
+    ) {
+      const roleError = new Error(
+        "Resubmission failed validation - Budget Zerorise is " +
+          "restricted to the BCM team.",
+      );
+
+      roleError.statusCode = 403;
+      roleError.userMessage =
+        "Only the BCM team can raise a Budget Zerorise return.";
+
+      LOG.error(roleError.message, JSON.stringify({ requestId }));
+
+      throw roleError;
+    }
+
+    /*
+     * 1a. Simulate the eventual S/4 posting (IV_TEST = "X" on
+     * ZFM_FI_FMBB_UPLOAD) before this resubmission ever reaches an
+     * approver again - same reasoning as the first-submission check
+     * in requests-before-create-logic.js. Runs before anything below
+     * is written, so a failure here leaves no history entry and never
+     * starts a new workflow instance.
+     */
+    await simulatePostToS4({
+      requestData: createdRequest,
+      items: createdRequestItems,
+    });
+
+    LOG.info("S/4 posting simulation passed.");
+
+    /*
      * 2. Insert the SUBMITTED history entry.
      *
      * This participates in the current CAP request transaction.
@@ -344,6 +397,26 @@ module.exports = async function (request) {
 
     LOG.info("--- AFTER CREATE Requests ended successfully ---");
   } catch (error) {
+    /*
+     * The S/4 posting simulation (step 1a above) fails with its own
+     * clear, accurate message (e.g. "Line 1: Cost Center is missing")
+     * - rethrow it as-is rather than wrapping it in the "approval
+     * workflow could not be started" message below, which would be
+     * misleading (the workflow was never even reached).
+     */
+    if (error.statusCode && error.userMessage !== undefined) {
+      LOG.error(
+        "Resubmission failed S/4 posting simulation:",
+        JSON.stringify({
+          requestId: resolveRequestId(request),
+          statusCode: error.statusCode,
+          message: error.message,
+        }),
+      );
+
+      throw error;
+    }
+
     const statusCode = getWorkflowErrorStatus(error);
 
     const errorMessage = getWorkflowErrorMessage(error);

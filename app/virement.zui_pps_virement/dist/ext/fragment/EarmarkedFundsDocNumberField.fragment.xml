@@ -1,0 +1,25 @@
+<!--
+    Earmarked Funds Document Number field, injected into the Request
+    Header field group as a custom field so the live completion
+    status (earmarkedFundsIsCompleted, checked against S/4 on every
+    Object Page read - see requests-after-read-logic.js) can show as
+    a green tick next to the document number.
+
+    icon/state use formatter functions (formatEarmarkedFundsIcon /
+    formatEarmarkedFundsState), not inline {= %{...} } expression
+    bindings, matching WorkflowStatusField.fragment.xml - the latter
+    was already found unreliable in this exact custom-field-template
+    context.
+
+    Registered in manifest.json under controlConfiguration >
+    "@com.sap.vocabularies.UI.v1.FieldGroup#RequestHeader" > fields.
+-->
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <ObjectStatus
+        id="earmarkedFundsDocNumberText"
+        text="{earmarkedFundsDocNumber}"
+        icon="{path: 'earmarkedFundsIsCompleted', formatter: '.extension.virement.zuippsvirement.ext.controller.ObjectPageExt.formatEarmarkedFundsIcon'}"
+        state="{path: 'earmarkedFundsIsCompleted', formatter: '.extension.virement.zuippsvirement.ext.controller.ObjectPageExt.formatEarmarkedFundsState'}" />
+</core:FragmentDefinition>

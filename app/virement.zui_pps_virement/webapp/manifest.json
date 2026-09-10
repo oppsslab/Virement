@@ -149,6 +149,11 @@
           "target": "PendingApprovals"
         },
         {
+          "name": "MyRequests",
+          "pattern": "MyRequests:?query:",
+          "target": "MyRequests"
+        },
+        {
           "name": "RequestsCreate",
           "pattern": "Requests/create:?query:",
           "target": "RequestsCreate"
@@ -263,6 +268,11 @@
                         "placement": "After",
                         "anchor": "DataField::budgetType_code"
                       }
+                    },
+                    "DataField::earmarkedFundsDocNumber": {
+                      "template": "virement.zuippsvirement.ext.fragment.EarmarkedFundsDocNumberField",
+                      "label": "{i18n>EarmarkedFundsDocNumber}",
+                      "visible": "{= %{requestType_code} === 'T' && %{transferOutAmount} > 0 }"
                     }
                   }
                 },
@@ -313,14 +323,14 @@
                   "actions": {
                     "downloadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
-                      "visible": true,
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>downloadTemplate}"
                     },
                     "uploadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
-                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>UploadTemplate}",
@@ -343,14 +353,14 @@
                   "actions": {
                     "downloadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
-                      "visible": true,
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>downloadTemplate}"
                     },
                     "uploadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
-                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>UploadTemplate}",
@@ -373,14 +383,14 @@
                   "actions": {
                     "downloadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
-                      "visible": true,
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>downloadTemplate}"
                     },
                     "uploadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
-                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>UploadTemplate}",
@@ -403,14 +413,14 @@
                   "actions": {
                     "downloadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
-                      "visible": true,
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>downloadTemplate}"
                     },
                     "uploadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
-                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>UploadTemplate}",
@@ -433,14 +443,14 @@
                   "actions": {
                     "downloadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onDownloadTemplate",
-                      "visible": true,
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>downloadTemplate}"
                     },
                     "uploadTemplate": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageCustomActions.onOpenUploadDialog",
-                      "visible": "{= !${ui>/isEditable} ? false : true }",
+                      "visible": "{= %{status_code} === 0 }",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>UploadTemplate}",
@@ -474,7 +484,7 @@
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
                     "disableCopyToClipboard": true,
-                    "type": "GridTable"
+                    "type": "ResponsiveTable"
                   }
                 }
               },
@@ -502,7 +512,52 @@
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
                     "disableCopyToClipboard": true,
-                    "type": "GridTable"
+                    "type": "ResponsiveTable",
+                    "selectionMode": "Multi"
+                  },
+                  "actions": {
+                    "massApproveRequests": {
+                      "press": "virement.zuippsvirement.ext.controller.PendingApprovalsListReportActions.onMassApprove",
+                      "text": "Approve Selected",
+                      "requiresSelection": true,
+                      "enabled": true,
+                      "visible": true
+                    },
+                    "massRejectRequests": {
+                      "press": "virement.zuippsvirement.ext.controller.PendingApprovalsListReportActions.onMassReject",
+                      "text": "Reject Selected",
+                      "requiresSelection": true,
+                      "enabled": true,
+                      "visible": true
+                    }
+                  }
+                }
+              },
+              "initialLoad": "Enabled",
+              "enhanceI18n": "i18n/custom-fe.properties"
+            }
+          }
+        },
+        "MyRequests": {
+          "type": "Component",
+          "id": "MyRequests",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "defaultTemplateAnnotationPath": "@com.sap.vocabularies.UI.v1.SelectionPresentationVariant#MyRequests",
+              "navigation": {
+                "Requests": {
+                  "detail": {
+                    "route": "RequestsObjectPage"
+                  }
+                }
+              },
+              "contextPath": "/Requests",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "disableCopyToClipboard": true,
+                    "type": "ResponsiveTable"
                   }
                 }
               },

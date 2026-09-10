@@ -51,9 +51,14 @@
                             <NewsContent contentText="Pending Approvals" subheader="Review and take action" />
                         </TileContent>
                     </GenericTile>
+                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/myRequestsIcon}" frameType="TwoByOne" press=".onNavigate" app:route="MyRequests">
+                        <TileContent>
+                            <NewsContent contentText="View My Requests" subheader="Track your own submitted requests" />
+                        </TileContent>
+                    </GenericTile>
                     <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/viewRequestIcon}" frameType="TwoByOne" press=".onNavigate" app:route="VirementRequests">
                         <TileContent>
-                            <NewsContent contentText="View All Requests" subheader="Track status and history across all requestors" />
+                            <NewsContent contentText="Request Report" subheader="Track status and history across all requestors" />
                         </TileContent>
                     </GenericTile>
                     <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/approverMatrixIcon}" frameType="TwoByOne" press=".onNavigate" app:route="ApproverMatrix">

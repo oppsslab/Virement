@@ -12,6 +12,15 @@ const {
   ERROR_WORKFLOW_STATUSES,
 } = require("./utils/workflow-utils");
 
+const { normalizeUserId } = require("./utils/user-id");
+
+// TEMPORARY: the live S/4 check below is disabled in favor of a local
+// derivation - see refreshEarmarkedFundsStatus's own comment. Restore
+// this import when that's reverted.
+// const {
+//   getEarmarkedFundsDocumentStatus,
+// } = require("./utils/earmarked-funds");
+
 const LOG = cds.log("requests-after-read-logic");
 
 const REQUESTS_DATABASE_ENTITY = "ZDB_PPS_VIREMENT.Requests";
@@ -33,12 +42,6 @@ function hasRole(user, roleName) {
   return Boolean(
     user && roleName && typeof user.is === "function" && user.is(roleName),
   );
-}
-
-function normalizeUserId(value) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
 }
 
 /**
@@ -148,12 +151,23 @@ async function loadPendingApproverRequestIds(
   return new Set(matchingRequestIds);
 }
 
-function applyVirtualFields(row, user, roleFlags, pendingApproverRequestIds) {
+function applyVirtualFields(
+  row,
+  user,
+  roleFlags,
+  pendingApproverRequestIds,
+  normalizedCurrentUser,
+) {
   row.isPendingApprover = pendingApproverRequestIds.has(row.ID);
 
   row.isJKEW = roleFlags.isJKEW;
 
   row.isFunctional = roleFlags.isFunctional;
+
+  row.isMyRequest = Boolean(
+    normalizedCurrentUser &&
+      normalizeUserId(row.requestor) === normalizedCurrentUser,
+  );
 
   LOG.info("Calculated request UI flags", {
     requestId: row.ID,
@@ -271,6 +285,51 @@ async function refreshLiveWorkflowStatus(rows, request) {
   }
 }
 
+/**
+ * TEMPORARY: derives a Transfer's Earmarked Funds completion status
+ * locally (true once the combined Transfer document has posted, i.e.
+ * transferOutDocNumber is set - transferOutDocNumber and
+ * transferInDocNumber are always posted together as one document, see
+ * post-to-s4-logic.js) instead of checking S/4 live.
+ *
+ * Stands in for the real live check (see getEarmarkedFundsDocumentStatus
+ * in utils/earmarked-funds.js, still imported below but unused here for
+ * now) while the actual S/4 completion API is unusable - see
+ * completeEarmarkedFundsDocument's own comments: S/4 only exposes a
+ * plain field PATCH, not the actual completion business action, so the
+ * header's EarmarkedFundsIsCompleted can never genuinely be set through
+ * it. Revisit once a proper backend action exists.
+ *
+ * Only on a single-entity (Object Page) read, never for a list, to
+ * match the shape of the real check this replaces.
+ *
+ * @param {object[]} rows
+ * @param {cds.Request} request
+ */
+async function refreshEarmarkedFundsStatus(rows, request) {
+  try {
+    const isSingleEntityRead = Boolean(
+      request.params && request.params.length,
+    );
+
+    if (!isSingleEntityRead) {
+      return;
+    }
+
+    for (const row of rows) {
+      if (!row.earmarkedFundsDocNumber) {
+        continue;
+      }
+
+      row.earmarkedFundsIsCompleted = Boolean(row.transferOutDocNumber);
+    }
+  } catch (error) {
+    LOG.error("Error refreshing (temporary, local) Earmarked Funds status.", {
+      message: error.message,
+    });
+  }
+}
+
 module.exports = async function requestsAfterRead(results, request) {
   const rows = (Array.isArray(results) ? results : [results]).filter(
     (row) => row && row.ID,
@@ -308,7 +367,13 @@ module.exports = async function requestsAfterRead(results, request) {
     );
 
     for (const row of rows) {
-      applyVirtualFields(row, user, roleFlags, pendingApproverRequestIds);
+      applyVirtualFields(
+        row,
+        user,
+        roleFlags,
+        pendingApproverRequestIds,
+        normalizedCurrentUser,
+      );
     }
 
     await applyAgingToRows(rows);
@@ -319,6 +384,12 @@ module.exports = async function requestsAfterRead(results, request) {
      * snapshot was last persisted.
      */
     await refreshLiveWorkflowStatus(rows, request);
+
+    /*
+     * Same reasoning, for the Earmarked Funds document's completion
+     * status.
+     */
+    await refreshEarmarkedFundsStatus(rows, request);
   } catch (error) {
     LOG.error("Error computing request UI fields", {
       message: error.message,
@@ -335,6 +406,8 @@ module.exports = async function requestsAfterRead(results, request) {
       row.isJKEW = false;
 
       row.isFunctional = false;
+
+      row.isMyRequest = false;
     }
 
     /*

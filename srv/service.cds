@@ -76,6 +76,21 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             to   : 'REQUEST_APPROVE',
             where: 'status_code = 2 and exists RequestApprovers[emailAddress = $user]'
         },
+
+        /*
+         * Marking an Earmarked Funds document complete is best-effort
+         * at approval time (see approve-reject-request.js) and never
+         * retried automatically if S/4 rejects it. Any of this
+         * request's approvers can retry it afterwards, regardless of
+         * the request's current status, since the underlying S/4
+         * document lives on independently of this app once the
+         * transfer is posted.
+         */
+        {
+            grant: ['retryEarmarkedFundsCompletion'],
+            to   : 'REQUEST_APPROVE',
+            where: 'exists RequestApprovers[emailAddress = $user]'
+        },
     ])
     @odata.draft.enabled
     entity Requests             as
@@ -84,6 +99,22 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             virtual isPendingApprover : Boolean default false,
             virtual isJKEW            : Boolean,
             virtual isFunctional      : Boolean,
+            /*
+             * True when the current user is this request's own
+             * requestor. Filter-only, like isPendingApprover above:
+             * requests-list-scope-logic.js rewrites an "isMyRequest eq
+             * true" filter into a real WHERE on the requestor column
+             * before it reaches the database.
+             */
+            virtual isMyRequest       : Boolean default false,
+            /*
+             * Live-checked against S/4 on every Object Page read (see
+             * requests-after-read-logic.js) - never persisted, since
+             * the Earmarked Funds document's completion status can
+             * change in S/4 independently of this app (e.g. once the
+             * FMBB posting references it as its predecessor).
+             */
+            virtual earmarkedFundsIsCompleted : Boolean default false,
             /*
              * Live workflow execution log, read straight from SAP Build
              * Process Automation (see WorkflowLogs below) rather than
@@ -113,12 +144,45 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
                                  @title: 'Delegate To'
                                  delegateEmail: String) returns Requests;
 
+            /*
+             * Manually retries completing this request's Earmarked
+             * Funds document in S/4, for when the best-effort attempt
+             * at approval time (approve-reject-request.js) failed
+             * silently. See utils/earmarked-funds.js.
+             */
+            @requires: ['REQUEST_APPROVE']
+            action retryEarmarkedFundsCompletion() returns Requests;
+
             action uploadItems(content: LargeString) returns Requests;
 
             action downloadItemsTemplate()           returns TemplateFile;
         };
 
-    entity RequestItems         as projection on my.RequestItems;
+    entity RequestItems         as
+        projection on my.RequestItems {
+            *,
+            /*
+             * Display-only helpers for the Virement approval-routing
+             * scenario (see utils/virement-scenario.js) - "Yes" once
+             * the corresponding auto-derived field(s) are populated,
+             * so a tester can see at a glance which scenario an item
+             * lines up with, without inspecting the raw
+             * department/region/branch values themselves.
+             */
+            case
+                when department is not null and department <> '' then 'Yes'
+                else 'No'
+            end as isDepartment       : String(3),
+            case
+                when region is not null and region <> ''
+                    and branch is not null and branch <> '' then 'Yes'
+                else 'No'
+            end as isRegionAndBranch  : String(3),
+            case
+                when buildingName is not null and buildingName <> '' then 'Yes'
+                else 'No'
+            end as isBuilding         : String(3)
+        };
 
     @readonly
     entity RequestHistory       as projection on my.RequestHistory;
@@ -270,6 +334,21 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
     }) returns Boolean;
 
     /*
+     * One-time admin maintenance action: backfills costCentreDescription/
+     * glAccountName/materialGroupDescription on existing RequestItems
+     * rows that predate those fields (see
+     * code/backfill-item-descriptions-logic.js). Only ever fills a
+     * currently-empty field.
+     */
+    @requires: ['VR_ADMIN']
+    action backfillItemDescriptions() returns {
+        scanned : Integer;
+        updated : Integer;
+        failed  : Integer;
+        errors  : array of String;
+    };
+
+    /*
      * Approver Matrix - reference data maintained by admins. Reading
      * is open to any authenticated user, same as the rest of this
      * service; maintaining it (create/update/delete) is restricted to
@@ -294,6 +373,18 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * RequestItems under Requests): no separate restrict block here.
      */
     entity ApproverDelegation as projection on my.ApproverDelegation;
+
+    /*
+     * Without an ETag, the SAPUI5 OData V4 model has no reliable way
+     * to tell a row changed after editing it on the Object Page and
+     * navigating back, so the List Report table kept showing the
+     * pre-edit values until a manual browser refresh. modifiedAt (from
+     * the managed aspect) already updates on every save, so it doubles
+     * as the concurrency-control property.
+     */
+    annotate ApproverMatrix with {
+        modifiedAt @odata.etag;
+    };
 
     @requires: ['VR_ADMIN']
     action downloadApproverMatrixTemplate() returns TemplateFile;
@@ -399,7 +490,9 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             functionalDepartment : String;
             itemType             : String;
             glAccounts           : String;
-            fundCentreScope      : String;
+            isBuildingGrouping   : Boolean;
+            isDepartment         : Boolean;
+            isRegionAndBranch    : Boolean;
             remarks              : String;
         };
     };

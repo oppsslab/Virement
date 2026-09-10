@@ -49,6 +49,8 @@ const get_Approvers_Logic = require("./code/get-approvers-logic");
 const get_Request_Approvers_Logic = require("./code/get-request-approvers-logic");
 const delegate_Approval_Logic = require("./code/delegate-approval-logic");
 const workflow_Logs_Read_Logic = require("./code/workflow-logs-read-logic");
+const retry_Earmarked_Funds_Logic = require("./code/retry-earmarked-funds-logic");
+const backfill_Item_Descriptions_Logic = require("./code/backfill-item-descriptions-logic");
 
 class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
   async init() {
@@ -164,6 +166,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
       // return rejectRequest(request);
     });
 
+    this.on("backfillItemDescriptions", async (request) => {
+      return backfill_Item_Descriptions_Logic(request);
+    });
+
     this.on("downloadApproverMatrixTemplate", async (request) => {
       return download_Approver_Matrix_Template_Logic(request);
     });
@@ -234,6 +240,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("delegateApproval", "Requests", async (request) => {
       return delegate_Approval_Logic(request);
+    });
+
+    this.on("retryEarmarkedFundsCompletion", "Requests", async (request) => {
+      return retry_Earmarked_Funds_Logic(request);
     });
 
     this.on("resubmitRequest", "Requests", async (request) => {
