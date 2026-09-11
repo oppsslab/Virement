@@ -253,7 +253,7 @@ A budget reservation created at *submit* time (before the FMBB posting exists) f
 | Cost Centre | `/sap/opu/odata/sap/API_COSTCENTER_SRV/A_CostCenter` |
 | GL Account | `/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/GLAccountVH` |
 | Material Group | `/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/MaterialGroupVH` |
-| WBS Element | `/sap/opu/odata/sap/API_WBS_ELEMENT_SRV//A_WBSElement` — note the double slash, see §11 |
+| WBS Element | `/sap/opu/odata/sap/API_WBSELEMENT_SRV//A_WBSElement` — no underscore in the service name, note the double slash, see §11 |
 
 All four go through `QA1-800-S4HANA` and share `srv/code/utils/value-help.js`'s fetch/narrow helpers, which re-rank S/4's fuzzy `search=` results against exactly what the user typed.
 
@@ -343,7 +343,7 @@ Errors are capped at 20 rows shown, with a rollup count beyond that, and reject 
 
 **`ams/dcl/cap/basePolicies.dcl` is hand-maintained beyond what `@requires` annotations alone produce.** `VR_FUNCTIONAL`/`VR_JKEW`/`VR_BCM` policies exist in this file with **no corresponding `@requires` annotation anywhere in the CDS model** — they were added by hand and are preserved across rebuilds because `@sap/ams` detects manual edits and skips regeneration (confirmed by testing: renaming `dclGenerationPackage` from the default `"cap"` silently *dropped* both policies from the freshly generated file). **Never change `dclGenerationPackage`** without diffing the regenerated file against what's committed first.
 
-**WBS S/4 service path.** The working path is `/sap/opu/odata/sap/API_WBS_ELEMENT_SRV//A_WBSElement` — note the double slash before the entity set. Two other variants each failed differently: the plain single-slash standard path returned a structured OData "service not found" error, and a non-standard prefix without the Gateway path returned a bare ICM 404 page. If the service still isn't reachable after using the double-slash path, the next-most-likely cause is that the OData service itself needs activating in S/4 via `/IWFND/MAINT_SERVICE` (look for error code `/IWFND/MED/170`, which specifically means the service is defined but not yet added to the Gateway catalog).
+**WBS S/4 service path.** The working path, confirmed via a direct SAP Gateway Client test (HTTP 200, real rows returned), is `/sap/opu/odata/sap/API_WBSELEMENT_SRV//A_WBSElement`. Two details matter, and each prior broken attempt got exactly one of them right: the service name is `API_WBSELEMENT_SRV` — **no underscore** between WBS and ELEMENT (`API_WBS_ELEMENT_SRV` 404s with a structured OData "service not found" error) — and the entity set needs a **double slash** before it (dropping the standard `/sap/opu/odata/sap/` Gateway prefix instead of using the double slash 404s with a bare ICM "Service cannot be reached" page, not even OData-level).
 
 **SAP Build's fully-qualified-path bug.** See §7 — any new unbound action/function called by a workflow needs registering in `srv/server.js`'s workaround lists, or it will silently fail from the workflow side while SAP Build's own Test tool appears to work fine.
 
