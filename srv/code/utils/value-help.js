@@ -315,6 +315,12 @@ async function fetchValueHelp({ path, selectFields, term, filter, top, skip, lab
 
     LOG.error(`${label} search failed.`, {
       status: error?.response?.status,
+      statusText: error?.response?.statusText,
+      url: error?.config?.url || error?.request?.path,
+      responseData:
+        typeof error?.response?.data === "string"
+          ? error.response.data.slice(0, 2000)
+          : JSON.stringify(error?.response?.data)?.slice(0, 2000),
       detail,
     });
 
