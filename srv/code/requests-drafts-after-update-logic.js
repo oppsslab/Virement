@@ -58,7 +58,26 @@ module.exports = async function (data, request) {
 
     const tx = cds.tx(request);
 
-    const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
+    const { Requests, RequestApprovers, RequestItems } =
+      cds.entities(SERVICE_NAMESPACE);
+
+    if ("budgetType_code" in patchedFields) {
+      // Cascade the header's new Budget Type onto every existing item
+      // (see budgetTypeCode in db/schema.cds) - items created before
+      // this PATCH still carry the OLD value otherwise, so the item
+      // tables' Cost Centre/GL/Material vs WBS columns would stay on
+      // the wrong set until the item itself is touched.
+      await tx.run(
+        UPDATE(RequestItems.drafts)
+          .set({ budgetTypeCode: patchedFields.budgetType_code })
+          .where({ request_ID: requestId }),
+      );
+
+      LOG.info(
+        "Cascaded budgetTypeCode to existing items:",
+        JSON.stringify({ requestId, budgetTypeCode: patchedFields.budgetType_code }),
+      );
+    }
 
     const applied = await refreshDraftApproverPreview({
       tx,

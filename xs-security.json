@@ -5,8 +5,12 @@
       "description": "REQUEST_APPROVE"
     },
     {
-      "name": "$XSAPPNAME.VR_ADMIN",
-      "description": "VR_ADMIN"
+      "name": "$XSAPPNAME.ADMIN",
+      "description": "ADMIN"
+    },
+    {
+      "name": "$XSAPPNAME.BUDGET_ZERORISE",
+      "description": "BUDGET_ZERORISE"
     }
   ],
   "attributes": [],
@@ -20,10 +24,18 @@
       "attribute-references": []
     },
     {
-      "name": "VR_ADMIN",
+      "name": "ADMIN",
       "description": "Maintains the Approver Matrix",
       "scope-references": [
-        "$XSAPPNAME.VR_ADMIN"
+        "$XSAPPNAME.ADMIN"
+      ],
+      "attribute-references": []
+    },
+    {
+      "name": "BUDGET_ZERORISE",
+      "description": "Raises a Budget Zerorise Return (BCM team only)",
+      "scope-references": [
+        "$XSAPPNAME.BUDGET_ZERORISE"
       ],
       "attribute-references": []
     }

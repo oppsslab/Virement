@@ -19,6 +19,7 @@ const { resolveGLAccountName } = require("./utils/gl-account-name-lookup");
 const {
   resolveMaterialGroupDescription,
 } = require("./utils/material-group-description-lookup");
+const { resolveWBSDetails } = require("./utils/wbs-elements");
 
 const LOG = cds.log("requestitems-drafts-before-create-logic");
 
@@ -98,6 +99,21 @@ module.exports = async function (request) {
       return request.error(400, "Unable to determine parent Request ID.");
     }
 
+    // 1a-pre. Denormalize the parent Request's current budgetType_code
+    // onto the item (see budgetTypeCode in db/schema.cds) - the item
+    // tables' Cost Centre/GL/Material vs WBS column visibility is
+    // driven off this local field.
+    const { Requests } = cds.entities("ZSVC_PPS_VIREMENT");
+    const parentRequest = await tx.run(
+      SELECT.one
+        .from(Requests.drafts)
+        .columns("budgetType_code")
+        .where({ ID: parentRequestId }),
+    );
+    request.data.budgetTypeCode = parentRequest?.budgetType_code || null;
+
+    LOG.info("Auto-populated budgetTypeCode on create:", request.data.budgetTypeCode);
+
     // 1a. Auto-populate the read-only GL Group and Functional
     // Department whenever a GL Account is already provided at
     // creation time (e.g. a deep-create/upload payload). Client-
@@ -132,10 +148,37 @@ module.exports = async function (request) {
       );
     }
 
+    // 1a2. Auto-populate the read-only WBS Description and
+    // responsibleCostCentre whenever a WBS Element is already provided
+    // at creation time. Client-provided values are always overwritten
+    // - neither field is ever user-settable. responsibleCostCentre is
+    // a dedicated field, separate from costCentre - see db/schema.cds
+    // - used only for Virement + Project approval routing (see
+    // utils/virement-scenario.js classifyVirementProjectScenario); a
+    // Project item's costCentre is intentionally left untouched, since
+    // the Department/Region cascade below is a Non Project-only
+    // concept that doesn't apply to WBS-based items.
+    if (request.data.wbs) {
+      const wbsDetails = await resolveWBSDetails(request.data.wbs);
+
+      request.data.wbsDescription = wbsDetails.wbsDescription;
+      request.data.responsibleCostCentre = wbsDetails.responsibleCostCenter;
+
+      LOG.info(
+        "Auto-populated wbsDescription/responsibleCostCentre from WBS on create:",
+        JSON.stringify({
+          wbs: request.data.wbs,
+          wbsDescription: request.data.wbsDescription,
+          responsibleCostCentre: request.data.responsibleCostCentre,
+        }),
+      );
+    }
+
     // 1b. Auto-populate the read-only Department, Region, and Branch
-    // whenever a Cost Centre is already provided at creation time.
-    // Client-provided values are always overwritten - these fields
-    // are never user-settable.
+    // whenever a Cost Centre is already provided at creation time
+    // (including one just derived from WBS above). Client-provided
+    // values are always overwritten - these fields are never
+    // user-settable.
     if (request.data.costCentre) {
       request.data.department = await resolveDepartment(
         tx,

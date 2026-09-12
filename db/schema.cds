@@ -61,6 +61,18 @@ entity Requests : cuid, managed {
 entity RequestItems : cuid, managed {
     request           : Association to Requests;
     srNo              : String(3);
+    /*
+     * Denormalized copy of the parent Request's budgetType_code, kept
+     * in sync server-side (requestitems-drafts-before-create-logic.js
+     * on create, requests-drafts-after-update-logic.js cascading to
+     * existing items whenever the header's Budget Type changes). The
+     * item tables' Cost Centre/GL/Material vs WBS columns are shown/
+     * hidden based on this LOCAL field rather than a live
+     * "request/budgetType_code" navigation - the latter never
+     * reactively re-evaluated when Budget Type was picked on an
+     * already-open item table.
+     */
+    budgetTypeCode    : String(1) @readonly;
     costCentre        : String(10);
     /*
      * Read-only, system-derived from the Cost Centre search help (S/4,
@@ -135,6 +147,30 @@ entity RequestItems : cuid, managed {
      */
     materialGroupDescription : String(200) @readonly;
     wbs               : String;
+    /*
+     * Read-only, system-derived from the WBS Element search help
+     * (S/4, same lookup the value help itself uses - see
+     * utils/wbs-elements.js resolveWBSDescription) whenever wbs is
+     * set/changed - never client-writable. Server-derived for the
+     * same reason as costCentreDescription above.
+     */
+    wbsDescription    : String(40)  @readonly;
+    /*
+     * Read-only, system-derived from the WBS Element search help (S/4,
+     * same lookup the value help itself uses - see
+     * utils/wbs-elements.js resolveWBSDetails) whenever wbs is
+     * set/changed - never client-writable. Used ONLY for Virement
+     * (Transfer) + Project approval routing: the Head of Transfer-out
+     * Cost Center role is resolved against this value (via the
+     * Approver Matrix's departmentBranch column - see
+     * utils/virement-scenario.js classifyVirementProjectScenario),
+     * exactly like costCentre already does for Non Project. Kept
+     * separate from costCentre (which drives the GL-based
+     * Department/Region/Branch cascade - a Non Project-only concept
+     * that doesn't apply to WBS-based items) so a Project item's own
+     * costCentre stays empty, as it always has.
+     */
+    responsibleCostCentre : String(10) @readonly;
     assetStatus       : Association to AssetStatus;
     // @assert.range rejects a negative entry both client-side (Fiori
     // Elements shows an inline input error before save) and
@@ -256,6 +292,40 @@ entity ApproverMatrix : cuid, managed {
     endDate          : Date;
     Delegations      : Composition of many ApproverDelegation
                             on Delegations.approverMatrix = $self;
+    /*
+     * Every currently Pending Approval RequestApprovers row assigned to
+     * this row's own emailAddress - lets an admin see what this
+     * approver is presently sitting on and bulk-delegate a selection
+     * elsewhere (delegatePendingApproval action, see
+     * delegate-pending-approval-logic.js) without waiting for the
+     * approver to act themselves. Unlike Delegations above (forward-
+     * looking, only affects requests resolved from now on), this
+     * reassigns requests that are ALREADY Pending Approval, immediately.
+     *
+     * Targets RequestApprovers (not Requests) so each row unambiguously
+     * identifies exactly which pending approval assignment to reassign
+     * - a request can carry more than one pending row for the same
+     * email address across levels, and delegatePendingApproval must
+     * only touch the one the admin actually selected.
+     *
+     * Only filters on RequestApprovers.status and emailAddress (a
+     * managed to-one association can only be followed to its key in an
+     * unmanaged on-condition, so the parent Request's own status can't
+     * be re-checked here, and RequestApprovers.userRole stores plain
+     * descriptive text rather than a code that could be compared
+     * directly). srv/code/pending-approvals-for-approver-scope-logic.js
+     * narrows this further at read time: excluding rows whose parent
+     * Request has since moved past Pending Approval, and restricting to
+     * rows matching this Approver Matrix row's own role (an email
+     * address holding more than one role would otherwise see every
+     * role's pending items mixed together). delegate-pending-approval-
+     * logic.js separately re-verifies the parent Request is still
+     * Pending Approval before reassigning, same defensive check
+     * delegate-approval-logic.js already does.
+     */
+    PendingApprovals : Association to many RequestApprovers
+                            on  PendingApprovals.emailAddress = $self.emailAddress
+                            and PendingApprovals.status.code = 2;
 };
 
 /*

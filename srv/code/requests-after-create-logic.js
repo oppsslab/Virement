@@ -374,6 +374,7 @@ module.exports = async function (results, request) {
         SELECT.from(RequestItems)
           .columns(
             "costCentre",
+            "responsibleCostCentre",
             "glGroup",
             "department",
             "region",

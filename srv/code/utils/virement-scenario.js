@@ -64,6 +64,7 @@ const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
 const REQUEST_TYPE_TRANSFER = "T";
 const BUDGET_TYPE_NON_PROJECT = "N";
+const BUDGET_TYPE_PROJECT = "P";
 
 const LEVEL_1_LETTERS = ["A", "B", "C", "D", "E"];
 
@@ -98,13 +99,21 @@ function singleValue(items, field) {
  * Center", per transfer-out line item order.
  *
  * @param {object[]} transferOutItems
+ * @param {string} [costCentreField] - which item field carries the
+ *   cost center to match against the Approver Matrix's
+ *   departmentBranch column - "costCentre" (GL-based) for Non Project,
+ *   "responsibleCostCentre" (WBS-derived) for Project. See
+ *   db/schema.cds RequestItems.responsibleCostCentre.
  * @returns {{level: string, userRole: string, departmentBranch: string}[]}
  */
-function buildTransferOutCostCentreEntries(transferOutItems) {
+function buildTransferOutCostCentreEntries(
+  transferOutItems,
+  costCentreField = "costCentre",
+) {
   return transferOutItems.map((item, index) => ({
     level: `1${LEVEL_1_LETTERS[index] || index + 1}`,
     userRole: "HOD_XFER_CC",
-    departmentBranch: String(item.costCentre || "").trim(),
+    departmentBranch: String(item[costCentreField] || "").trim(),
   }));
 }
 
@@ -400,8 +409,55 @@ async function classifyVirementNonProjectScenario(tx, items) {
   };
 }
 
+/**
+ * Classifies a Project Virement request's approval scenario - much
+ * simpler than the Non-Project chain above: a Project item is
+ * identified by WBS Element alone, whose Responsible Cost Center is
+ * auto-derived into the dedicated responsibleCostCentre field (see
+ * requestitems-drafts-before-create/update-logic.js and
+ * utils/wbs-elements.js - kept separate from costCentre, which stays
+ * empty for a Project item since the GL-based Department/Region
+ * cascade doesn't apply to WBS-based items). Level 1 is always "Head
+ * of Transfer-out Cost Center", resolved once PER TRANSFER-OUT LINE
+ * ITEM against that responsibleCostCentre via the Approver Matrix's
+ * departmentBranch column (same buildTransferOutCostCentreEntries
+ * helper the Non-Project chain uses, just pointed at a different
+ * field) - with no further level: a Project Virement approval is one
+ * level only.
+ *
+ * @param {object[]} items - RequestItems rows, each carrying
+ *   responsibleCostCentre (the WBS's Responsible Cost Center) and
+ *   transferOutAmount
+ * @returns {{scenario: string, level1Entries: object[]}|null} null if
+ *   there's no transfer-out item yet to resolve
+ */
+function classifyVirementProjectScenario(items) {
+  const transferOutItems = (items || []).filter(
+    (item) => Number(item.transferOutAmount) > 0,
+  );
+
+  if (!transferOutItems.length) {
+    LOG.info(
+      "Not yet classifiable - missing a transfer-out item.",
+      JSON.stringify({ transferOutCount: transferOutItems.length }),
+    );
+
+    return null;
+  }
+
+  return {
+    scenario: "Project Virement - Head of Transfer-out Cost Center",
+    level1Entries: buildTransferOutCostCentreEntries(
+      transferOutItems,
+      "responsibleCostCentre",
+    ),
+  };
+}
+
 module.exports = {
   classifyVirementNonProjectScenario,
+  classifyVirementProjectScenario,
   REQUEST_TYPE_TRANSFER,
   BUDGET_TYPE_NON_PROJECT,
+  BUDGET_TYPE_PROJECT,
 };

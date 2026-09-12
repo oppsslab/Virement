@@ -15,7 +15,7 @@ const LOG = cds.log("backfill-item-descriptions-logic");
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
 /**
- * @requires(role = "VR_ADMIN")
+ * @requires(role = "ADMIN")
  *
  * One-time admin action: backfills costCentreDescription/glAccountName/
  * materialGroupDescription on existing (active, non-draft) RequestItems

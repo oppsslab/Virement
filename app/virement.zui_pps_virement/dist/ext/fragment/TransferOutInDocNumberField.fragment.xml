@@ -1,0 +1,19 @@
+<!--
+    Transfer Out/In Document Number field (transferOutDocNumber and
+    transferInDocNumber are always the same value - see the
+    UI.DataField comment in annotations.cds), injected into the
+    Request Header field group as a custom field purely to strip the
+    leading zero for display (formatDocumentNumber in
+    ObjectPageExt.controller.js) - the stored value itself is the
+    real, zero-padded S/4 document number and is left untouched.
+
+    Registered in manifest.json under controlConfiguration >
+    "@com.sap.vocabularies.UI.v1.FieldGroup#RequestHeader" > fields.
+-->
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Text
+        id="transferOutInDocNumberText"
+        text="{path: 'transferOutDocNumber', formatter: '.extension.virement.zuippsvirement.ext.controller.ObjectPageExt.formatDocumentNumber'}" />
+</core:FragmentDefinition>

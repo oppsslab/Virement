@@ -4,6 +4,11 @@ const insertRequestHistory = require("./insert-request-history");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
+const {
+  findOpenTasksForLevels,
+  addTaskRecipient,
+} = require("./utils/workflow-utils");
+
 const LOG = cds.log("delegate-approval-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
@@ -30,17 +35,22 @@ function resolveRequestId(request) {
  * @On("delegateApproval")
  *
  * Lets the current pending approver hand off their approval task to
- * someone else, without involving SAP Build Process Automation at
- * all. Every RequestApprovers row still Pending Approval for the
- * current user on this request has its emailAddress swapped to the
- * delegate, keeping the same level and status - the delegate then
+ * someone else. Every RequestApprovers row still Pending Approval for
+ * the current user on this request has its emailAddress swapped to
+ * the delegate, keeping the same level and status - the delegate then
  * passes the same "is this user a pending approver" check the
  * existing Approve/Reject actions already use.
  *
- * The BPA task itself is left untouched: it stays assigned to
- * whoever/whatever BPA originally recorded, since nothing here
- * calls out to BPA. Only this app's own record of who may act is
- * updated.
+ * The current user is also swapped out for the delegate as a
+ * recipient on the matching SAP Build Process Automation task(s) (see
+ * addTaskRecipient in utils/workflow-utils.js) so BPA's own My Inbox
+ * follows the same delegation - any OTHER recipient already on the
+ * task (e.g. a different approver at the same level) is left as-is,
+ * only the delegating user is removed - best-effort: this app's own
+ * delegation above is the source of truth and already committed by
+ * the time that call happens, so a BPA-side failure (e.g. missing
+ * ProcessAutomationAdmin privilege) is logged only, never surfaced to
+ * the caller as a failure of the delegation they just performed.
  *
  * @param {cds.Request} request
  */
@@ -79,7 +89,7 @@ module.exports = async function delegateApproval(request) {
   const requestRow = await tx.run(
     SELECT.one
       .from(Requests)
-      .columns("ID", "status_code")
+      .columns("ID", "status_code", "workflowInstanceId")
       .where({ ID: requestId }),
   );
 
@@ -95,7 +105,7 @@ module.exports = async function delegateApproval(request) {
 
   const pendingRows = await tx.run(
     SELECT.from(RequestApprovers)
-      .columns("ID", "emailAddress")
+      .columns("ID", "emailAddress", "level")
       .where({
         request_ID: requestId,
         status_code: REQUEST_STATUS.PENDING_APPROVAL,
@@ -137,6 +147,50 @@ module.exports = async function delegateApproval(request) {
     "Approval delegated.",
     JSON.stringify({ requestId, from: approverEmail, to: delegateEmail }),
   );
+
+  /*
+   * Best-effort: this app's own delegation already committed above,
+   * so a BPA-side failure here must not fail the delegation the user
+   * just successfully performed. Logged only, same treatment as
+   * completeTask's callers give a BPA failure.
+   */
+  try {
+    const tasks = await findOpenTasksForLevels(
+      requestRow.workflowInstanceId,
+      myPendingRows.map((row) => row.level),
+    );
+
+    await Promise.all(
+      tasks.map((task) =>
+        addTaskRecipient({
+          taskId: task.id || task.taskId,
+          existingRecipients: task.recipientUsers,
+          removeRecipientEmail: approverEmail,
+          recipientEmail: delegateEmail,
+        }),
+      ),
+    );
+
+    LOG.info(
+      "BPA task recipient swapped to delegate.",
+      JSON.stringify({
+        requestId,
+        taskIds: tasks.map((t) => t.id || t.taskId),
+        from: approverEmail,
+        to: delegateEmail,
+      }),
+    );
+  } catch (error) {
+    LOG.error(
+      "Could not add the delegate as a BPA task recipient for this " +
+        "delegation - this app's own record is still correctly delegated.",
+      JSON.stringify({
+        requestId,
+        message: error.message,
+        status: error.response?.status || error.statusCode,
+      }),
+    );
+  }
 
   request.info(`Approval delegated to ${delegateEmail}.`);
 };

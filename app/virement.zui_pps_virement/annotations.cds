@@ -406,6 +406,33 @@ annotate service.Requests with @(
             // ]}}
             ![@UI.Hidden]: true
         },
+        {
+            $Type        : 'UI.DataFieldForAction',
+            Action       : 'service.delegateApprovalAsAdmin',
+            Label        : '{i18n>Delegate}',
+            // Admin-only, regardless of who the current pending
+            // approver is - contrast with delegateApproval above,
+            // which is self-service-only and unconditionally hidden.
+            // Not in use for now - unconditionally hidden at the
+            // user's request. Restore the condition below
+            // (status_code/isAdmin/IsActiveEntity) to bring the button
+            // back.
+            // ![@UI.Hidden]: {$edmJson: {$Or: [
+            //     {$Ne: [
+            //         {$Path: 'status_code'},
+            //         2
+            //     ]},
+            //     {$Eq: [
+            //         {$Path: 'isAdmin'},
+            //         false
+            //     ]},
+            //     {$Eq: [
+            //         {$Path: 'IsActiveEntity'},
+            //         false
+            //     ]}
+            // ]}}
+            ![@UI.Hidden]: true
+        },
         /*
          * Manual fallback for the best-effort Earmarked Funds
          * completion attempted at approval time (see
@@ -1074,12 +1101,23 @@ annotate service.RequestItems with @Common.SideEffects #RecalcHeaderOnAmountChan
 // correcting it after items already exist) re-resolves the CAP-owned
 // approver preview server-side (requests-drafts-after-update-logic.js) -
 // refresh the Approvers facet to match.
+//
+// RequestItems is also a target: the item tables' Cost Centre/GL/
+// Material vs WBS columns are shown/hidden via a UI.Hidden condition on
+// the item's own local budgetTypeCode field (see db/schema.cds and the
+// #SupplementItems/#ReturnItems/etc. LineItems above), which is
+// cascaded onto every existing item by requests-drafts-after-update-
+// logic.js whenever this PATCH touches budgetType_code. This
+// SideEffect is what makes the item table re-fetch and pick up that
+// cascaded value - without it, picking a Budget Type on an
+// already-loaded item table leaves the column visibility stale until
+// the page is reloaded.
 annotate service.Requests with @Common.SideEffects #RefreshApproversOnTypeChange: {
     SourceProperties: [
         requestType_code,
         budgetType_code
     ],
-    TargetEntities  : [RequestApprovers]
+    TargetEntities  : [RequestApprovers, RequestItems]
 };
 
 annotate service.Requests actions {
@@ -1135,6 +1173,18 @@ annotate service.Requests actions {
 };
 
 annotate service.Requests actions {
+    delegateApprovalAsAdmin @(Common.SideEffects: {
+        TargetProperties: [
+            'in/status_code'
+        ],
+        TargetEntities  : [
+            RequestApprovers,
+            RequestHistory
+        ]
+    })
+};
+
+annotate service.Requests actions {
     retryEarmarkedFundsCompletion @(Common.SideEffects: {
         TargetProperties: [
             'in/earmarkedFundsIsCompleted'
@@ -1168,6 +1218,13 @@ annotate service.Requests actions {
 annotate service.RequestItems with {
     srNo              @(
         title              : '{i18n>SRNo}',
+        Common.FieldControl: #ReadOnly
+    );
+    // Internal-only, never shown as its own column - see budgetTypeCode
+    // in db/schema.cds for why it exists (drives the UI.Hidden
+    // conditions on costCentre/wbs and friends below).
+    budgetTypeCode    @(
+        title              : 'Budget Type',
         Common.FieldControl: #ReadOnly
     );
     costCentre        @(
@@ -1391,14 +1448,25 @@ annotate service.RequestItems with {
     );
     wbs               @(
         title           : '{i18n>WBS}',
-        // See costCentre above: read-only once Pending Approval.
+        // Read-only once Pending Approval (see costCentre above);
+        // otherwise Mandatory for a Project item (budgetTypeCode is
+        // the local, denormalized copy of the parent's Budget Type -
+        // see db/schema.cds), Optional for Non-Project (where this
+        // field is hidden anyway).
         Common.FieldControl: {$edmJson: {$If: [
             {$Eq: [
                 {$Path: 'request/status_code'},
                 2
             ]},
             1,
-            3
+            {$If: [
+                {$Eq: [
+                    {$Path: 'budgetTypeCode'},
+                    'P'
+                ]},
+                7,
+                3
+            ]}
         ]}},
 
         /*
@@ -1417,11 +1485,47 @@ annotate service.RequestItems with {
                     ValueListProperty: 'wbsElement'
                 },
                 {
+                    // DisplayOnly, not InOut: wbsDescription is
+                    // @readonly (Core.Computed) and server-resolved in
+                    // requestitems-drafts-before-create/update-logic.js
+                    // (utils/wbs-elements.js resolveWBSDescription) -
+                    // this only shows the Description as an extra
+                    // column in the value help dialog for context
+                    // while searching.
                     $Type            : 'Common.ValueListParameterDisplayOnly',
-                    ValueListProperty: 'wbsElementInternalID'
+                    ValueListProperty: 'wbsDescription'
+                },
+                {
+                    // Display-only context in the search dialog only -
+                    // not persisted anywhere on RequestItems, unlike
+                    // wbsDescription above (no business need for it
+                    // beyond helping identify the right WBS while
+                    // searching).
+                    $Type            : 'Common.ValueListParameterDisplayOnly',
+                    ValueListProperty: 'responsibleCostCenter'
                 }
             ]
         }
+    );
+    /*
+     * Read-only, system-derived from the WBS Element search help
+     * (S/4) whenever wbs is set/changed - never user-settable.
+     */
+    wbsDescription    @(
+        title              : 'WBS Description',
+        Common.FieldControl: #ReadOnly
+    );
+    /*
+     * Read-only, system-derived from the WBS Element search help
+     * (S/4) whenever wbs is set/changed - never user-settable. Used
+     * only for Virement + Project approval routing (see
+     * utils/virement-scenario.js classifyVirementProjectScenario) -
+     * not part of any LineItem by default, but titled properly for
+     * when it's added as a column via table personalization.
+     */
+    responsibleCostCentre @(
+        title              : 'Responsible Cost Centre',
+        Common.FieldControl: #ReadOnly
     );
     assetStatus       @(
         title                          : '{i18n>AssetStatus}',
@@ -1532,37 +1636,75 @@ annotate service.RequestItems with @(
             Value: srNo
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentre
+            $Type        : 'UI.DataField',
+            Value        : costCentre,
+            // Project-budget items are identified by WBS alone -
+            // Cost Centre/GL Account/Material (and their derived
+            // description columns below) only apply to Non Project.
+            // See wbs below for the inverse condition.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentreDescription
+            $Type        : 'UI.DataField',
+            Value        : costCentreDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccount
+            $Type        : 'UI.DataField',
+            Value        : glAccount,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccountName
+            $Type        : 'UI.DataField',
+            Value        : glAccountName,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: material
+            $Type        : 'UI.DataField',
+            Value        : material,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: materialGroupDescription
+            $Type        : 'UI.DataField',
+            Value        : materialGroupDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
             $Type        : 'UI.DataField',
             Value        : wbs,
             // WBS elements only exist for Project budgets, so the column
-            // is hidden for Non Project requests. budgetType lives on the
-            // parent, hence the path across the request association.
+            // is hidden for Non Project requests. budgetTypeCode is a
+            // local, denormalized copy of the parent's Budget Type -
+            // see db/schema.cds.
             ![@UI.Hidden]: {$edmJson: {$Eq: [
-                {$Path: 'request/budgetType_code'},
+                {$Path: 'budgetTypeCode'},
+                'N'
+            ]}}
+        },
+        {
+            $Type        : 'UI.DataField',
+            Value        : wbsDescription,
+            // Same visibility rule as wbs above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
                 'N'
             ]}}
         },
@@ -1607,37 +1749,75 @@ annotate service.RequestItems with @(
             Value: srNo
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentre
+            $Type        : 'UI.DataField',
+            Value        : costCentre,
+            // Project-budget items are identified by WBS alone -
+            // Cost Centre/GL Account/Material (and their derived
+            // description columns below) only apply to Non Project.
+            // See wbs below for the inverse condition.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentreDescription
+            $Type        : 'UI.DataField',
+            Value        : costCentreDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccount
+            $Type        : 'UI.DataField',
+            Value        : glAccount,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccountName
+            $Type        : 'UI.DataField',
+            Value        : glAccountName,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: material
+            $Type        : 'UI.DataField',
+            Value        : material,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: materialGroupDescription
+            $Type        : 'UI.DataField',
+            Value        : materialGroupDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
             $Type        : 'UI.DataField',
             Value        : wbs,
             // WBS elements only exist for Project budgets, so the column
-            // is hidden for Non Project requests. budgetType lives on the
-            // parent, hence the path across the request association.
+            // is hidden for Non Project requests. budgetTypeCode is a
+            // local, denormalized copy of the parent's Budget Type -
+            // see db/schema.cds.
             ![@UI.Hidden]: {$edmJson: {$Eq: [
-                {$Path: 'request/budgetType_code'},
+                {$Path: 'budgetTypeCode'},
+                'N'
+            ]}}
+        },
+        {
+            $Type        : 'UI.DataField',
+            Value        : wbsDescription,
+            // Same visibility rule as wbs above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
                 'N'
             ]}}
         },
@@ -1682,37 +1862,75 @@ annotate service.RequestItems with @(
             Value: srNo
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentre
+            $Type        : 'UI.DataField',
+            Value        : costCentre,
+            // Project-budget items are identified by WBS alone -
+            // Cost Centre/GL Account/Material (and their derived
+            // description columns below) only apply to Non Project.
+            // See wbs below for the inverse condition.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentreDescription
+            $Type        : 'UI.DataField',
+            Value        : costCentreDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccount
+            $Type        : 'UI.DataField',
+            Value        : glAccount,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccountName
+            $Type        : 'UI.DataField',
+            Value        : glAccountName,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: material
+            $Type        : 'UI.DataField',
+            Value        : material,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: materialGroupDescription
+            $Type        : 'UI.DataField',
+            Value        : materialGroupDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
             $Type        : 'UI.DataField',
             Value        : wbs,
             // WBS elements only exist for Project budgets, so the column
-            // is hidden for Non Project requests. budgetType lives on the
-            // parent, hence the path across the request association.
+            // is hidden for Non Project requests. budgetTypeCode is a
+            // local, denormalized copy of the parent's Budget Type -
+            // see db/schema.cds.
             ![@UI.Hidden]: {$edmJson: {$Eq: [
-                {$Path: 'request/budgetType_code'},
+                {$Path: 'budgetTypeCode'},
+                'N'
+            ]}}
+        },
+        {
+            $Type        : 'UI.DataField',
+            Value        : wbsDescription,
+            // Same visibility rule as wbs above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
                 'N'
             ]}}
         },
@@ -1815,37 +2033,75 @@ annotate service.RequestItems with @(
             Value: srNo
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentre
+            $Type        : 'UI.DataField',
+            Value        : costCentre,
+            // Project-budget items are identified by WBS alone -
+            // Cost Centre/GL Account/Material (and their derived
+            // description columns below) only apply to Non Project.
+            // See wbs below for the inverse condition.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentreDescription
+            $Type        : 'UI.DataField',
+            Value        : costCentreDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccount
+            $Type        : 'UI.DataField',
+            Value        : glAccount,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccountName
+            $Type        : 'UI.DataField',
+            Value        : glAccountName,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: material
+            $Type        : 'UI.DataField',
+            Value        : material,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: materialGroupDescription
+            $Type        : 'UI.DataField',
+            Value        : materialGroupDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
             $Type        : 'UI.DataField',
             Value        : wbs,
             // WBS elements only exist for Project budgets, so the column
-            // is hidden for Non Project requests. budgetType lives on the
-            // parent, hence the path across the request association.
+            // is hidden for Non Project requests. budgetTypeCode is a
+            // local, denormalized copy of the parent's Budget Type -
+            // see db/schema.cds.
             ![@UI.Hidden]: {$edmJson: {$Eq: [
-                {$Path: 'request/budgetType_code'},
+                {$Path: 'budgetTypeCode'},
+                'N'
+            ]}}
+        },
+        {
+            $Type        : 'UI.DataField',
+            Value        : wbsDescription,
+            // Same visibility rule as wbs above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
                 'N'
             ]}}
         },
@@ -1951,37 +2207,75 @@ annotate service.RequestItems with @(
             Value: srNo
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentre
+            $Type        : 'UI.DataField',
+            Value        : costCentre,
+            // Project-budget items are identified by WBS alone -
+            // Cost Centre/GL Account/Material (and their derived
+            // description columns below) only apply to Non Project.
+            // See wbs below for the inverse condition.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: costCentreDescription
+            $Type        : 'UI.DataField',
+            Value        : costCentreDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccount
+            $Type        : 'UI.DataField',
+            Value        : glAccount,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: glAccountName
+            $Type        : 'UI.DataField',
+            Value        : glAccountName,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: material
+            $Type        : 'UI.DataField',
+            Value        : material,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
-            $Type: 'UI.DataField',
-            Value: materialGroupDescription
+            $Type        : 'UI.DataField',
+            Value        : materialGroupDescription,
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
+                'P'
+            ]}}
         },
         {
             $Type        : 'UI.DataField',
             Value        : wbs,
             // WBS elements only exist for Project budgets, so the column
-            // is hidden for Non Project requests. budgetType lives on the
-            // parent, hence the path across the request association.
+            // is hidden for Non Project requests. budgetTypeCode is a
+            // local, denormalized copy of the parent's Budget Type -
+            // see db/schema.cds.
             ![@UI.Hidden]: {$edmJson: {$Eq: [
-                {$Path: 'request/budgetType_code'},
+                {$Path: 'budgetTypeCode'},
+                'N'
+            ]}}
+        },
+        {
+            $Type        : 'UI.DataField',
+            Value        : wbsDescription,
+            // Same visibility rule as wbs above.
+            ![@UI.Hidden]: {$edmJson: {$Eq: [
+                {$Path: 'budgetTypeCode'},
                 'N'
             ]}}
         },
@@ -2381,6 +2675,75 @@ annotate service.RequestApprovers with @(
 );
 
 // =============================================================================
+// Pending Approvals sub-table on the Approver Matrix Object Page
+// (ApproverMatrix.PendingApprovals, see db/schema.cds) - shows every
+// request this specific approver is currently holding up, so an admin
+// can select several and bulk-delegate via delegatePendingApproval
+// (delegate-pending-approval-logic.js). emailAddress/level/status are
+// left off since they're always this same row's own email, Pending,
+// and whichever level routed to them - not useful context here.
+// =============================================================================
+annotate service.RequestApprovers with @(
+    UI.LineItem #ApproverMatrixPending: [
+        {
+            /*
+             * Confirmed (twice) that UI.DataFieldWithNavigationPath
+             * crashes on click here ("Cannot read properties of
+             * undefined (reading 'request')", sap.fe.core.
+             * TemplateComponent) - a genuine framework limitation for
+             * a navigation nested this deep (Object Page -> facet ->
+             * row -> association -> another Object Page), unrelated
+             * to $select/requestProperty. Do not re-attempt this
+             * again - use the "Open Request" toolbar action
+             * (ApproverMatrixObjectPageActions.js) instead, which
+             * works reliably.
+             */
+            $Type: 'UI.DataField',
+            Value: request.requestNumber,
+            Label: '{i18n>RequestNumber}'
+        },
+        {
+            /*
+             * .descr (plain read-only text from the RequestType
+             * CodeList), not requestType_code - the code field carries
+             * its own Mandatory/ValueList annotations (for editing it
+             * on the Requests Object Page itself), which a bare
+             * cross-navigation DataField would otherwise inherit here
+             * too, rendering as a live editable dropdown on what is
+             * meant to be a read-only summary row.
+             */
+            $Type: 'UI.DataField',
+            Value: request.requestType.descr,
+            Label: '{i18n>RequestType}'
+        },
+        {
+            // See requestType.descr above for why .descr, not budgetType_code.
+            $Type: 'UI.DataField',
+            Value: request.budgetType.descr,
+            Label: '{i18n>BudgetType}'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: request.requestor,
+            Label: 'Requestor'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: request.submissionDate,
+            Label: 'Submission Date'
+        }
+    ],
+    UI.PresentationVariant #ApproverMatrixPending: {
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : request_ID,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem#ApproverMatrixPending']
+    }
+);
+
+// =============================================================================
 // Pending Approval Requests
 //
 // Backs the Pending Approvals list report. This is a separate entity from
@@ -2422,9 +2785,9 @@ annotate service.MaterialGroups with {
 // WBS Element Search Help
 // =============================================================================
 annotate service.WBSElements with {
-    wbsElement           @(title: '{i18n>WBS}');
-    wbsElementInternalID @(title: '{i18n>WBSInternalID}');
-    isBillingElement     @(title: '{i18n>IsBillingElement}');
+    wbsElement            @(title: '{i18n>WBS}');
+    wbsDescription        @(title: 'WBS Description');
+    responsibleCostCenter @(title: 'Responsible Cost Center');
 };
 
 // =============================================================================
@@ -2586,6 +2949,12 @@ annotate service.ApproverMatrix with @(
             ID    : 'Delegations',
             Label : 'Delegations',
             Target: 'Delegations/@UI.LineItem'
+        },
+        {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'PendingApprovals',
+            Label : 'Pending Approvals',
+            Target: 'PendingApprovals/@UI.LineItem#ApproverMatrixPending'
         }
     ],
 

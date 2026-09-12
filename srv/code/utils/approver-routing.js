@@ -2,8 +2,10 @@
 
 const {
   classifyVirementNonProjectScenario,
+  classifyVirementProjectScenario,
   REQUEST_TYPE_TRANSFER,
   BUDGET_TYPE_NON_PROJECT,
+  BUDGET_TYPE_PROJECT,
 } = require("./virement-scenario");
 
 /**
@@ -25,15 +27,17 @@ const REQUEST_TYPE_SUPPLEMENT = "S";
 const REQUEST_TYPE_RETURN = "R";
 
 /**
- * Return requests (both Project and Non Project budget type): the
- * approver depends on the return amount. Bands are contiguous and
- * non-overlapping - "up to X" is inclusive of X, "above X" is
- * exclusive of X.
+ * Return requests, Non Project budget type: the approver depends on
+ * the return amount. Bands are contiguous and non-overlapping - "up
+ * to X" is inclusive of X, "above X" is exclusive of X.
  *
  *   < 30,000                    -> JKEW Officer PG14 and above
  *   30,000 - 100,000 (incl.)    -> JKEW Officer PG19 and above
  *   > 100,000 - 500,000 (incl.) -> JKEW Officer PG21 and above
  *   > 500,000                   -> Head of JKEW
+ *
+ * Return requests, Project budget type: always a single level - Head
+ * of JKEW, regardless of amount. See resolveApprovalPlan below.
  */
 function resolveReturnRole(returnAmount) {
   const amount = Number(returnAmount) || 0;
@@ -98,6 +102,10 @@ async function resolveApprovalPlan({
   }
 
   if (requestType === REQUEST_TYPE_RETURN) {
+    if (budgetType === BUDGET_TYPE_PROJECT) {
+      return [{ level: "1", userRole: "HOD_JKEW" }];
+    }
+
     return [{ level: "1", userRole: resolveReturnRole(amount) }];
   }
 
@@ -139,6 +147,25 @@ async function resolveApprovalPlan({
     return plan;
   }
 
+  if (
+    requestType === REQUEST_TYPE_TRANSFER &&
+    budgetType === BUDGET_TYPE_PROJECT
+  ) {
+    const classification = classifyVirementProjectScenario(items || []);
+
+    if (!classification) {
+      return [];
+    }
+
+    return classification.level1Entries.map(
+      ({ level, userRole, departmentBranch }) => ({
+        level,
+        userRole,
+        ...(departmentBranch ? { departmentBranch } : {}),
+      }),
+    );
+  }
+
   return [];
 }
 
@@ -175,6 +202,13 @@ function getManagedLevels({ requestTypeCode, budgetTypeCode }) {
     budgetType === BUDGET_TYPE_NON_PROJECT
   ) {
     return ["1", "1A", "1B", "1C", "1D", "1E", "2", "3"];
+  }
+
+  if (
+    requestType === REQUEST_TYPE_TRANSFER &&
+    budgetType === BUDGET_TYPE_PROJECT
+  ) {
+    return ["1A", "1B", "1C", "1D", "1E"];
   }
 
   return [];

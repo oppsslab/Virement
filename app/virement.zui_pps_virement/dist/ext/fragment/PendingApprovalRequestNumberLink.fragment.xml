@@ -1,0 +1,32 @@
+<!--
+    Request Number link on the Approver Matrix Object Page's Pending
+    Approvals sub-table (RequestApprovers, UI.LineItem
+    #ApproverMatrixPending in annotations.cds). Registered in
+    manifest.json under controlConfiguration >
+    "PendingApprovals/@com.sap.vocabularies.UI.v1.LineItem#ApproverMatrixPending"
+    > columns, the same lookup mechanism WorkflowInstanceIdLink.fragment.xml
+    already uses for a FieldGroup field, applied here to a table column
+    instead.
+
+    A plain href-based Link, not a press handler calling the router
+    directly - clicking a same-app "#/..." hash link triggers the
+    browser's native hashchange event, which UI5's own router already
+    listens for, so this needs no controller/JS at all. Replaces an
+    earlier UI.DataFieldWithNavigationPath attempt, which crashed
+    ("Cannot read properties of undefined (reading 'request')",
+    TemplateComponent.ts) on click for any row not already cached from
+    an earlier successful open - apparently unreliable for a
+    navigation nested this deep (Object Page -> facet -> row ->
+    association -> another Object Page). request_ID (a plain local
+    scalar column, forced into $select by a hidden DataField earlier
+    in the same LineItem) is used for the target key rather than the
+    crossed "request" navigation the earlier attempt depended on.
+-->
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Link
+        id="pendingApprovalRequestNumberLink"
+        text="{request/requestNumber}"
+        href="{= '#/Requests(ID=' + %{request_ID} + ',IsActiveEntity=true)' }" />
+</core:FragmentDefinition>

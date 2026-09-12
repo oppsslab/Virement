@@ -12,6 +12,10 @@ const { simulatePostToS4 } = require("./post-to-s4-logic");
 
 const { hasRole } = require("./utils/role-check");
 
+const {
+  validateWbsForProjectBudget,
+} = require("./utils/validate-wbs-for-project");
+
 const LOG = cds.log("requests-resubmit-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
@@ -277,6 +281,23 @@ module.exports = async function (request) {
       LOG.error(roleError.message, JSON.stringify({ requestId }));
 
       throw roleError;
+    }
+
+    /*
+     * 0b. Validate WBS is filled on all items when Budget Type is
+     * Project - a rejected request can be edited (including its
+     * items) before resubmission, so this must be re-checked here
+     * too, same as first submission (requests-before-create-logic.js).
+     */
+    const isWbsValid = validateWbsForProjectBudget(request, {
+      items: createdRequestItems,
+      budgetTypeCode: createdRequest.budgetType_code,
+    });
+
+    if (!isWbsValid) {
+      LOG.error("Resubmission failed WBS validation for Project budget type.");
+
+      return;
     }
 
     /*

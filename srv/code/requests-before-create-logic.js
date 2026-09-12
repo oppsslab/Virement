@@ -26,6 +26,10 @@ const { hasRole } = require("./utils/role-check");
 
 const { simulatePostToS4 } = require("./post-to-s4-logic");
 
+const {
+  validateWbsForProjectBudget,
+} = require("./utils/validate-wbs-for-project");
+
 const LOG = cds.log("requests-before-create-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
@@ -318,6 +322,7 @@ async function fetchRequestItems({ tx, RequestItems, request, requestId }) {
         // utils/earmarked-funds.js). Harmless for the WBS / Material-GL
         // validations, which read only the fields above.
         "costCentre",
+        "responsibleCostCentre",
         "transferInAmount",
         "transferOutAmount",
         "description",
@@ -335,62 +340,6 @@ async function fetchRequestItems({ tx, RequestItems, request, requestId }) {
   return persistedItems || [];
 }
 
-/**
- * Validates that WBS is filled on every request item when the
- * request type is Supplement (S) and the budget type is
- * "Project" (P).
- *
- * @param {cds.Request} request
- * @param {object} options
- * @param {object[]} options.items
- * @param {string} options.requestTypeCode
- * @param {string} options.budgetTypeCode
- * @returns {boolean}
- */
-function validateWbsForProjectBudget(
-  request,
-  { items, requestTypeCode, budgetTypeCode },
-) {
-  const type = String(requestTypeCode || "")
-    .trim()
-    .toUpperCase();
-
-  const budgetType = String(budgetTypeCode || "")
-    .trim()
-    .toUpperCase();
-
-  if (type !== REQUEST_TYPE_SUPPLEMENT || budgetType !== BUDGET_TYPE_PROJECT) {
-    return true;
-  }
-
-  const itemsMissingWbs = (items || []).filter(function (item) {
-    return !String(item.wbs || "").trim();
-  });
-
-  if (itemsMissingWbs.length > 0) {
-    const missingItemIds = itemsMissingWbs
-      .map(function (item, index) {
-        return item.ID || `#${index + 1}`;
-      })
-      .join(", ");
-
-    LOG.error(
-      "WBS is required for Supplement requests with Project budget " +
-        "type. Missing on items:",
-      missingItemIds,
-    );
-
-    request.error(
-      400,
-      "WBS is required for all Request Items when Request Type is " +
-        "Supplement and Budget Type is Project.",
-    );
-
-    return false;
-  }
-
-  return true;
-}
 
 /**
  * Validates that the first digits of Material match the first
@@ -1398,20 +1347,16 @@ module.exports = async function (request) {
     }
 
     /*
-     * Validate WBS is filled on all items when Request Type is
-     * Supplement (S) and Budget Type is Project (P).
+     * Validate WBS is filled on all items when Budget Type is
+     * Project (P), regardless of request type.
      */
     const isWbsValid = validateWbsForProjectBudget(request, {
       items: requestItems,
-      requestTypeCode,
       budgetTypeCode,
     });
 
     if (!isWbsValid) {
-      LOG.error(
-        "Request failed WBS validation for Supplement / " +
-          "Project budget type.",
-      );
+      LOG.error("Request failed WBS validation for Project budget type.");
 
       return;
     }
@@ -1828,12 +1773,23 @@ module.exports = async function (request) {
     LOG.info("Generated requestLink:", request.data.requestLink);
 
     /*
-     * 8. Reserve funds in S/4 for Virement requests that move budget out.
+     * 8. Reserve funds in S/4 for Non-Project Virement requests that
+     * move budget out.
      *
      * Only a transfer-out commits funds, so a Virement whose transfer-out
      * total is zero reserves nothing and skips the call entirely. The
      * amount is read from request.data, which step 4 above has already
      * recalculated from the line items.
+     *
+     * Project Virement never creates an Earmarked Funds document at
+     * all - it doesn't apply there. The Earmarked Funds API's account
+     * assignment is Fund Center/Commitment Item only (see
+     * utils/earmarked-funds.js buildItem, FundsCenter from costCentre)
+     * and rejects a Project item with "(FMEF/010) Entry in field Funds
+     * Center required" once costCentre is populated from the WBS's
+     * Responsible Cost Center for other purposes - reusing that value
+     * here would be semantically wrong regardless (it's the WBS's cost
+     * center, not a Fund Center reservation account assignment).
      *
      * The Earmarked Funds document must exist before the request is
      * persisted, so that a rejection from S/4 aborts the submission and
@@ -1845,7 +1801,8 @@ module.exports = async function (request) {
     if (
       isFirstSubmission &&
       normalizedRequestType === REQUEST_TYPE_TRANSFER &&
-      Number(request.data.transferOutAmount) > 0
+      Number(request.data.transferOutAmount) > 0 &&
+      String(budgetTypeCode || "").trim().toUpperCase() !== BUDGET_TYPE_PROJECT
     ) {
       LOG.info(
         "Virement request with a transfer-out amount detected. " +

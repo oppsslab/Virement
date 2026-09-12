@@ -8,7 +8,6 @@ const cds = require("@sap/cds");
 const { getDestination } = require("@sap-cloud-sdk/connectivity");
 const { executeHttpRequest } = require("@sap-cloud-sdk/http-client");
 const xml2js = require("xml2js");
-const { randomInt } = require("node:crypto");
 
 const insertRequestHistory = require("./insert-request-history");
 
@@ -210,10 +209,6 @@ function toAmount(value) {
   return Number.isFinite(amount) ? amount : NaN;
 }
 
-function generateTestDocumentNumber() {
-  return String(randomInt(1000000000, 10000000000));
-}
-
 function formatAmount(value) {
   return Number(value)
     .toFixed(2)
@@ -399,12 +394,40 @@ function buildHeader(requestData, process, supplyType) {
   };
 }
 
-function buildLineItem(requestData, item, sign, amount) {
+/**
+ * Builds one IT_ITEM row. The field mapping differs completely by
+ * supplyType, per ZFM_FI_FMBB_UPLOAD's own routing (confirmed against
+ * its actual ABAP source):
+ *
+ * - NONPROJ posts via BAPI_0050_CREATE (STEP 1/2/3): FUNDCTR/CMMTITM/
+ *   MATKL identify the Fund Center/Commitment Item/Material Group.
+ *
+ * - PROJECT routes immediately to f_project_supplement/
+ *   f_project_transfer (KBPP_EXTERN_UPDATE_CO, CJ37/CJ38/CJ34) and
+ *   NEVER reaches STEP 1/2/3 at all - CMMTITM is reused to carry the
+ *   WBS Element instead (validated there as "CMMTITM (WBS Element) is
+ *   required"), and FUNDCTR/MATKL/DISTKEY are not read. Sending
+ *   item.glAccount (always blank for a Project item, since Cost
+ *   Centre/GL/Material are hidden in the UI for Project budgets) into
+ *   CMMTITM here was rejecting every Project posting.
+ *
+ * @param {object} requestData
+ * @param {object} item
+ * @param {string} sign "+" or "-"
+ * @param {number} amount
+ * @param {string} supplyType BUDGET_TYPES.P ("PROJECT") or .N ("NONPROJ")
+ * @returns {object}
+ */
+function buildLineItem(requestData, item, sign, amount, supplyType) {
+  const isProject = supplyType === BUDGET_TYPES.P;
+
   return {
     SIGN: sign,
-    FUNDCTR: String(item.costCentre ?? "").trim(),
-    CMMTITM: String(item.glAccount ?? "").trim(),
-    MATKL: String(item.material ?? "").trim(),
+    FUNDCTR: isProject ? "" : String(item.costCentre ?? "").trim(),
+    CMMTITM: isProject
+      ? String(item.wbs ?? "").trim()
+      : String(item.glAccount ?? "").trim(),
+    MATKL: isProject ? "" : String(item.material ?? "").trim(),
     DISTKEY: "0",
     QUANTITY: "1",
     PRICE: formatAmount(amount),
@@ -477,7 +500,7 @@ function buildPayloads(requestData, items) {
 
       if (amount > 0) {
         payload.IT_ITEM.push(
-          buildLineItem(requestData, item, itemSign, amount),
+          buildLineItem(requestData, item, itemSign, amount, supplyType),
         );
 
         configTotal += amount;
@@ -503,6 +526,7 @@ function buildPayloads(requestData, items) {
           },
           "+",
           configTotal,
+          supplyType,
         ),
       );
     }
@@ -536,7 +560,7 @@ function buildPayloads(requestData, items) {
 
     if (outAmount > 0) {
       transferPayload.IT_ITEM.push(
-        buildLineItem(requestData, item, "-", outAmount),
+        buildLineItem(requestData, item, "-", outAmount, supplyType),
       );
     }
 
@@ -549,7 +573,7 @@ function buildPayloads(requestData, items) {
 
     if (inAmount > 0) {
       transferPayload.IT_ITEM.push(
-        buildLineItem(requestData, item, "+", inAmount),
+        buildLineItem(requestData, item, "+", inAmount, supplyType),
       );
     }
   });
@@ -577,6 +601,7 @@ function buildPayloads(requestData, items) {
 
 function validatePayload({ key, payload }) {
   const errors = [];
+  const isProject = payload.IV_SUPL_TYPE === BUDGET_TYPES.P;
 
   if (!payload.IV_RESP) errors.push("Budget Officer or Requestor is missing.");
   if (!payload.IT_ITEM.length)
@@ -584,9 +609,20 @@ function validatePayload({ key, payload }) {
 
   payload.IT_ITEM.forEach((item, index) => {
     const line = index + 1;
-    if (!item.FUNDCTR) errors.push(`Line ${line}: Cost Center is missing.`);
+
+    /*
+     * PROJECT items never populate FUNDCTR (see buildLineItem) - the
+     * project routing in ZFM_FI_FMBB_UPLOAD does not read it at all,
+     * only CMMTITM (reused there for the WBS Element).
+     */
+    if (!isProject && !item.FUNDCTR)
+      errors.push(`Line ${line}: Cost Center is missing.`);
     if (!item.CMMTITM)
-      errors.push(`Line ${line}: GL or commitment item is missing.`);
+      errors.push(
+        isProject
+          ? `Line ${line}: WBS Element is missing.`
+          : `Line ${line}: GL or commitment item is missing.`,
+      );
     if (!Number.isFinite(Number(item.PRICE)))
       errors.push(`Line ${line}: Amount is invalid.`);
     if (!item.REFNO) errors.push(`Line ${line}: Request Number is missing.`);
@@ -1053,18 +1089,12 @@ async function performPostToS4({ tx, request, requestId, emailAddress }) {
       );
     }
 
-    let docNumber = "";
+    const docNumber = documentNumber(result);
 
-    if (S4_TEST_MODE !== "X") {
-      docNumber = documentNumber(result);
-
-      if (!docNumber) {
-        throw new Error(
-          `S/4 reported success for ${descriptor.key}, but no document number was returned.`,
-        );
-      }
-    } else {
-      docNumber = generateTestDocumentNumber();
+    if (!docNumber) {
+      throw new Error(
+        `S/4 reported success for ${descriptor.key}, but no document number was returned.`,
+      );
     }
 
     postings.push({

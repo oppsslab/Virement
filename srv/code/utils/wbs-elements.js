@@ -1,21 +1,27 @@
+const cds = require("@sap/cds");
+
 const { fetchValueHelp } = require("./value-help");
 
-// Confirmed working via a direct SAP Gateway Client test (HTTP 200,
-// real WBS rows returned) - two details matter and each prior attempt
-// got exactly one of them right:
-//   - Service name is "API_WBSELEMENT_SRV" - no underscore between
-//     WBS and ELEMENT. "API_WBS_ELEMENT_SRV" 404s with a structured
-//     OData error ("No service found for namespace '', name
-//     'API_WBS_ELEMENT_SRV'").
-//   - The entity set needs the double slash before it
-//     (".../API_WBSELEMENT_SRV//A_WBSElement"). Dropping the standard
-//     "/sap/opu/odata/sap/" Gateway prefix instead of the double slash
-//     404s with a bare ICM "Service cannot be reached" page (not even
-//     OData-level).
-const WBS_ELEMENT_PATH = "/sap/opu/odata/sap/API_WBSELEMENT_SRV//A_WBSElement";
+const LOG = cds.log("wbs-elements");
 
-const SELECT_FIELDS =
-  "WBSElementInternalID,WBSElementExternalID,WBSElementIsBillingElement";
+// Two prior services were tried and abandoned before this one:
+//   - API_WBSELEMENT_SRV/A_WBSElement: worked, but has no Cost Center
+//     field of any kind (confirmed against its live $metadata).
+//   - API_ENTERPRISE_PROJECT_SRV/A_EnterpriseProjectElement: has
+//     ResponsibleCostCenter, but returned a clean 200 with 0 rows for
+//     every query once activated - most likely the destination's
+//     technical user isn't authorized for Enterprise Project data,
+//     even though the service itself is reachable.
+//
+// This is a purpose-built custom value help service instead of a
+// standard SAP API - confirmed via a live sample response carrying
+// real data (WBSElement, WBSDescription, ResponsibleCostCenter,
+// CompanyCode, ProfitCenter, Project, ProjectDescription; no
+// WBSElementInternalID or billing-element flag, hence those two
+// columns are dropped below rather than left permanently blank).
+const WBS_ELEMENT_PATH = "/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/WBSElementVH";
+
+const SELECT_FIELDS = "WBSElement,WBSDescription,ResponsibleCostCenter";
 
 /**
  * Escapes single quotes for an OData string literal.
@@ -43,17 +49,77 @@ async function readWBSElements(prefix, paging = {}) {
   const rows = await fetchValueHelp({
     path: WBS_ELEMENT_PATH,
     selectFields: SELECT_FIELDS,
-    filter: `startswith(WBSElementExternalID,'${literal}')`,
+    filter: `startswith(WBSElement,'${literal}')`,
     top: paging.top,
     skip: paging.skip,
     label: "WBS elements",
   });
 
-  return rows.map((row) => ({
-    wbsElement: row.WBSElementExternalID,
-    wbsElementInternalID: row.WBSElementInternalID,
-    isBillingElement: row.WBSElementIsBillingElement,
-  }));
+  /*
+   * This custom value help occasionally returns a row with a blank
+   * WBSElement (the entity's key) alongside a real description -
+   * confirmed live: {"WBSElement":"","WBSDescription":"INSTL.
+   * PAPANTANDA","ResponsibleCostCenter":""}. An OData row with an
+   * empty (or, worse, duplicated-across-rows-empty) key breaks the
+   * client's ability to bind/identify it - dropped here rather than
+   * surfaced, since a blank WBS is never a usable value help
+   * selection anyway.
+   */
+  return rows
+    .filter((row) => String(row.WBSElement || "").trim())
+    .map((row) => ({
+      wbsElement: row.WBSElement,
+      wbsDescription: row.WBSDescription,
+      responsibleCostCenter: row.ResponsibleCostCenter,
+    }));
 }
 
-module.exports = { readWBSElements };
+/**
+ * Looks up the Description and Responsible Cost Center for a single
+ * WBS Element from S/4 (the same live lookup the WBS value help
+ * itself uses), for the read-only WBS Description display field and
+ * the auto-populated Cost Centre field on RequestItems (see
+ * requestitems-drafts-before-create/update-logic.js - a Project
+ * item's Cost Centre column is hidden in the UI, but is still
+ * populated server-side from the WBS's Responsible Cost Center so
+ * downstream logic that keys off costCentre, e.g. Department/Region
+ * derivation, works for Project items too).
+ *
+ * Best-effort: an S/4 read failure (timeout, destination issue) is
+ * logged and resolves to nulls rather than blocking the item
+ * create/update - neither field is required data.
+ *
+ * @param {string} wbsElement
+ * @returns {Promise<{wbsDescription: string|null, responsibleCostCenter: string|null}>}
+ */
+async function resolveWBSDetails(wbsElement) {
+  const trimmed = String(wbsElement || "").trim();
+
+  if (!trimmed) {
+    return { wbsDescription: null, responsibleCostCenter: null };
+  }
+
+  try {
+    const rows = await readWBSElements(trimmed);
+
+    const match = rows.find(
+      (row) =>
+        String(row.wbsElement || "").trim().toUpperCase() ===
+        trimmed.toUpperCase(),
+    );
+
+    return {
+      wbsDescription: match?.wbsDescription || null,
+      responsibleCostCenter: match?.responsibleCostCenter || null,
+    };
+  } catch (error) {
+    LOG.warn(
+      `Could not resolve WBS details for "${trimmed}":`,
+      error.message,
+    );
+
+    return { wbsDescription: null, responsibleCostCenter: null };
+  }
+}
+
+module.exports = { readWBSElements, resolveWBSDetails };

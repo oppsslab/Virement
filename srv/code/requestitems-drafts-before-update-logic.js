@@ -19,6 +19,7 @@ const { resolveGLAccountName } = require("./utils/gl-account-name-lookup");
 const {
   resolveMaterialGroupDescription,
 } = require("./utils/material-group-description-lookup");
+const { resolveWBSDetails } = require("./utils/wbs-elements");
 
 const LOG = cds.log("requestitems-drafts-before-update-logic");
 
@@ -51,7 +52,8 @@ module.exports = async function (request) {
     if (
       !("glAccount" in patchedFields) &&
       !("costCentre" in patchedFields) &&
-      !("material" in patchedFields)
+      !("material" in patchedFields) &&
+      !("wbs" in patchedFields)
     ) {
       return;
     }
@@ -90,28 +92,50 @@ module.exports = async function (request) {
       );
     }
 
+    if ("wbs" in patchedFields) {
+      const wbsDetails = await resolveWBSDetails(patchedFields.wbs);
+
+      request.data.wbsDescription = wbsDetails.wbsDescription;
+
+      /*
+       * responsibleCostCentre is a dedicated field, separate from
+       * costCentre - see db/schema.cds - used only for Virement +
+       * Project approval routing (utils/virement-scenario.js
+       * classifyVirementProjectScenario). A Project item's costCentre
+       * is intentionally left untouched here: the Department/Region/
+       * etc. cascade below is a Non Project-only concept that doesn't
+       * apply to WBS-based items.
+       */
+      request.data.responsibleCostCentre = wbsDetails.responsibleCostCenter;
+
+      LOG.info(
+        "Auto-populated wbsDescription/responsibleCostCentre for patched wbs:",
+        JSON.stringify({
+          wbs: patchedFields.wbs,
+          wbsDescription: wbsDetails.wbsDescription,
+          responsibleCostCentre: request.data.responsibleCostCentre,
+        }),
+      );
+    }
+
     if ("costCentre" in patchedFields) {
-      const department = await resolveDepartment(tx, patchedFields.costCentre);
+      const costCentre = request.data.costCentre;
+
+      const department = await resolveDepartment(tx, costCentre);
 
       request.data.department = department;
 
-      const { region, branch } = await resolveRegionBranch(
-        tx,
-        patchedFields.costCentre,
-      );
+      const { region, branch } = await resolveRegionBranch(tx, costCentre);
 
       request.data.region = region;
       request.data.branch = branch;
 
-      const buildingName = await resolveBuildingName(
-        tx,
-        patchedFields.costCentre,
-      );
+      const buildingName = await resolveBuildingName(tx, costCentre);
 
       request.data.buildingName = buildingName;
 
       const costCentreDescription = await resolveCostCentreDescription(
-        patchedFields.costCentre,
+        costCentre,
       );
 
       request.data.costCentreDescription = costCentreDescription;
@@ -119,7 +143,7 @@ module.exports = async function (request) {
       LOG.info(
         "Auto-populated department/region/branch/buildingName/costCentreDescription for patched costCentre:",
         JSON.stringify({
-          costCentre: patchedFields.costCentre,
+          costCentre,
           department,
           region,
           branch,
@@ -144,6 +168,7 @@ module.exports = async function (request) {
         }),
       );
     }
+
   } catch (error) {
     LOG.error("Error in requestitems-drafts-before-update-logic:", error);
     // Don't block the item update if a lookup fails.

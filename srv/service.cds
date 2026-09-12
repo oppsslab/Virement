@@ -100,6 +100,15 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             virtual isJKEW            : Boolean,
             virtual isFunctional      : Boolean,
             /*
+             * True when the current user holds the ADMIN role -
+             * computed in requests-after-read-logic.js. Drives the
+             * Admin-only Delegate button on the Object Page, which
+             * (unlike the self-service Delegate button, gated on
+             * isPendingApprover) lets an admin delegate ANY request's
+             * pending approval(s), not just their own.
+             */
+            virtual isAdmin           : Boolean default false,
+            /*
              * True when the current user is this request's own
              * requestor. Filter-only, like isPendingApprover above:
              * requests-list-scope-logic.js rewrites an "isMyRequest eq
@@ -141,6 +150,19 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
 
             @requires: ['REQUEST_APPROVE']
             action delegateApproval(
+                                 @title: 'Delegate To'
+                                 delegateEmail: String) returns Requests;
+
+            /*
+             * Admin-only counterpart to delegateApproval above,
+             * exposed as a Delegate button on the Requests Object
+             * Page itself - lets an ADMIN delegate every currently
+             * pending approval on this request without being an
+             * approver themselves. See
+             * delegate-approval-as-admin-logic.js.
+             */
+            @requires: ['ADMIN']
+            action delegateApprovalAsAdmin(
                                  @title: 'Delegate To'
                                  delegateEmail: String) returns Requests;
 
@@ -188,7 +210,25 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
     entity RequestHistory       as projection on my.RequestHistory;
 
     @readonly
-    entity RequestApprovers     as projection on my.RequestApprovers;
+    entity RequestApprovers     as
+        projection on my.RequestApprovers
+        actions {
+            /*
+             * Admin-triggered bulk delegation, invoked from the Approver
+             * Matrix Object Page's Pending Approvals facet (an admin
+             * selects one or more rows there and reassigns them without
+             * being a pending approver themselves - contrast with
+             * delegateApproval above, which only the current pending
+             * approver can call on their own request). Bound to
+             * RequestApprovers (not Requests) so each call unambiguously
+             * targets exactly the one pending assignment the admin
+             * selected. See delegate-pending-approval-logic.js.
+             */
+            @requires: ['ADMIN']
+            action delegatePendingApproval(
+                                 @title: 'Delegate To'
+                                 delegateEmail: String) returns RequestApprovers;
+        };
 
     type TemplateFile {
         fileName : String;
@@ -293,9 +333,9 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
     @cds.persistence.skip
     @cds.redirection.target: false
     entity WBSElements {
-        key wbsElement           : String(24);
-            wbsElementInternalID : String(20);
-            isBillingElement     : Boolean;
+        key wbsElement            : String(24);
+            wbsDescription        : String(40);
+            responsibleCostCenter : String(10);
     }
 
     @readonly
@@ -340,7 +380,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * code/backfill-item-descriptions-logic.js). Only ever fills a
      * currently-empty field.
      */
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action backfillItemDescriptions() returns {
         scanned : Integer;
         updated : Integer;
@@ -352,7 +392,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * Approver Matrix - reference data maintained by admins. Reading
      * is open to any authenticated user, same as the rest of this
      * service; maintaining it (create/update/delete) is restricted to
-     * VR_ADMIN below.
+     * ADMIN below.
      *
      * Draft-enabled so the List Report table supports inline edit of
      * existing rows - that Fiori Elements feature requires a draft
@@ -362,7 +402,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         {grant: 'READ'},
         {
             grant: ['CREATE', 'UPDATE', 'DELETE'],
-            to   : 'VR_ADMIN'
+            to   : 'ADMIN'
         },
     ])
     @odata.draft.enabled
@@ -386,10 +426,10 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         modifiedAt @odata.etag;
     };
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action downloadApproverMatrixTemplate() returns TemplateFile;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action uploadApproverMatrix(content: LargeString) returns {
         rows : array of {
             userRole_code    : String;
@@ -406,23 +446,23 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * GL Grouping - reference data maintained by admins mapping each
      * GL Account to its GL Group, for Virement approval routing.
      * Reading is open to any authenticated user; maintaining it
-     * (create/update/delete) is restricted to VR_ADMIN, same as the
+     * (create/update/delete) is restricted to ADMIN, same as the
      * Approver Matrix above.
      */
     @(restrict: [
         {grant: 'READ'},
         {
             grant: ['CREATE', 'UPDATE', 'DELETE'],
-            to   : 'VR_ADMIN'
+            to   : 'ADMIN'
         },
     ])
     @odata.draft.enabled
     entity GLGrouping as projection on my.GLGrouping;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action downloadGLGroupingTemplate() returns TemplateFile;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action uploadGLGrouping(content: LargeString) returns {
         rows : array of {
             expenditureGroup     : String;
@@ -439,22 +479,22 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * mapping each Cost Centre to its Department, for Virement
      * approval routing. Reading is open to any authenticated user;
      * maintaining it (create/update/delete) is restricted to
-     * VR_ADMIN, same as the Approver Matrix / GL Grouping above.
+     * ADMIN, same as the Approver Matrix / GL Grouping above.
      */
     @(restrict: [
         {grant: 'READ'},
         {
             grant: ['CREATE', 'UPDATE', 'DELETE'],
-            to   : 'VR_ADMIN'
+            to   : 'ADMIN'
         },
     ])
     @odata.draft.enabled
     entity DepartmentGrouping as projection on my.DepartmentGrouping;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action downloadDepartmentGroupingTemplate() returns TemplateFile;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action uploadDepartmentGrouping(content: LargeString) returns {
         rows : array of {
             department            : String;
@@ -468,23 +508,23 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * admins listing each functional department, the GL Accounts it
      * covers, and its Fund Centre scope, for Virement approval
      * routing. Reading is open to any authenticated user; maintaining
-     * it (create/update/delete) is restricted to VR_ADMIN, same as
+     * it (create/update/delete) is restricted to ADMIN, same as
      * the Approver Matrix / GL Grouping / Department Grouping above.
      */
     @(restrict: [
         {grant: 'READ'},
         {
             grant: ['CREATE', 'UPDATE', 'DELETE'],
-            to   : 'VR_ADMIN'
+            to   : 'ADMIN'
         },
     ])
     @odata.draft.enabled
     entity FunctionalDepartmentGrouping as projection on my.FunctionalDepartmentGrouping;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action downloadFunctionalDepartmentGroupingTemplate() returns TemplateFile;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action uploadFunctionalDepartmentGrouping(content: LargeString) returns {
         rows : array of {
             functionalDepartment : String;
@@ -501,23 +541,23 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * Building Grouping - reference data maintained by admins mapping
      * each Cost Centre to its State, for Virement approval routing.
      * Reading is open to any authenticated user; maintaining it
-     * (create/update/delete) is restricted to VR_ADMIN, same as the
+     * (create/update/delete) is restricted to ADMIN, same as the
      * other grouping tables above.
      */
     @(restrict: [
         {grant: 'READ'},
         {
             grant: ['CREATE', 'UPDATE', 'DELETE'],
-            to   : 'VR_ADMIN'
+            to   : 'ADMIN'
         },
     ])
     @odata.draft.enabled
     entity BuildingGrouping as projection on my.BuildingGrouping;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action downloadBuildingGroupingTemplate() returns TemplateFile;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action uploadBuildingGrouping(content: LargeString) returns {
         rows : array of {
             state                 : String;
@@ -531,22 +571,22 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
      * mapping each Cost Centre to its Region, State, and Branch, for
      * Virement approval routing. Reading is open to any authenticated
      * user; maintaining it (create/update/delete) is restricted to
-     * VR_ADMIN, same as the other grouping tables above.
+     * ADMIN, same as the other grouping tables above.
      */
     @(restrict: [
         {grant: 'READ'},
         {
             grant: ['CREATE', 'UPDATE', 'DELETE'],
-            to   : 'VR_ADMIN'
+            to   : 'ADMIN'
         },
     ])
     @odata.draft.enabled
     entity RegionBranchGrouping as projection on my.RegionBranchGrouping;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action downloadRegionBranchGroupingTemplate() returns TemplateFile;
 
-    @requires: ['VR_ADMIN']
+    @requires: ['ADMIN']
     action uploadRegionBranchGrouping(content: LargeString) returns {
         rows : array of {
             region                : String;

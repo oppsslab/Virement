@@ -272,7 +272,16 @@
                     "DataField::earmarkedFundsDocNumber": {
                       "template": "virement.zuippsvirement.ext.fragment.EarmarkedFundsDocNumberField",
                       "label": "{i18n>EarmarkedFundsDocNumber}",
-                      "visible": "{= %{requestType_code} === 'T' && %{transferOutAmount} > 0 }"
+                      "visible": "{= %{requestType_code} === 'T' && %{transferOutAmount} > 0 && %{budgetType_code} !== 'P' }"
+                    },
+                    "DataField::supplementDocNumber": {
+                      "template": "virement.zuippsvirement.ext.fragment.SupplementDocNumberField"
+                    },
+                    "DataField::returnDocNumber": {
+                      "template": "virement.zuippsvirement.ext.fragment.ReturnDocNumberField"
+                    },
+                    "DataField::transferOutDocNumber": {
+                      "template": "virement.zuippsvirement.ext.fragment.TransferOutInDocNumberField"
                     }
                   }
                 },
@@ -641,7 +650,50 @@
                   "anchorBarVisible": false
                 }
               },
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "backToApproverMatrix": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToApproverMatrix",
+                      "text": "{i18n>BackToList}",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                },
+                "PendingApprovals/@com.sap.vocabularies.UI.v1.LineItem#ApproverMatrixPending": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable",
+                    "selectionMode": "Multi"
+                  },
+                  "columns": {
+                    "DataField::request::requestNumber": {
+                      "template": "virement.zuippsvirement.ext.fragment.PendingApprovalRequestNumberLink"
+                    }
+                  },
+                  "actions": {
+                    "delegateSelectedPendingApprovals": {
+                      "press": "virement.zuippsvirement.ext.controller.ApproverMatrixObjectPageActions.onDelegateSelected",
+                      "text": "{i18n>DelegateSelected}",
+                      "requiresSelection": true,
+                      "enabled": true,
+                      "visible": true
+                    },
+                    "openSelectedPendingApprovalRequest": {
+                      "press": "virement.zuippsvirement.ext.controller.ApproverMatrixObjectPageActions.onOpenRequest",
+                      "text": "{i18n>OpenRequest}",
+                      "requiresSelection": true,
+                      "enabled": true,
+                      "visible": true,
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "delegateSelectedPendingApprovals"
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -702,7 +754,19 @@
                   "anchorBarVisible": false
                 }
               },
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "backToGLGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToGLGrouping",
+                      "text": "{i18n>BackToList}",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -763,7 +827,19 @@
                   "anchorBarVisible": false
                 }
               },
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "backToDepartmentGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToDepartmentGrouping",
+                      "text": "{i18n>BackToList}",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -824,7 +900,19 @@
                   "anchorBarVisible": false
                 }
               },
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "backToFunctionalDepartmentGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToFunctionalDepartmentGrouping",
+                      "text": "{i18n>BackToList}",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -885,7 +973,19 @@
                   "anchorBarVisible": false
                 }
               },
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "backToBuildingGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToBuildingGrouping",
+                      "text": "{i18n>BackToList}",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -946,7 +1046,19 @@
                   "anchorBarVisible": false
                 }
               },
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "backToRegionBranchGrouping": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToRegionBranchGrouping",
+                      "text": "{i18n>BackToList}",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                }
+              }
             }
           }
         }

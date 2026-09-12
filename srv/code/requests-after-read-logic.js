@@ -31,6 +31,8 @@ const ROLE_JKEW = "MASS_UPLOAD_ALL";
 
 const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
 
+const ROLE_ADMIN = "ADMIN";
+
 /*
  * workflowStatus values that mean the workflow instance is done and
  * will never change again - no point calling out to SAP Build to
@@ -164,6 +166,8 @@ function applyVirtualFields(
 
   row.isFunctional = roleFlags.isFunctional;
 
+  row.isAdmin = roleFlags.isAdmin;
+
   row.isMyRequest = Boolean(
     normalizedCurrentUser &&
       normalizeUserId(row.requestor) === normalizedCurrentUser,
@@ -187,6 +191,8 @@ function applyVirtualFields(
     isJKEW: row.isJKEW,
 
     isFunctional: row.isFunctional,
+
+    isAdmin: row.isAdmin,
   });
 }
 
@@ -346,6 +352,8 @@ module.exports = async function requestsAfterRead(results, request) {
       isJKEW: hasRole(user, ROLE_JKEW),
 
       isFunctional: hasRole(user, ROLE_FUNCTIONAL),
+
+      isAdmin: hasRole(user, ROLE_ADMIN),
     };
 
     /*
@@ -406,6 +414,8 @@ module.exports = async function requestsAfterRead(results, request) {
       row.isJKEW = false;
 
       row.isFunctional = false;
+
+      row.isAdmin = false;
 
       row.isMyRequest = false;
     }

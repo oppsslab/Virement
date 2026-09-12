@@ -856,6 +856,57 @@ async function getOpenTaskForWorkflowInstance(workflowInstanceId) {
   return openTask;
 }
 
+function getLevelNumber(level) {
+  const match = String(level || "").match(/\d+/);
+
+  return match ? parseInt(match[0], 10) : null;
+}
+
+/**
+ * Finds the open BPA task instance(s) matching the given
+ * RequestApprovers level(s) for a workflow instance - the same
+ * matching rule approve-reject-request.js's prepareApprovalAction
+ * uses to find the task to complete: with only one open task there is
+ * nothing to disambiguate (return it as-is); with more than one
+ * (parallel levels genuinely pending at once), match the numeric
+ * level against an "L<number>" token, since that is the format BPA's
+ * subject text actually uses (it never spells out lettered sub-levels
+ * like "2A").
+ *
+ * Used by delegateApproval/delegatePendingApproval to find which
+ * task(s) need the delegate added as a recipient in BPA alongside
+ * this app's own RequestApprovers update. Returns the raw task
+ * objects (not just IDs) so the caller can read each task's current
+ * recipientUsers before adding to it.
+ *
+ * @param {string} workflowInstanceId
+ * @param {string[]} levels - RequestApprovers.level value(s) being delegated
+ * @returns {Promise<object[]>} matching raw task instance object(s), possibly empty
+ */
+async function findOpenTasksForLevels(workflowInstanceId, levels) {
+  const openTask = await getOpenTaskForWorkflowInstance(workflowInstanceId);
+
+  if (!openTask || !openTask.length) {
+    return [];
+  }
+
+  let filterTask = openTask;
+
+  if (openTask.length > 1) {
+    const levelTokens = (levels || [])
+      .map((level) => `L${getLevelNumber(level)}`)
+      .filter((token) => token !== "Lnull");
+
+    filterTask = openTask.filter(function (task) {
+      const subject = String(task?.subject || "");
+
+      return levelTokens.some((token) => subject.includes(token));
+    });
+  }
+
+  return filterTask.filter((task) => task.id || task.taskId);
+}
+
 /**
  * Reports whether SAP Build Process Automation shows a COMPLETED
  * task for the given workflow instance.
@@ -981,15 +1032,166 @@ async function completeTask({ taskId, decision, comment }) {
   }
 }
 
+/**
+ * Normalizes a task's recipientUsers into a plain array, regardless
+ * of whether BPA represents it as a JSON array (confirmed shape of a
+ * GET response) or a comma-separated string.
+ *
+ * @param {string[]|string|undefined} recipientUsers
+ * @returns {string[]}
+ */
+function normalizeRecipients(recipientUsers) {
+  if (Array.isArray(recipientUsers)) {
+    return recipientUsers.map((r) => String(r).trim()).filter(Boolean);
+  }
+
+  return String(recipientUsers || "")
+    .split(",")
+    .map((r) => r.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Swaps a recipient on a SAP Build Process Automation task instance:
+ * the delegating approver (removeRecipientEmail) is taken off the
+ * task and the delegate (recipientEmail) is put on in their place,
+ * while any OTHER recipient already on the task (e.g. a different
+ * approver at the same level who was never part of this delegation)
+ * is left untouched - so BPA's own My Inbox reflects the same
+ * delegation this app's own record (RequestApprovers.emailAddress)
+ * just made, without leaving the person who delegated still able to
+ * see/claim the task there.
+ *
+ * Per the Workflow Runtime API spec (SPA_Workflow_Runtime.json,
+ * PATCH /v1/task-instances/{taskInstanceId}), setting recipientUsers
+ * requires the calling credential to hold the ProcessAutomationAdmin
+ * role (or already be a recipient on the task) - a higher privilege
+ * than completeTask/fetchTaskInstances above have ever needed from
+ * this destination. If that role is missing, this fails with a 403 -
+ * callers must treat this as best-effort (log, don't fail the
+ * caller's own already-committed local delegation) exactly like
+ * completeTask's callers do.
+ *
+ * @param {object} options
+ * @param {string} options.taskId
+ * @param {string[]|string} [options.existingRecipients] - the task's
+ *   current recipientUsers (from the raw task object returned by
+ *   findOpenTasksForLevels)
+ * @param {string} [options.removeRecipientEmail] - the original
+ *   approver being delegated away from; dropped from the recipient
+ *   list if present
+ * @param {string} options.recipientEmail - the delegate being added
+ * @returns {Promise<object>}
+ */
+async function addTaskRecipient({
+  taskId,
+  existingRecipients,
+  removeRecipientEmail,
+  recipientEmail,
+}) {
+  if (!taskId) {
+    const error = new Error("taskId is required to add a task recipient.");
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+  if (!recipientEmail) {
+    const error = new Error(
+      "recipientEmail is required to add a task recipient.",
+    );
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+  const { destination, apiKey } = await getProcessAutomationDestination();
+
+  const current = normalizeRecipients(existingRecipients);
+
+  const withoutOldApprover = removeRecipientEmail
+    ? current.filter(
+        (r) => r.toLowerCase() !== removeRecipientEmail.toLowerCase(),
+      )
+    : current;
+
+  const alreadyPresent = withoutOldApprover.some(
+    (r) => r.toLowerCase() === recipientEmail.toLowerCase(),
+  );
+
+  const combined = alreadyPresent
+    ? withoutOldApprover
+    : [...withoutOldApprover, recipientEmail];
+
+  const payload = {
+    recipientUsers: combined.join(","),
+  };
+
+  LOG.info(
+    "Updating task instance recipient.",
+    JSON.stringify({ taskId, current, removeRecipientEmail, recipientEmail }),
+  );
+
+  try {
+    const response = await executeHttpRequest(
+      destination,
+      {
+        method: "PATCH",
+
+        url: TASK_INSTANCE_PATH(taskId),
+
+        headers: {
+          Accept: "application/json",
+
+          "Content-Type": "application/json",
+
+          "irpa-api-key": apiKey,
+        },
+
+        data: payload,
+      },
+      { fetchCsrfToken: false },
+    );
+
+    LOG.info(
+      "Task instance recipient added successfully.",
+      JSON.stringify({
+        taskId,
+        rawResponse: JSON.stringify(response?.data || {}),
+      }),
+    );
+
+    return response?.data || {};
+  } catch (error) {
+    const status = error.response?.status || error.statusCode;
+
+    LOG.error(
+      "Adding task instance recipient failed.",
+      JSON.stringify({
+        taskId,
+        status,
+        message: error.response?.data?.message || error.message,
+        responseData: error.response?.data || null,
+      }),
+    );
+
+    throw error;
+  }
+}
+
 module.exports = {
   startApprovalWorkflow,
   getProcessAutomationDestination,
   getDestinationProperty,
   getOpenTaskForWorkflowInstance,
+  findOpenTasksForLevels,
   hasCompletedTaskForWorkflowInstance,
   getWorkflowInstanceStatus,
   getWorkflowInstanceErrorMessages,
   getWorkflowInstanceExecutionLogs,
   ERROR_WORKFLOW_STATUSES,
   completeTask,
+  addTaskRecipient,
 };

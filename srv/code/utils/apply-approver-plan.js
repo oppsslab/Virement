@@ -257,6 +257,7 @@ async function refreshDraftApproverPreview({
       SELECT.from(RequestItems.drafts)
         .columns(
           "costCentre",
+          "responsibleCostCentre",
           "glGroup",
           "department",
           "region",

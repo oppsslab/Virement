@@ -1,6 +1,11 @@
 sap.ui.define(
-  ["sap/ui/core/mvc/ControllerExtension", "sap/m/Popover", "sap/m/Text"],
-  function (ControllerExtension, Popover, Text) {
+  [
+    "sap/ui/core/mvc/ControllerExtension",
+    "sap/m/Popover",
+    "sap/m/Text",
+    "sap/ui/core/UIComponent",
+  ],
+  function (ControllerExtension, Popover, Text, UIComponent) {
     "use strict";
 
     /*
@@ -11,9 +16,59 @@ sap.ui.define(
 
     const ERROR_WORKFLOW_STATUSES = ["ERRONEOUS", "ERROR"];
 
+    /**
+     * Navigates to a named route deterministically, bypassing browser
+     * history entirely - a reliable "Back to List" for the master-data
+     * Object Pages (Approver Matrix, the 5 Groupings), since the
+     * browser's native Back button is not reliable here: Fiori
+     * Elements' own List Report -> Object Page transition replaces the
+     * current history entry rather than pushing a new one (intentional
+     * framework behaviour, so a bare "no selection" list state never
+     * sits in history), which means pressing Back from the Object Page
+     * can skip straight past the List and land on whatever page was
+     * open before this section was ever entered - reported live as
+     * "back button ... sometime ... back to another screen".
+     * getRouterFor(oControl) finds the owning component's router for
+     * any control, which works reliably from inside a controller
+     * extension.
+     *
+     * @param {sap.ui.base.Event} oEvent press event of the header action
+     * @param {string} sRouteName the List Report route to navigate to
+     * @returns {void}
+     */
+    function navigateToList(oEvent, sRouteName) {
+      const oRouter = UIComponent.getRouterFor(oEvent.getSource());
+
+      oRouter.navTo(sRouteName);
+    }
+
     return ControllerExtension.extend(
       "virement.zuippsvirement.ext.controller.ObjectPageExt",
       {
+        onBackToApproverMatrix: function (oEvent) {
+          navigateToList(oEvent, "ApproverMatrix");
+        },
+
+        onBackToGLGrouping: function (oEvent) {
+          navigateToList(oEvent, "GLGrouping");
+        },
+
+        onBackToDepartmentGrouping: function (oEvent) {
+          navigateToList(oEvent, "DepartmentGrouping");
+        },
+
+        onBackToFunctionalDepartmentGrouping: function (oEvent) {
+          navigateToList(oEvent, "FunctionalDepartmentGrouping");
+        },
+
+        onBackToBuildingGrouping: function (oEvent) {
+          navigateToList(oEvent, "BuildingGrouping");
+        },
+
+        onBackToRegionBranchGrouping: function (oEvent) {
+          navigateToList(oEvent, "RegionBranchGrouping");
+        },
+
         /**
          * Icon for WorkflowStatusField.fragment.xml's ObjectStatus -
          * only set for an error status, so a healthy request shows no
@@ -47,6 +102,27 @@ sap.ui.define(
          */
         formatWorkflowStatusActive: function (sStatus) {
           return ERROR_WORKFLOW_STATUSES.indexOf(sStatus) !== -1;
+        },
+
+        /**
+         * Strips leading zeros from a posted S/4 document number for
+         * display only (SupplementDocNumberField/ReturnDocNumberField/
+         * TransferOutInDocNumberField.fragment.xml) - the stored value
+         * itself (message_v3 from S/4, see documentNumber() in
+         * post-to-s4-logic.js) is left untouched, since SAP document
+         * numbers are zero-padded to a fixed length and other SAP
+         * transactions (FB03, ME23N, ...) expect that exact padded
+         * form - only the Fiori display strips it for readability.
+         *
+         * @param {string} sValue e.g. supplementDocNumber
+         * @returns {string} e.g. "0100000477" -> "100000477"
+         */
+        formatDocumentNumber: function (sValue) {
+          if (!sValue) {
+            return sValue;
+          }
+
+          return String(sValue).replace(/^0+(?=\d)/, "");
         },
 
         /**

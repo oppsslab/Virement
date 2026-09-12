@@ -77,7 +77,7 @@ Two more classifications shape almost everything downstream:
 - **Budget Type** — `Project` (`P`) or `Non-Project` (`N`). Project-budget requests are capped at **RM 5,000,000** total (Transfer-out or Supplement amount), and Project + Supplement requires a WBS element on every item.
 - **Return Category** — Return-only. `Z` (Budget Zerorise) vs `C` (Budget Return to Central Fund, cost centre `100050500`). A Project-budget Return is *always* forced to Zerorise (Central Fund doesn't apply to Project budgets); raising a Zerorise return additionally requires the `BUDGET_ZERORISE` role, restricted to the BCM team.
 
-Only **Transfer + Non-Project** requests get CAP-owned, business-rule-driven approval routing (§4) — every other type/budget-type combination uses a flat amount-tiered rule, and Transfer + Project falls through entirely to SAP Build's own decision tables.
+**Transfer + Non-Project** gets the full business-rule-driven approval routing (§4); **Transfer + Project** is CAP-owned too, but deliberately simpler — a single level, Head of Transfer-out Cost Center per line, with no Level 2/3; **Return + Project** is also single-level (Head of JKEW, no amount tiering); every other combination uses the flat amount-tiered rule.
 
 ## 2. Architecture & deployment topology
 
@@ -99,7 +99,7 @@ Defined end-to-end in `mta.yaml` — 7 modules, 9 bound resources.
 
 | Service | Used for |
 |---|---|
-| `virement-service-uaa` (XSUAA) | Login/OAuth, role collections `REQUEST_APPROVE` / `VR_ADMIN` |
+| `virement-service-uaa` (XSUAA) | Login/OAuth, role collections `REQUEST_APPROVE` / `ADMIN` |
 | `virement-service-db` (HANA HDI) | Persistence |
 | `virement-ias` (Identity, `authorization.enabled: true`) | AMS/DCL policy-based authorization — X.509 bindings for both `virement-srv` and the policies deployer |
 | `virement-dms` | Attachment storage (Document Management Service, via `@cap-js/sdm`) |
@@ -137,8 +137,12 @@ Beyond the user-entered fields (`costCentre`, `glAccount`, `material`, `wbs`, am
 | `assetType` | `glAccount` | `GLGrouping` — hides Asset Status when `NON ASSET` |
 | `functionalDepartment` | `glAccount` | `FunctionalDepartmentGrouping` (matched against a multi-value list) |
 | `materialGroupDescription` | `material` | Live S/4 Material Group search help |
+| `wbsDescription` | `wbs` | Live S/4 WBS Element search help (`WBSElementVH`) |
+| `responsibleCostCentre` | `wbs` | Same WBS Element search help — deliberately kept separate from `costCentre` (see below) |
 
-All nine are populated in `srv/code/requestitems-drafts-before-create-logic.js` and `requestitems-drafts-before-update-logic.js`, calling `srv/code/utils/*-lookup.js` helper modules — one lookup module per field. **This is the pattern to copy for any new derived item field.**
+All are populated in `srv/code/requestitems-drafts-before-create-logic.js` and `requestitems-drafts-before-update-logic.js`, calling `srv/code/utils/*-lookup.js` helper modules — one lookup module per field. **This is the pattern to copy for any new derived item field.**
+
+`responsibleCostCentre` is not shown in any `UI.LineItem` by default (available via column personalization only) and is never read by the Department/Region/Branch cascade above — that cascade is a Non-Project (GL-based) concept. It exists solely to feed the Project Virement approval routing (§4): the Head of Transfer-out Cost Center role is resolved against it, via `ApproverMatrix.departmentBranch`, exactly like `costCentre` already does for Non-Project. A Project item's own `costCentre` is intentionally left empty.
 
 ### Master-data ("Grouping") entities
 
@@ -176,13 +180,17 @@ Amount tiers (scenario 6, and identically for plain Supplement/Return): `<30,000
 
 Whenever Level 1 is `HOD_XFER_CC`, it resolves **once per transfer-out line item**, in item order — `1A`, `1B`, ... up to `1E` (the enforced 1–5 line cap), each scoped to that line's own `costCentre` via `ApproverMatrix.departmentBranch`. These are **independent parallel approvers**, not redundant alternates — `approve-reject-request.js` waits for every sibling letter to act before the request advances past Level 1 (see §5).
 
+### Project Virement scenario (`classifyVirementProjectScenario`)
+
+Deliberately much simpler than the Non-Project chain above: a Project item is identified by WBS Element alone, whose Responsible Cost Center is auto-derived into the dedicated `responsibleCostCentre` field (§3 — kept separate from `costCentre`, which stays empty for a Project item since the GL-based Department/Region cascade doesn't apply to WBS-based items). There is exactly one level — `HOD_XFER_CC` (Head of Transfer-out Cost Center), resolved once per transfer-out line item against `responsibleCostCentre` via `ApproverMatrix.departmentBranch`, same lettered `1A`–`1E` mechanic as Non-Project. No Level 2/3.
+
 ### Other request types (approver-routing.js)
 
 - **Supplement** — fixed single level, role `JKEW_BCM`, no amount dependency.
-- **Return** — single level, amount-tiered role (same 4 bands as above), applies identically to Project and Non-Project.
-- **Transfer + Project** — returns an empty plan; **not** CAP-owned, SAP Build's own decision tables handle it entirely.
+- **Return, Non-Project** — single level, amount-tiered role (same 4 bands as above).
+- **Return, Project** — single level, always `HOD_JKEW` — no amount tiering.
 
-`getManagedLevels(requestType, budgetType)` returns the full universe of levels a combo could *ever* use (e.g. `["1","1A".."1E","2","3"]` for Transfer/Non-Project) so `applyApproverPlan` can wipe every stale level from an earlier classification, not just the ones the current plan happens to use — important when item edits mid-draft change which scenario applies.
+`getManagedLevels(requestType, budgetType)` returns the full universe of levels a combo could *ever* use (e.g. `["1","1A".."1E","2","3"]` for Transfer/Non-Project, `["1A".."1E"]` for Transfer/Project) so `applyApproverPlan` can wipe every stale level from an earlier classification, not just the ones the current plan happens to use — important when item edits mid-draft change which scenario applies.
 
 > Two read-only helpers built on the same plan, both used at submission (§5): `previewApprovalPlanGaps` (any level resolving to zero current approvers — hard blocks) and `resolveApprovalPlanWithApprovers` (levels with actual resolved emails — used for the same-person conflict checks).
 
@@ -241,7 +249,7 @@ Calls the RFC-enabled function module **`ZFM_FI_FMBB_UPLOAD`** through the `CPI`
 
 ### Earmarked Funds — `utils/earmarked-funds.js`
 
-A budget reservation created at *submit* time (before the FMBB posting exists) for any Virement carrying a transfer-out amount — so the money can't be double-committed while the request is in flight. Two different backends, on purpose:
+A budget reservation created at *submit* time (before the FMBB posting exists) for any **Non-Project** Virement carrying a transfer-out amount — so the money can't be double-committed while the request is in flight. Skipped entirely for **Project** Virement (`requests-before-create-logic.js` gates creation on `budgetTypeCode !== 'P'`, and the `earmarkedFundsDocNumber` field is hidden in the UI for Project too): the Earmarked Funds API's account assignment is Fund Center/Commitment Item only, which doesn't apply to WBS-based items, and reusing the WBS's derived Cost Centre there would be semantically wrong. Two different backends, on purpose:
 
 - **Create + read status** — via the `CPI` iFlow (GET/POST only).
 - **Complete** — via the native S/4 OData V4 API directly (`QA1-800-S4HANA`), because the CPI iFlow doesn't expose PATCH. **Currently disabled** — S/4 only exposes a plain field PATCH on `EarmarkedFundsIsCompleted` which confirmed-live does nothing; `requests-after-read-logic.js`'s `refreshEarmarkedFundsStatus` derives completion *locally* instead (true once the transfer document number is set). A manual retry exists: `retryEarmarkedFundsCompletion`, callable by any approver on the request.
@@ -253,7 +261,7 @@ A budget reservation created at *submit* time (before the FMBB posting exists) f
 | Cost Centre | `/sap/opu/odata/sap/API_COSTCENTER_SRV/A_CostCenter` |
 | GL Account | `/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/GLAccountVH` |
 | Material Group | `/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/MaterialGroupVH` |
-| WBS Element | `/sap/opu/odata/sap/API_WBSELEMENT_SRV//A_WBSElement` — no underscore in the service name, note the double slash, see §11 |
+| WBS Element | `/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/WBSElementVH` — a purpose-built custom value help, not a standard SAP API, see §11 |
 
 All four go through `QA1-800-S4HANA` and share `srv/code/utils/value-help.js`'s fetch/narrow helpers, which re-rank S/4's fuzzy `search=` results against exactly what the user typed.
 
@@ -275,16 +283,26 @@ There is no inbound callback from BPA. `requests-after-read-logic.js`'s `refresh
 
 BPA's native Approval Form has no custom output fields, so it cannot carry approver identity/comments back into the workflow. All business logic (approver rows, S/4 posting, Earmarked Funds) happens in CAP first; `completeTask` is called *only* afterward, purely to close the BPA task and advance the workflow branch. If S/4 posting fails, the task is deliberately left open for retry.
 
+### Delegation and BPA task recipients
+
+This app's own `RequestApprovers.emailAddress` is always the source of truth for who can act via its own Approve/Reject/Delegate buttons — the BPA-side sync below is best-effort and never blocks or reverses a delegation that already committed locally.
+
+- **`delegateApproval`** (`delegate-approval-logic.js`) — self-service: the current pending approver hands off their own pending row(s) to someone else.
+- **`delegatePendingApproval`** (`delegate-pending-approval-logic.js`), bound to `RequestApprovers`, `@requires: ['ADMIN']` — lets an admin reassign one specific pending assignment from the Approver Matrix Object Page's Pending Approvals facet, without being the approver themselves. Bound-action deep paths matter here: invoked via `ApproverMatrix(ID=...)/PendingApprovals(ID=...)/delegatePendingApproval`, `request.params` holds one entry **per path segment** — the bound entity's own key is always the **last** element (`params[params.length - 1]`), not `params[0]`.
+- **`delegateApprovalAsAdmin`** (`delegate-approval-as-admin-logic.js`), bound to `Requests`, `@requires: ['ADMIN']` — delegates every currently-pending approval on a request in one action, from the Requests Object Page itself. Currently wired but its UI button is unconditionally `UI.Hidden` in `annotations.cds` (not in active use).
+
+All three, after committing their own change, best-effort swap the delegate in for the original approver on the matching SAP Build task's `recipientUsers` (`addTaskRecipient` in `utils/workflow-utils.js`) — the delegating approver is removed, any *other* recipient already on the task (e.g. a different approver at the same level) is left untouched. Per the Workflow Runtime API spec (`SPA_Workflow_Runtime.json`), `recipientUsers` is a JSON array on a `TaskInstance` GET but a **comma-separated string** on the `PATCH /v1/task-instances/{id}` payload — `addTaskRecipient` normalizes between the two. Setting it also requires the calling destination credential to hold `ProcessAutomationAdmin` (or already be a recipient) — missing that fails with a 403, logged only, never surfaced as a failure of the delegation itself.
+
 ## 8. Authorization model
 
 Two mechanisms populate the exact same `req.user` role-name space, so CDS `@requires` and in-code `hasRole` checks never need to know which one granted a role:
 
 | Mechanism | Defined in | Roles | Granted via |
 |---|---|---|---|
-| XSUAA (classic) | `xs-security.json` | `REQUEST_APPROVE`, `VR_ADMIN` | BTP Cockpit role collections |
+| XSUAA (classic) | `xs-security.json` | `REQUEST_APPROVE`, `ADMIN` | BTP Cockpit role collections |
 | AMS / IAS (policy-based) | `ams/dcl/cap/basePolicies.dcl` | `REQUEST_APPROVE`, `MASS_UPLOAD_TRANSFER`, `MASS_UPLOAD_ALL`, `BUDGET_ZERORISE` | IAS admin console → Users & Authorizations → Groups (`cap - VR_*`) |
 
-`VR_ADMIN` exists only on the XSUAA side — no AMS policy counterpart. The three "mass upload"/BCM roles exist *only* as AMS policy targets and are checked purely in JS (never at the CDS transport-authorization layer):
+`ADMIN` exists only on the XSUAA side — no AMS policy counterpart. The three "mass upload"/BCM roles exist *only* as AMS policy targets and are checked purely in JS (never at the CDS transport-authorization layer):
 
 | AMS Policy | → Role checked | Gates |
 |---|---|---|
@@ -323,8 +341,8 @@ All 5 `RequestItems` LineItem qualifiers live in `annotations.cds`: SR No first,
 
 Six admin-maintained entities (5 Groupings + Approver Matrix) each get an identical, independently-implemented five-file set — **not** a shared generic handler, deliberately duplicated per entity:
 
-1. `download-<entity>-template-logic.js` — `@requires: ['VR_ADMIN']` action returning a base64 XLSX built via `utils/<entity>-template.js`'s column list
-2. `upload-<entity>-logic.js` — `@requires: ['VR_ADMIN']`, parses the uploaded workbook, validates every row (required fields, formats, cross-lookups), returns `{rows: validRows}` — **does not write to the DB itself**
+1. `download-<entity>-template-logic.js` — `@requires: ['ADMIN']` action returning a base64 XLSX built via `utils/<entity>-template.js`'s column list
+2. `upload-<entity>-logic.js` — `@requires: ['ADMIN']`, parses the uploaded workbook, validates every row (required fields, formats, cross-lookups), returns `{rows: validRows}` — **does not write to the DB itself**
 3. `webapp/ext/controller/<Entity>ListReportActions.js` — triggers the browser download; on upload, takes the validated rows back from the server and creates them client-side via a draft-enabled OData list binding + `draftActivate` per row
 4. `webapp/ext/fragment/<Entity>UploadDialog.fragment.xml` — the FileUploader dialog
 5. `utils/<entity>-template.js` — the column key/header/example/width list shared by download and upload header-matching
@@ -343,9 +361,11 @@ Errors are capped at 20 rows shown, with a rollup count beyond that, and reject 
 
 **`ams/dcl/cap/basePolicies.dcl` is hand-maintained beyond what `@requires` annotations alone produce.** `VR_FUNCTIONAL`/`VR_JKEW`/`VR_BCM` policies exist in this file with **no corresponding `@requires` annotation anywhere in the CDS model** — they were added by hand and are preserved across rebuilds because `@sap/ams` detects manual edits and skips regeneration (confirmed by testing: renaming `dclGenerationPackage` from the default `"cap"` silently *dropped* both policies from the freshly generated file). **Never change `dclGenerationPackage`** without diffing the regenerated file against what's committed first.
 
-**WBS S/4 service path.** The working path, confirmed via a direct SAP Gateway Client test (HTTP 200, real rows returned), is `/sap/opu/odata/sap/API_WBSELEMENT_SRV//A_WBSElement`. Two details matter, and each prior broken attempt got exactly one of them right: the service name is `API_WBSELEMENT_SRV` — **no underscore** between WBS and ELEMENT (`API_WBS_ELEMENT_SRV` 404s with a structured OData "service not found" error) — and the entity set needs a **double slash** before it (dropping the standard `/sap/opu/odata/sap/` Gateway prefix instead of using the double slash 404s with a bare ICM "Service cannot be reached" page, not even OData-level).
+**WBS S/4 service path.** Three services were tried before landing on the current one (`srv/code/utils/wbs-elements.js`): `API_WBSELEMENT_SRV/A_WBSElement` worked but has no Cost Center field at all; `API_ENTERPRISE_PROJECT_SRV/A_EnterpriseProjectElement` has `ResponsibleCostCenter` but returned a clean 200 with 0 rows for every query (the destination's technical user most likely isn't authorized for Enterprise Project data); the working path is now a **purpose-built custom value help**, `/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/WBSElementVH` (fields `WBSElement,WBSDescription,ResponsibleCostCenter`), confirmed against a live sample response. It also has a live data-quality quirk: it occasionally returns a row with a blank `WBSElement` key alongside a real description (e.g. `{"WBSElement":"","WBSDescription":"INSTL. PAPANTANDA","ResponsibleCostCenter":""}`) — `readWBSElements` filters these out defensively, since a blank key breaks the value-help dialog's row binding.
 
 **SAP Build's fully-qualified-path bug.** See §7 — any new unbound action/function called by a workflow needs registering in `srv/server.js`'s workaround lists, or it will silently fail from the workflow side while SAP Build's own Test tool appears to work fine.
+
+**Debugging `ZFM_FI_FMBB_UPLOAD` (or any RFC-invoked S/4 function) — set an External Breakpoint, not a normal one.** This function is called via RFC from the `CPI` destination (see §6), not from a dialog session — a plain Session Breakpoint set in your own SAPGUI logon will never trigger for it, even though the code genuinely executes (confirmed by matching the exact `ET_RETURN` message text back to the ABAP source). In the Q (QA1) S/4 backend, set an **External Breakpoint** instead — Utilities → Breakpoints → External Breakpoints in the ABAP editor/debugger, tied to user ID `PWC_RAY` — before triggering the request submission from the app.
 
 ## 12. Build & deploy process
 
