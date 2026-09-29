@@ -43,14 +43,14 @@
     xmlns="sap.m"
     xmlns:core="sap.ui.core"
     xmlns:form="sap.ui.layout.form">
-    <VBox>
+    <VBox id="_IDReturnVBox">
         <RadioButtonGroup
             id="returnCategoryGroup"
             columns="1"
             width="100%"
             visible="{= %{requestType_code} === 'R' &amp;&amp; %{budgetType_code} !== 'P' }"
             editable="{= %{ui>/isEditable} === true &amp;&amp; %{status_code} !== 2 }"
-            selectedIndex="{= %{returnCategory_code} === 'Z' ? 0 : (%{returnCategory_code} === 'C' ? 1 : -1) }"
+            selectedIndex="{= %{returnCategory_code} === 'Z' ? 0 : (%{returnCategory_code} === 'C' ? 1 : (%{returnCategory_code} === 'H' ? 2 : -1)) }"
             select=".extension.virement.zuippsvirement.ext.controller.ObjectPageExt.onReturnCategorySelect">
             <!--
                 The Central Fund option's label is longer than this form's
@@ -68,13 +68,17 @@
                 id="returnCategoryCentralFund"
                 text="{i18n>BudgetReturnToCentralFund}"
                 wrapping="true" />
+            <RadioButton
+                id="returnCategoryHalfYearly"
+                text="{i18n>BudgetReturnHalfYearly}"
+                wrapping="true" />
         </RadioButtonGroup>
         <Text
             id="returnCategoryZeroriseOnly"
             text="{i18n>BudgetZerorise}"
             visible="{= %{requestType_code} === 'R' &amp;&amp; %{budgetType_code} === 'P' }" />
         <layoutData>
-            <form:ColumnElementData cellsLarge="4" cellsSmall="4" />
+            <form:ColumnElementData id="_IDReturnColumnElementData" cellsLarge="4" cellsSmall="4" />
         </layoutData>
     </VBox>
 </core:FragmentDefinition>

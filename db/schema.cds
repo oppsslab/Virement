@@ -19,6 +19,7 @@ entity Requests : cuid, managed {
     // they are modelled as one code instead of two flags, and surfaced as a
     // radio group in the request header. Null for every other request type.
     returnCategory       : Association to ReturnCategory;
+    supplementCategory   : Association to SupplementCategory;
     transferCategory     : String(1);
     status               : Association to RequestStatus default 0;
     currentApprovalLevel : Integer;
@@ -261,10 +262,20 @@ entity BudgetType : CodeList {
 type ReturnCategoryCode : String(1) enum {
     ZERORISE = 'Z';
     CENTRALFUND = 'C';
+    HALFYEAREX = 'H';
 };
 
 entity ReturnCategory : CodeList {
     key code : ReturnCategoryCode
+};
+
+type SupplementCategoryCode : String(1) enum {
+    SUPPLEMENT = 'S';
+    HALFYEAR = 'H';
+};
+
+entity SupplementCategory : CodeList {
+    key code : SupplementCategoryCode
 };
 
 /*

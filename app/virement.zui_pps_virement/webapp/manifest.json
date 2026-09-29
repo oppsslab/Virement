@@ -269,6 +269,12 @@
                         "anchor": "DataField::budgetType_code"
                       }
                     },
+                    "SupplementCategory": {
+                      "template": "virement.zuippsvirement.ext.fragment.SupplementCategoryField",
+                      "label": "{i18n>SupplementCategory}",
+                      "property": "supplementCategory_code",
+                      "visible": "{= %{requestType_code} === 'S' }"
+                    },
                     "DataField::earmarkedFundsDocNumber": {
                       "template": "virement.zuippsvirement.ext.fragment.EarmarkedFundsDocNumberField",
                       "label": "{i18n>EarmarkedFundsDocNumber}",
@@ -316,7 +322,7 @@
                     "disableCopyToClipboard": true,
                     "enableExport": false,
                     "enableFullScreen": false,
-                    "enablePaste": false,
+                      "enablePaste": false,
                     "type": "ResponsiveTable"
                   }
                 },

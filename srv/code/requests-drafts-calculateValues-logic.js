@@ -90,6 +90,8 @@ module.exports = async function (request) {
       requestId,
       requestTypeCode,
       budgetTypeCode: draftRequest.budgetType_code,
+      returnCategory: draftRequest.returnCategory_code,
+      supplementCategory: draftRequest.supplementCategory_code,
       amount: resolveApprovalAmount(requestTypeCode, amounts),
       draftUUID: draftRequest.DraftAdministrativeData_DraftUUID,
     });

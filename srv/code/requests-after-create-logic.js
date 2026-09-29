@@ -227,6 +227,12 @@ module.exports = async function (results, request) {
     const projectType =
       createdRequest.budgetType_code || request.data?.budgetType_code || "";
 
+    const returnCategory =
+      createdRequest.returnCategory_code || request.data?.returnCategory_code || "";
+
+    const supplementCategory =
+      createdRequest.supplementCategory_code || request.data?.supplementCategory_code || "";
+
     // Supplement (S) and Return (R) requests report their total via
     // supplementAmount / returnAmount instead of transferOutAmount
     // when calling the approval workflow.
@@ -394,6 +400,8 @@ module.exports = async function (results, request) {
       requestId,
       requestTypeCode: requestType,
       budgetTypeCode: projectType,
+      returnCategory: returnCategory,
+      supplementCategory: supplementCategory,
       amount: requestAmount,
       items: approvalPlanItems,
     });

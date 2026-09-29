@@ -431,26 +431,40 @@ async function classifyVirementNonProjectScenario(tx, items) {
  * @returns {{scenario: string, level1Entries: object[]}|null} null if
  *   there's no transfer-out item yet to resolve
  */
-function classifyVirementProjectScenario(items) {
+async function classifyVirementProjectScenario(items) {
   const transferOutItems = (items || []).filter(
     (item) => Number(item.transferOutAmount) > 0,
   );
 
-  if (!transferOutItems.length) {
+  const transferInItems = (items || []).filter(
+    (item) => Number(item.transferInAmount) > 0,
+  );
+
+  if (!transferOutItems.length || !transferInItems.length) {
     LOG.info(
-      "Not yet classifiable - missing a transfer-out item.",
+      "Not yet classifiable - missing a transfer-out + transfer-in item.",
       JSON.stringify({ transferOutCount: transferOutItems.length }),
     );
 
     return null;
   }
 
+  const allItems = [...transferOutItems, ...transferInItems];
+
+  const totalTransferOutAmount = transferOutItems.reduce(
+    (sum, item) => sum + (Number(item.transferOutAmount) || 0),
+    0,
+  );
+
   return {
-    scenario: "Project Virement - Head of Transfer-out Cost Center",
+    scenario: "Project Virement",
     level1Entries: buildTransferOutCostCentreEntries(
       transferOutItems,
       "responsibleCostCentre",
     ),
+    level2Role: "HOD_JKEW",
+    level3Role: "CEO_CFO",
+    totalTransferOutAmount,
   };
 }
 

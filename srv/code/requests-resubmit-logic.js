@@ -283,6 +283,24 @@ module.exports = async function (request) {
       throw roleError;
     }
 
+    if (
+      createdRequest.supplementCategory_code === "H" &&
+      !hasRole(request.user, ROLE_BCM)
+    ) {
+      const roleError = new Error(
+        "Resubmission failed validation - Budget Supplement (Half Yearly) is " +
+          "restricted to the BCM team.",
+      );
+
+      roleError.statusCode = 403;
+      roleError.userMessage =
+        "Only the BCM team can raise a Budget Supplement (Half Yearly).";
+
+      LOG.error(roleError.message, JSON.stringify({ requestId }));
+
+      throw roleError;
+    }
+
     /*
      * 0b. Validate WBS is filled on all items when Budget Type is
      * Project - a rejected request can be edited (including its

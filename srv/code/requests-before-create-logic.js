@@ -994,6 +994,7 @@ async function generateRequestNumber({
  * @param {string|number} values.fiscalYear
  * @param {string|null} values.transferCategory
  * @param {string|null} values.returnCategory
+ * @param {string|null} values.supplementCategory
  * @returns {boolean}
  */
 function validateSubmission(
@@ -1005,6 +1006,7 @@ function validateSubmission(
     fiscalYear,
     transferCategory,
     returnCategory,
+    supplementCategory,
   },
 ) {
   if (!requestId) {
@@ -1047,13 +1049,27 @@ function validateSubmission(
     return false;
   }
 
-  if (type === "R" && !["Z", "C"].includes(returnCategory)) {
+  if (type === "R" && !["Z", "C", "H"].includes(returnCategory)) {
     LOG.error("Invalid returnCategory_code:", returnCategory);
 
     request.error(
       400,
       "Return Category must be Budget Zerorise or " +
-        "Budget Return to Central Fund for Return requests.",
+        "Budget Return to Central Fund or Excess Budget Return (Half Yearly) " +
+        "for Return requests.",
+    );
+
+    return false;
+  }
+
+  if (type === "S" && !["S", "H"].includes(supplementCategory)) {
+    LOG.error("Invalid supplementCategory_code:", supplementCategory);
+
+    request.error(
+      400,
+      "Supplement Category must be Supplement or " +
+        "Budget Supplement (Half Yearly) " +
+        "for supplement requests. " + supplementCategory,
     );
 
     return false;
@@ -1267,6 +1283,26 @@ module.exports = async function (request) {
     request.data.returnCategory_code = returnCategory;
 
     /*
+     * Supplement Category only applies to Supplement requests. Normalize it here so
+     * a stale draft value cannot survive a change of request type.
+     *
+     * A Project-budget Supplement is always Supplement ('S') . The UI
+     * mirrors this by hiding the radio choice and showing a plain
+     * "Supplement" label instead for Project (see
+     * SupplementCategoryField.fragment.xml).
+     */
+    const supplementCategory =
+      normalizedRequestType === "S"
+        ? budgetTypeCode === "P"
+          ? "S"
+          : String(request.data.supplementCategory_code || "")
+              .trim()
+              .toUpperCase() || null
+        : null;
+
+    request.data.supplementCategory_code = supplementCategory;
+
+    /*
      * Budget Zerorise is restricted to the BCM team, regardless of
      * whether it was explicitly chosen (Non Project) or system-forced
      * (Project). Checked on every submission, not just first, so a
@@ -1277,6 +1313,29 @@ module.exports = async function (request) {
     if (returnCategory === "Z" && !hasRole(request.user, ROLE_BCM)) {
       LOG.error(
         "Request failed submission validation - Budget Zerorise is " +
+          "restricted to the BCM team.",
+        JSON.stringify({ requestId, budgetTypeCode }),
+      );
+
+      request.error(
+        403,
+        "Only the BCM team can raise a Budget Zerorise return.",
+      );
+
+      return;
+    }
+
+    /*
+     * Half Yearly is restricted to the BCM team, regardless of
+     * whether it was explicitly chosen (Non Project) or system-forced
+     * (Project). Checked on every submission, not just first, so a
+     * previously-rejected request can't be edited into Half Yearly and
+     * resubmitted by a non-BCM user (see requests-resubmit-logic.js
+     * for the same check on the resubmit path).
+     */
+    if ((returnCategory === "H" || supplementCategory === 'H' ) && !hasRole(request.user, ROLE_BCM)) {
+      LOG.error(
+        "Request failed submission validation - Half Yearly is " +
           "restricted to the BCM team.",
         JSON.stringify({ requestId, budgetTypeCode }),
       );
@@ -1303,6 +1362,7 @@ module.exports = async function (request) {
 
     LOG.info("returnCategory_code:", request.data.returnCategory_code);
 
+    LOG.info("supplementCategory_code:", request.data.supplementCategory_code);
     /*
      * Validate the request before performing calculations.
      */
@@ -1313,6 +1373,7 @@ module.exports = async function (request) {
       fiscalYear,
       transferCategory,
       returnCategory,
+      supplementCategory,
     });
 
     if (!isValid) {
@@ -1575,6 +1636,8 @@ module.exports = async function (request) {
         tx,
         requestTypeCode,
         budgetTypeCode,
+        returnCategory,
+        supplementCategory,
         amount: resolveApprovalAmount(requestTypeCode, amounts),
         items: requestItems,
       });
@@ -1629,6 +1692,8 @@ module.exports = async function (request) {
         tx,
         requestTypeCode,
         budgetTypeCode,
+        returnCategory,
+        supplementCategory,
         amount: resolveApprovalAmount(requestTypeCode, amounts),
         items: requestItems,
       });

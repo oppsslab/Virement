@@ -44,20 +44,6 @@
         "auth": {
           "kind": "mocked",
           "users": {
-            "janine.louise.martinez@pwc.com": {
-              "password": "1234567",
-              "attr": {
-                "givenName": "Janine",
-                "familyName": "Martinez",
-                "email": "janine.louise.martinez@pwc.com",
-                "groups": []
-              },
-              "policies": [
-                "cap.VR_REQUEST_APPROVE",
-                "cap.VR_FUNCTIONAL",
-                "cap.VR_JKEW"
-              ]
-            },
             "kevin.p.orense@pwc.com": {
               "password": "1234567",
               "attr": {

@@ -71,6 +71,7 @@ function resolveReturnRole(returnAmount) {
  * @param {string} options.budgetTypeCode - currently unused: both
  *   migrated rules (Supplement, Return) apply the same way regardless
  *   of Project vs Non Project. Kept for rules that may need it later.
+ * @param {string} options.supplementCategory
  * @param {number|string} [options.amount] - the amount relevant to
  *   this request type (e.g. returnAmount for Return requests).
  *   Ignored by rules that don't need it.
@@ -90,6 +91,8 @@ async function resolveApprovalPlan({
   tx,
   requestTypeCode,
   budgetTypeCode,
+  returnCategory,
+  supplementCategory,
   amount,
   items,
 }) {
@@ -97,6 +100,15 @@ async function resolveApprovalPlan({
 
   const budgetType = String(budgetTypeCode || "").trim().toUpperCase();
 
+  const supplementCategoryCode = String(supplementCategory || "").trim().toUpperCase();
+
+  const returnCategoryCode = String(returnCategory || "").trim().toUpperCase();
+
+  // Half Yearly will goes to HOD_JKEW (Head of JKEW)
+  if (supplementCategoryCode === 'H' || returnCategoryCode === 'H' ) {
+    return [{ level: "1", userRole: "HOD_JKEW" }];
+  }
+  
   if (requestType === REQUEST_TYPE_SUPPLEMENT) {
     return [{ level: "1", userRole: "JKEW_BCM" }];
   }
@@ -151,19 +163,43 @@ async function resolveApprovalPlan({
     requestType === REQUEST_TYPE_TRANSFER &&
     budgetType === BUDGET_TYPE_PROJECT
   ) {
-    const classification = classifyVirementProjectScenario(items || []);
+    const classification = await classifyVirementProjectScenario(items || []);
 
     if (!classification) {
       return [];
     }
 
+/*  Project virement also has multiple levels (3 levels)  
     return classification.level1Entries.map(
       ({ level, userRole, departmentBranch }) => ({
         level,
         userRole,
         ...(departmentBranch ? { departmentBranch } : {}),
       }),
+    );*/
+    const plan = classification.level1Entries.map(
+      ({ level, userRole, departmentBranch }) => ({
+        level,
+        userRole,
+        ...(departmentBranch ? { departmentBranch } : {}),
+      }),
     );
+
+    if (classification.level2Role) {
+      plan.push({
+        level: "2",
+        userRole: classification.level2Role,
+        ...(classification.level2DepartmentBranch
+          ? { departmentBranch: classification.level2DepartmentBranch }
+          : {}),
+      });
+    }
+
+    if (classification.level3Role) {
+      plan.push({ level: "3", userRole: classification.level3Role });
+    }
+
+    return plan;
   }
 
   return [];
@@ -208,7 +244,8 @@ function getManagedLevels({ requestTypeCode, budgetTypeCode }) {
     requestType === REQUEST_TYPE_TRANSFER &&
     budgetType === BUDGET_TYPE_PROJECT
   ) {
-    return ["1A", "1B", "1C", "1D", "1E"];
+    return ["1A", "1B", "1C", "1D", "1E", "2", "3"];
+    //    return ["1A", "1B", "1C", "1D", "1E"];
   }
 
   return [];

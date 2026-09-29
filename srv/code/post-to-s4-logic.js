@@ -74,6 +74,7 @@ const AMOUNT_CONFIGS = [
  */
 const CENTRAL_FUND_COST_CENTRE = "100050500";
 const CENTRAL_FUND_GL_ACCOUNT = "760001";
+const CENTRAL_FUND_MATERIAL = "760001000";
 
 /*
  * Every amount field/document-number pairing that can appear on a
@@ -171,7 +172,23 @@ function getProcess(requestData) {
 function resolveReturnProcess(requestData) {
   const category = associationCode(requestData, "returnCategory").toUpperCase();
 
-  return category === "C" ? "TRAN" : "RETN";
+  return category === "C" || category === "H" ? "TRAN" : "RETN";
+}
+
+/**
+ * For Half Yearly, user will post return Half Yearly excess first, then
+ * Supplement to other fund center via the return fund center
+ * It is a separate transaction/document, but will be a pair
+ * This function is used to change the posting to TRAN, since it is actually
+ * a posting of transfer out and transfer in (TRAN)
+ *
+ * @param {object} requestData
+ * @returns {string} "SUPL" or "TRAN"
+ */
+function resolveSupplementProcess(requestData) {
+  const category = associationCode(requestData, "supplementCategory").toUpperCase();
+
+  return category === "H" ? "TRAN" : "SUPL";
 }
 
 function getSupplyType(requestData) {
@@ -475,10 +492,17 @@ function buildPayloads(requestData, items) {
   for (const config of AMOUNT_CONFIGS) {
     // See resolveReturnProcess: Return's IV_PROC depends on its
     // Return Category, not the static config value.
-    const process =
+    let process =
       config.key === "RETN"
         ? resolveReturnProcess(requestData)
         : config.process;
+
+    // See resolveSupplementProcess: Return's IV_PROC depends on its
+    // Supplement Category, not the static config value.
+    process =
+      config.key === "SUPL"
+        ? resolveSupplementProcess(requestData)
+        : process;
 
     const payload = buildHeader(requestData, process, supplyType);
 
@@ -521,10 +545,35 @@ function buildPayloads(requestData, items) {
             // requests-before-create-logic.js) for every
             // user-entered line, but this line is generated here,
             // not entered by the user.
-            material: "760001000",
+            material: CENTRAL_FUND_MATERIAL,
             description: "Return to Central Fund",
           },
           "+",
+          configTotal,
+          supplyType,
+        ),
+      );
+    }
+
+    const isHalfYearly = config.key === "SUPL" && process === "TRAN";
+    if (isHalfYearly && configTotal > 0) {
+      payload.IT_ITEM.push(
+        buildLineItem(
+          requestData,
+          {
+            costCentre: CENTRAL_FUND_COST_CENTRE,
+            glAccount: CENTRAL_FUND_GL_ACCOUNT,
+            // S/4 rejects the posting ("Material Group first 6 chars
+            // not equal to Commitment Item") when MATKL is blank -
+            // same first-6-chars alignment this app's own
+            // validateMaterialGlAlignment enforces client-side (see
+            // requests-before-create-logic.js) for every
+            // user-entered line, but this line is generated here,
+            // not entered by the user.
+            material: CENTRAL_FUND_MATERIAL,
+            description: "Budget Supplement (Half Yearly)",
+          },
+          "-",
           configTotal,
           supplyType,
         ),

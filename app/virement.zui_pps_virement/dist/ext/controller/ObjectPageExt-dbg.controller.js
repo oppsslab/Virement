@@ -12,7 +12,8 @@ sap.ui.define(
      * Radio button order in ReturnCategoryField.fragment.xml, mapped to the
      * ReturnCategory code list. Keep the two in sync.
      */
-    const RETURN_CATEGORY_CODES = ["Z", "C"];
+    const RETURN_CATEGORY_CODES = ["Z", "C", "H"];
+    const SUPPLEMENT_CATEGORY_CODES = ["S", "H"];
 
     const ERROR_WORKFLOW_STATUSES = ["ERRONEOUS", "ERROR"];
 
@@ -190,6 +191,67 @@ sap.ui.define(
             oError,
           ) {
             console.error("Failed to set the Return Category:", oError);
+          });
+        },
+
+        /**
+         * Opens a Popover showing the workflow's execution error message.
+         * Called from the WorkflowStatusField fragment's ObjectStatus
+         * press event - that control is only shown as "active"
+         * (clickable) when workflowStatus is an error status, so this is
+         * not wired to fire otherwise.
+         *
+         * workflowError is deliberately NOT relied on to already be
+         * loaded: it is not part of this page's own $select (it is only
+         * ever read via a plain OData path, never referenced by any
+         * annotation Fiori elements scans to build $select, and marking
+         * it Hidden in a FieldGroup to force inclusion does not work -
+         * Fiori elements skips genuinely hidden fields from $select too).
+         * context.requestProperty() explicitly fetches it on demand
+         * instead, regardless of what the page originally selected.
+         *
+         * The Popover is created once and reused (bound to whichever
+         * context was pressed most recently), matching the standard
+         * SAPUI5 lazy-singleton-control pattern.
+         *
+         * @param {sap.ui.base.Event} oEvent press event of the ObjectStatus
+         * @returns {void}
+         */
+        onSupplementCategorySelect: function (oEvent) {
+          const oGroup = oEvent.getSource();
+
+          const iSelectedIndex = oEvent.getParameter("selectedIndex");
+
+          const sCode = SUPPLEMENT_CATEGORY_CODES[iSelectedIndex];
+             
+          if (!sCode) {
+            return;
+          }
+
+          const oContext = oGroup.getBindingContext();
+
+          // test
+          console.log("Path:", oContext.getPath());
+          console.log("Object:", oContext.getObject());
+          //test
+
+          if (!oContext) {
+            console.error("No binding context for the Supplement Category field.");
+
+            return;
+          }
+
+          /*
+           * Selecting the already selected button must not trigger a PATCH.
+           */
+          if (oContext.getProperty("supplementCategory_code") === sCode) {
+            return;
+          }
+
+          oContext.setProperty("supplementCategory_code", sCode).catch(function (
+            oError,
+          ) {
+            console.error("Failed to set the Supplement Category:", oError);
           });
         },
 

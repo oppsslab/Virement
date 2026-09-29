@@ -88,6 +88,30 @@ annotate service.Requests with {
         }
     );
 
+    /*
+     * Supplement requests only. The Object Page renders this as a radio group
+     * through the SupplementCategory custom field (see manifest.json); the value
+     * help below is what drives the list report filter and the text
+     * arrangement everywhere else.
+     */
+    supplementCategory       @(
+        title                          : '{i18n>SupplementCategory}',
+        Common.Text                    : supplementCategory.descr,
+        Common.Text.@UI.TextArrangement: #TextOnly,
+        Common.ValueListWithFixedValues: true,
+        Common.ValueList               : {
+            $Type          : 'Common.ValueListType',
+            CollectionPath : 'SupplementCategory',
+            SearchSupported: false,
+            Parameters     : [{
+                $Type            : 'Common.ValueListParameterInOut',
+                LocalDataProperty: supplementCategory_code,
+                ValueListProperty: 'code'
+            }]
+        }
+    );
+
+
     status               @(
         title                          : '{i18n>Status}',
         Common.Text                    : status.descr,

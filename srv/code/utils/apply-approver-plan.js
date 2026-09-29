@@ -66,6 +66,8 @@ async function applyApproverPlan({
   requestId,
   requestTypeCode,
   budgetTypeCode,
+  returnCategory,
+  supplementCategory,
   amount,
   items,
   draftUUID,
@@ -87,6 +89,8 @@ async function applyApproverPlan({
     tx,
     requestTypeCode,
     budgetTypeCode,
+    returnCategory,
+    supplementCategory,
     amount,
     items,
   });
@@ -277,6 +281,9 @@ async function refreshDraftApproverPreview({
     requestId,
     requestTypeCode,
     budgetTypeCode: draftRequest.budgetType_code,
+    returnCategory: draftRequest.returnCategory_code,
+    supplementCategory: draftRequest.supplementCategory_code,
+
     amount: resolveApprovalAmount(requestTypeCode, amounts || draftRequest),
     items,
     draftUUID: draftRequest.DraftAdministrativeData_DraftUUID,
@@ -305,6 +312,8 @@ async function previewApprovalPlanGaps({
   tx,
   requestTypeCode,
   budgetTypeCode,
+  returnCategory,
+  supplementCategory,
   amount,
   items,
 }) {
@@ -312,6 +321,8 @@ async function previewApprovalPlanGaps({
     tx,
     requestTypeCode,
     budgetTypeCode,
+    returnCategory,
+    supplementCategory,
     amount,
     items,
   });
@@ -343,6 +354,8 @@ async function previewApprovalPlanGaps({
  * @param {object} options.tx - an active cds.tx()
  * @param {string} options.requestTypeCode
  * @param {string} options.budgetTypeCode
+ * @param {string} options.returnCategory
+ * @param {string} options.supplementCategory
  * @param {number|string} [options.amount]
  * @param {object[]} [options.items]
  * @returns {Promise<{level: string, userRole: string, departmentBranch?: string, emails: string[]}[]>}
@@ -351,6 +364,8 @@ async function resolveApprovalPlanWithApprovers({
   tx,
   requestTypeCode,
   budgetTypeCode,
+  returnCategory,
+  supplementCategory,
   amount,
   items,
 }) {
@@ -358,6 +373,8 @@ async function resolveApprovalPlanWithApprovers({
     tx,
     requestTypeCode,
     budgetTypeCode,
+    returnCategory,
+    supplementCategory,
     amount,
     items,
   });

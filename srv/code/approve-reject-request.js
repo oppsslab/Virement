@@ -138,9 +138,8 @@ async function prepareApprovalAction(request) {
     return null;
   }
 
-  const approverEmail = request.user?.id;
-  // const approverEmail = "willy.angkasa@pwc.com";
-
+  const approverEmail = normalizeEmail(request.user?.id);
+  
   const tx = cds.tx(request);
 
   const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
@@ -376,8 +375,7 @@ async function approveRequest(request) {
   const { requestId, taskIds, approverRow, rows, lastApprover, requestRow, syncOnly } = prepared;
   console.log(prepared)
 
-  const approverEmail = request.user?.id;
-  // const approverEmail = "willy.angkasa@pwc.com";
+  const approverEmail = normalizeEmail(request.user?.id);
 
   const currentLevel = requestRow.currentApprovalLevel; // 1
   console.log("currentLevel:", currentLevel)
@@ -664,7 +662,7 @@ async function rejectRequest(request) {
 
   const { requestId, approverRow, row, lastApprover, taskIds } = prepared;
 
-  const approverEmail = request.user?.id;
+  const approverEmail = normalizeEmail(request.user?.id);
   // const approverEmail = "willy.angkasa@pwc.com";
 
   const tx = cds.tx(request);

@@ -33,6 +33,7 @@
           <NavigationPropertyBinding Path="requestType" Target="RequestType"/>
           <NavigationPropertyBinding Path="budgetType" Target="BudgetType"/>
           <NavigationPropertyBinding Path="returnCategory" Target="ReturnCategory"/>
+          <NavigationPropertyBinding Path="supplementCategory" Target="SupplementCategory"/>
           <NavigationPropertyBinding Path="status" Target="RequestStatus"/>
           <NavigationPropertyBinding Path="RequestItems" Target="RequestItems"/>
           <NavigationPropertyBinding Path="RequestApprovers" Target="RequestApprovers"/>
@@ -77,6 +78,10 @@
           <NavigationPropertyBinding Path="texts" Target="ReturnCategory_texts"/>
           <NavigationPropertyBinding Path="localized" Target="ReturnCategory_texts"/>
         </EntitySet>
+        <EntitySet Name="SupplementCategory" EntityType="ZSVC_PPS_VIREMENT.SupplementCategory">
+          <NavigationPropertyBinding Path="texts" Target="SupplementCategory_texts"/>
+          <NavigationPropertyBinding Path="localized" Target="SupplementCategory_texts"/>
+        </EntitySet>
         <EntitySet Name="RequestStatus" EntityType="ZSVC_PPS_VIREMENT.RequestStatus">
           <NavigationPropertyBinding Path="texts" Target="RequestStatus_texts"/>
           <NavigationPropertyBinding Path="localized" Target="RequestStatus_texts"/>
@@ -105,6 +110,7 @@
         <EntitySet Name="RequestType_texts" EntityType="ZSVC_PPS_VIREMENT.RequestType_texts"/>
         <EntitySet Name="BudgetType_texts" EntityType="ZSVC_PPS_VIREMENT.BudgetType_texts"/>
         <EntitySet Name="ReturnCategory_texts" EntityType="ZSVC_PPS_VIREMENT.ReturnCategory_texts"/>
+        <EntitySet Name="SupplementCategory_texts" EntityType="ZSVC_PPS_VIREMENT.SupplementCategory_texts"/>
         <EntitySet Name="RequestStatus_texts" EntityType="ZSVC_PPS_VIREMENT.RequestStatus_texts"/>
         <EntitySet Name="AssetStatus_texts" EntityType="ZSVC_PPS_VIREMENT.AssetStatus_texts"/>
         <EntitySet Name="ApproverStatus_texts" EntityType="ZSVC_PPS_VIREMENT.ApproverStatus_texts"/>
@@ -138,6 +144,10 @@
           <ReferentialConstraint Property="returnCategory_code" ReferencedProperty="code"/>
         </NavigationProperty>
         <Property Name="returnCategory_code" Type="Edm.String" MaxLength="1"/>
+        <NavigationProperty Name="supplementCategory" Type="ZSVC_PPS_VIREMENT.SupplementCategory">
+          <ReferentialConstraint Property="supplementCategory_code" ReferencedProperty="code"/>
+        </NavigationProperty>
+        <Property Name="supplementCategory_code" Type="Edm.String" MaxLength="1"/>
         <Property Name="transferCategory" Type="Edm.String" MaxLength="1"/>
         <NavigationProperty Name="status" Type="ZSVC_PPS_VIREMENT.RequestStatus">
           <ReferentialConstraint Property="status_code" ReferencedProperty="code"/>
@@ -403,6 +413,20 @@
           <ReferentialConstraint Property="code" ReferencedProperty="code"/>
         </NavigationProperty>
       </EntityType>
+      <EntityType Name="SupplementCategory">
+        <Key>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="1" Nullable="false"/>
+        <NavigationProperty Name="texts" Type="Collection(ZSVC_PPS_VIREMENT.SupplementCategory_texts)">
+          <OnDelete Action="Cascade"/>
+        </NavigationProperty>
+        <NavigationProperty Name="localized" Type="ZSVC_PPS_VIREMENT.SupplementCategory_texts">
+          <ReferentialConstraint Property="code" ReferencedProperty="code"/>
+        </NavigationProperty>
+      </EntityType>
       <EntityType Name="RequestStatus">
         <Key>
           <PropertyRef Name="code"/>
@@ -545,6 +569,16 @@
         <Property Name="code" Type="Edm.String" MaxLength="1" Nullable="false"/>
       </EntityType>
       <EntityType Name="ReturnCategory_texts">
+        <Key>
+          <PropertyRef Name="locale"/>
+          <PropertyRef Name="code"/>
+        </Key>
+        <Property Name="locale" Type="Edm.String" MaxLength="14" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" MaxLength="255"/>
+        <Property Name="descr" Type="Edm.String" MaxLength="1000"/>
+        <Property Name="code" Type="Edm.String" MaxLength="1" Nullable="false"/>
+      </EntityType>
+      <EntityType Name="SupplementCategory_texts">
         <Key>
           <PropertyRef Name="locale"/>
           <PropertyRef Name="code"/>
@@ -1676,6 +1710,30 @@
               <Collection>
                 <Record Type="Common.ValueListParameterInOut">
                   <PropertyValue Property="LocalDataProperty" PropertyPath="returnCategory_code"/>
+                  <PropertyValue Property="ValueListProperty" String="code"/>
+                </Record>
+              </Collection>
+            </PropertyValue>
+          </Record>
+        </Annotation>
+        <Annotation Term="Common.Label" String="Return Category"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/supplementCategory">
+        <Annotation Term="Common.Label" String="Supplement Category"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.Requests/supplementCategory_code">
+        <Annotation Term="Common.Text" Path="supplementCategory/descr">
+          <Annotation Term="UI.TextArrangement" EnumMember="UI.TextArrangementType/TextOnly"/>
+        </Annotation>
+        <Annotation Term="Common.ValueListWithFixedValues" Bool="true"/>
+        <Annotation Term="Common.ValueList">
+          <Record Type="Common.ValueListType">
+            <PropertyValue Property="CollectionPath" String="SupplementCategory"/>
+            <PropertyValue Property="SearchSupported" Bool="false"/>
+            <PropertyValue Property="Parameters">
+              <Collection>
+                <Record Type="Common.ValueListParameterInOut">
+                  <PropertyValue Property="LocalDataProperty" PropertyPath="supplementCategory_code"/>
                   <PropertyValue Property="ValueListProperty" String="code"/>
                 </Record>
               </Collection>
@@ -3373,6 +3431,39 @@
               <Annotation Term="Core.SymbolicName" String="CENTRALFUND"/>
               <PropertyValue Property="Value" String="C"/>
             </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="HALFYEAREX"/>
+              <PropertyValue Property="Value" String="H"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.SupplementCategory">
+        <Annotation Term="UI.Identification">
+          <Collection>
+            <Record Type="UI.DataField">
+              <PropertyValue Property="Value" Path="name"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.SupplementCategory/name">
+        <Annotation Term="Common.Label" String="Name"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.SupplementCategory/descr">
+        <Annotation Term="Common.Label" String="Description"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.SupplementCategory/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="SUPPLEMENT"/>
+              <PropertyValue Property="Value" String="S"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="HALFYEAR"/>
+              <PropertyValue Property="Value" String="H"/>
+            </Record>
           </Collection>
         </Annotation>
       </Annotations>
@@ -3877,6 +3968,33 @@
             <Record Type="Validation.AllowedValue">
               <Annotation Term="Core.SymbolicName" String="CENTRALFUND"/>
               <PropertyValue Property="Value" String="C"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="HALFYEAREX"/>
+              <PropertyValue Property="Value" String="H"/>
+            </Record>
+          </Collection>
+        </Annotation>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.SupplementCategory_texts/locale">
+        <Annotation Term="Common.Label" String="Language Code"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.SupplementCategory_texts/name">
+        <Annotation Term="Common.Label" String="Name"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.SupplementCategory_texts/descr">
+        <Annotation Term="Common.Label" String="Description"/>
+      </Annotations>
+      <Annotations Target="ZSVC_PPS_VIREMENT.SupplementCategory_texts/code">
+        <Annotation Term="Validation.AllowedValues">
+          <Collection>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="SUPPLEMENT"/>
+              <PropertyValue Property="Value" String="S"/>
+            </Record>
+            <Record Type="Validation.AllowedValue">
+              <Annotation Term="Core.SymbolicName" String="HALFYEAR"/>
+              <PropertyValue Property="Value" String="H"/>
             </Record>
           </Collection>
         </Annotation>
