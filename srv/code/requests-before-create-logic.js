@@ -1408,6 +1408,28 @@ module.exports = async function (request) {
     }
 
     /*
+     * At least one supporting attachment is mandatory on first
+     * submission. Draft activation passes the draft's child attachment
+     * rows in request.data.RequestAttachments (same as RequestItems
+     * above); the upper bound of 5 is enforced by the model's
+     * @Validation.MaxItems on RequestAttachments (srv/service.cds).
+     */
+    if (isFirstSubmission) {
+      const attachmentCount = (request.data.RequestAttachments || []).length;
+
+      if (attachmentCount < 1) {
+        LOG.error("Request failed submission validation - no attachment.");
+
+        request.error(
+          400,
+          "At least one attachment is required before submitting the request.",
+        );
+
+        return;
+      }
+    }
+
+    /*
      * Validate WBS is filled on all items when Budget Type is
      * Project (P), regardless of request type.
      */
