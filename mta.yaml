@@ -23,6 +23,8 @@ build-parameters:
           bash -c "cds -v | grep 'cds-dk' || npm i --production --no-save @sap/cds-dk"
         - bash -c "export PATH=$PATH:$(pwd)/node_modules/.bin"
         - cds build --production
+        - cp node_modules/@cap-js/attachments/db/data/sap.attachments-ScanStates_texts.csv gen/db/src/gen/data/
+        - cp db/hdi-overrides/sap.attachments-ScanStates_texts.hdbtabledata gen/db/src/gen/data/
   after-all:
     - builder: custom
       commands:

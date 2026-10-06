@@ -1,0 +1,35 @@
+{
+  "format_version": 1,
+  "imports": [
+    {
+      "target_table": "SAP_ATTACHMENTS_SCANSTATES_TEXTS",
+      "source_data": {
+        "data_type": "CSV",
+        "file_name": "sap.attachments-ScanStates_texts.csv",
+        "has_header": true,
+        "type_config": {
+          "delimiter": ";"
+        }
+      },
+      "import_settings": {
+        "import_columns": [
+          "LOCALE",
+          "CODE",
+          "NAME",
+          "DESCR"
+        ],
+        "include_filter": [
+          {
+            "LOCALE": "__none__"
+          }
+        ]
+      },
+      "column_mappings": {
+        "LOCALE": "locale",
+        "CODE": "code",
+        "NAME": "name",
+        "DESCR": "descr"
+      }
+    }
+  ]
+}

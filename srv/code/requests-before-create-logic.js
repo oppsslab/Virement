@@ -550,7 +550,7 @@ function validateVirementItemCounts(request, { items, requestTypeCode }) {
     return Number(item.transferOutAmount) > 0;
   }).length;
 
-  if (transferInCount < 1 || transferInCount > 5) {
+  if (transferInCount < 1 || transferInCount > 50) {
     LOG.error(
       "Invalid Transfer In line item count for Virement request:",
       transferInCount,
@@ -558,7 +558,7 @@ function validateVirementItemCounts(request, { items, requestTypeCode }) {
 
     request.error(
       400,
-      "A Virement request must have between 1 and 5 Request Items with " +
+      "A Virement request must have between 1 and 50 Request Items with " +
         "a Transfer In Amount.",
     );
 
@@ -1698,11 +1698,12 @@ module.exports = async function (request) {
         items: requestItems,
       });
 
-      const level1Emails = new Set();
-      const level2Emails = new Set();
       const allEmails = new Set();
+      const levelsByEmail = new Map();
 
       for (const { level, emails } of plan) {
+        const levelFamily = level.charAt(0);
+
         for (const email of emails) {
           const normalized = normalizeUserId(email);
 
@@ -1712,30 +1713,30 @@ module.exports = async function (request) {
 
           allEmails.add(normalized);
 
-          if (level === "2") {
-            level2Emails.add(normalized);
-          } else if (level.startsWith("1")) {
-            level1Emails.add(normalized);
+          if (!levelsByEmail.has(normalized)) {
+            levelsByEmail.set(normalized, new Set());
           }
+
+          levelsByEmail.get(normalized).add(levelFamily);
         }
       }
 
-      const level1And2Overlap = [...level1Emails].filter((email) =>
-        level2Emails.has(email),
-      );
+      const multiLevelEmails = [...levelsByEmail]
+        .filter(([, families]) => families.size > 1)
+        .map(([email]) => email);
 
-      if (level1And2Overlap.length) {
+      if (multiLevelEmails.length) {
         LOG.error(
           "Request failed submission validation - the same person is " +
-            "assigned as both a Level 1 and the Level 2 approver.",
-          JSON.stringify({ requestId, overlap: level1And2Overlap }),
+            "assigned to more than one approval level.",
+          JSON.stringify({ requestId, overlap: multiLevelEmails }),
         );
 
         request.error(
           400,
-          "The Level 1 approver and the Level 2 approver cannot be the " +
-            "same person. Please ask an admin to correct the Approver " +
-            "Matrix before submitting this request.",
+          "The same person cannot be assigned to more than one approval " +
+            "level (e.g. Level 1, Level 2 and Level 3). Please ask an admin " +
+            "to correct the Approver Matrix before submitting this request.",
         );
 
         return;
