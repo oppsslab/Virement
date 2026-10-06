@@ -464,33 +464,13 @@ annotate service.Requests with @(
          * something to retry: a Transfer with an Earmarked Funds
          * document that S/4 still reports as not completed.
          *
-         * Not in use for now - unconditionally hidden. Restore the
-         * condition below (requestType_code/earmarkedFundsDocNumber/
-         * earmarkedFundsIsCompleted/IsActiveEntity) to bring the
-         * button back.
          */
         {
             $Type        : 'UI.DataFieldForAction',
             Action       : 'service.retryEarmarkedFundsCompletion',
             Label        : '{i18n>RetryEarmarkedFundsCompletion}',
-            // ![@UI.Hidden]: {$edmJson: {$Or: [
-            //     {$Ne: [
-            //         {$Path: 'requestType_code'},
-            //         'T'
-            //     ]},
-            //     {$Eq: [
-            //         {$Path: 'earmarkedFundsDocNumber'},
-            //         null
-            //     ]},
-            //     {$Eq: [
-            //         {$Path: 'earmarkedFundsIsCompleted'},
-            //         true
-            //     ]},
-            //     {$Eq: [
-            //         {$Path: 'IsActiveEntity'},
-            //         false
-            //     ]}
-            // ]}}
+            // Completion is automatic on approval (see approve-reject-request.js);
+            // the manual retry is hidden.
             ![@UI.Hidden]: true
         },
     ],

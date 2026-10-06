@@ -2,6 +2,7 @@ const cds = require("@sap/cds");
 
 const { getDestination } = require("@sap-cloud-sdk/connectivity");
 const { executeHttpRequest } = require("@sap-cloud-sdk/http-client");
+const xml2js = require("xml2js");
 
 const LOG = cds.log("earmarked-funds");
 
@@ -14,20 +15,8 @@ const LOG = cds.log("earmarked-funds");
 const DESTINATION_NAME = "CPI";
 
 const EARMARKED_FUNDS_PATH = "/http/earmarkedfunds/EarmarkedFundsDocument";
+const COMPLETE_RFC_ENDPOINT = "/http/Z_KFM_EF_COMPLETE";
 
-/*
- * The standard SAP OData V4 API (API_EARMARKEDFUNDSDOCUMENT / A2X),
- * used only for the completion PATCH - the CPI iFlow above
- * (EARMARKED_FUNDS_PATH) only exposes GET and POST, per the
- * integration guide. This is a NATIVE S/4 OData V4 service path, not
- * a CPI iFlow path, so - like the Cost Centre/GL Account/Material
- * Group/WBS value helps (see utils/value-help.js) - it goes through
- * the S4_DESTINATION_NAME on-premise destination (Cloud Connector),
- * not the CPI one: routing this through 'CPI' failed with "Failed to
- * get CSRF token", since that destination only proxies its own
- * iFlow's paths.
- */
-const S4_DESTINATION_NAME = "QA1-800-S4HANA";
 
 /*
  * Confirmed against the service's own OpenAPI spec
@@ -365,86 +354,91 @@ async function createEarmarkedFundsDocument({
   return { documentNumber, raw: response?.data };
 }
 
-/**
- * Fetches a CSRF token + session cookie for a subsequent PATCH,
- * against the given (GET-able) url on the given destination.
- *
- * Done manually rather than via the SAP Cloud SDK's built-in
- * automatic CSRF pre-flight (executeHttpRequest's default
- * fetchCsrfToken: true): that pre-flight always appends a trailing
- * slash to the request's own URL first (a workaround for a different,
- * older S/4 redirect issue - see the SDK's own csrf-token-middleware
- * source), which THIS service instead rejects outright as "URI has a
- * slash as last character" (IWCOR/CX_OD_URI_SYNTAX_ERROR) on an
- * entity-key path like ours - confirmed live via the SAP Gateway
- * payload trace and error log. Fetching the token ourselves against
- * the url as-is (no appended slash) avoids that, while this service
- * does genuinely enforce CSRF (confirmed live: disabling the fetch
- * entirely gets "CSRF token is missing" on the PATCH), so it can't
- * just be skipped either.
- *
- * @param {object} destination
- * @param {string} url
- * @returns {Promise<object>} headers to spread onto the PATCH call -
- *   empty if no token could be obtained, in which case the PATCH will
- *   fail with S/4's own "CSRF token is missing" instead
+function escapeXml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/*
+ * S/4 document numbers are CHAR10 with leading zeros (e.g. 0200000048),
+ * but Requests.earmarkedFundsDocNumber is stored without them.
  */
-async function fetchCsrfHeaders(destination, url) {
-  try {
-    const response = await executeHttpRequest(
-      destination,
-      {
-        method: "GET",
-        url,
-        headers: { Accept: "application/json", "x-csrf-token": "Fetch" },
-      },
-      { fetchCsrfToken: false },
-    );
+function padDocumentNumber(documentNumber) {
+  const value = String(documentNumber ?? "").trim();
 
-    const token = response?.headers?.["x-csrf-token"];
+  return /^\d+$/.test(value) ? value.padStart(10, "0") : value;
+}
 
-    if (!token) {
-      return {};
-    }
+function buildCompleteXml({ documentNumber, test }) {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<n0:Z_KFM_EF_COMPLETE xmlns:n0="urn:sap-com:document:sap:rfc:functions">',
+    `  <IM_BELNR>${escapeXml(padDocumentNumber(documentNumber))}</IM_BELNR>`,
+    `  <IM_TEST>${test ? "X" : ""}</IM_TEST>`,
+    "  <T_RETURN></T_RETURN>",
+    "</n0:Z_KFM_EF_COMPLETE>",
+  ].join("\n");
+}
 
-    const setCookie = response?.headers?.["set-cookie"];
+function findXmlValue(object, localName) {
+  if (!object || typeof object !== "object") return undefined;
 
-    const cookie = Array.isArray(setCookie)
-      ? setCookie.map((entry) => String(entry).split(";")[0]).join("; ")
-      : setCookie
-        ? String(setCookie).split(";")[0]
-        : "";
-
-    return { "x-csrf-token": token, ...(cookie ? { Cookie: cookie } : {}) };
-  } catch (error) {
-    LOG.error(
-      "Failed to fetch a CSRF token ahead of an Earmarked Funds item PATCH.",
-      JSON.stringify({ url, detail: extractErrorDetail(error) }),
-    );
-
-    return {};
+  for (const [key, value] of Object.entries(object)) {
+    const name = key.includes(":") ? key.split(":").pop() : key;
+    if (name === localName) return value;
   }
+
+  for (const value of Object.values(object)) {
+    const found = findXmlValue(value, localName);
+    if (found !== undefined) return found;
+  }
+
+  return undefined;
+}
+
+function firstText(value) {
+  const v = Array.isArray(value) ? value[0] : value;
+  return typeof v === "string" ? v.trim() : "";
+}
+
+async function parseCompleteResponse(rawResponse) {
+  const text = Buffer.isBuffer(rawResponse)
+    ? rawResponse.toString("utf8")
+    : String(rawResponse ?? "");
+
+  if (!text.trim()) return [];
+
+  const parsed = await xml2js.parseStringPromise(text);
+  const returnTable = findXmlValue(parsed, "T_RETURN");
+  const items = findXmlValue(returnTable, "item") ?? [];
+
+  return (Array.isArray(items) ? items : [items])
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      type: firstText(item.TYPE).toUpperCase(),
+      message: firstText(item.MESSAGE),
+    }));
 }
 
 /**
- * Marks an existing Earmarked Funds document as completed, once the
- * Virement it reserved funds for has actually been posted to S/4
- * (see post-to-s4-logic.js: called after the combined Transfer
- * out+in document number is set).
- *
- * Uses the standard S/4 OData V4 API directly (PATCH), not the CPI
- * iFlow used for create/read - that iFlow only exposes GET and POST
- * per the integration guide. A blind update (If-Match: *) is used
- * since this app has no prior GET/ETag for the document at this
- * point.
+ * Marks an existing Earmarked Funds document as completed by calling
+ * the Z_KFM_EF_COMPLETE RFC through the CPI iFlow (same route as the
+ * FMBB posting). The RFC wraps the standard FMFR_CHANGE_COMPLETION_FLAG
+ * on the S/4 side.
  *
  * @param {object} params
- * @param {string} params.documentNumber - the Earmarked Funds
- *   document number to complete (Requests.earmarkedFundsDocNumber)
+ * @param {string} params.documentNumber - the Earmarked Funds document
+ *   number to complete (Requests.earmarkedFundsDocNumber)
+ * @param {boolean} [params.test=false] - check-only run; nothing is
+ *   changed in S/4
  * @returns {Promise<void>}
  * @throws {Error} with .statusCode and a message safe to show the user
  */
-async function completeEarmarkedFundsDocument({ documentNumber }) {
+async function completeEarmarkedFundsDocument({ documentNumber, test = false }) {
   if (!documentNumber) {
     const error = new Error(
       "An Earmarked Funds document number is required to mark it complete.",
@@ -456,12 +450,12 @@ async function completeEarmarkedFundsDocument({ documentNumber }) {
   }
 
   const destination = await getDestination({
-    destinationName: S4_DESTINATION_NAME,
+    destinationName: DESTINATION_NAME,
   });
 
   if (!destination) {
     const error = new Error(
-      `Destination '${S4_DESTINATION_NAME}' was not found. The Earmarked ` +
+      `Destination '${DESTINATION_NAME}' was not found. The Earmarked ` +
         "Funds document could not be marked complete.",
     );
 
@@ -474,289 +468,79 @@ async function completeEarmarkedFundsDocument({ documentNumber }) {
     destination.originalProperties?.destinationConfiguration?.URL ||
     destination.url;
 
-  const baseUrl = String(configuredUrl || "").replace(/\/$/, "");
-
-  const escapedKey = String(documentNumber).replace(/'/g, "''");
-
-  /*
-   * No ?sap-client here, unlike the CPI-routed calls above - this
-   * on-premise destination already carries the client (QA1-800-...),
-   * same as every value-help call through it (see utils/value-help.js
-   * and utils/cost-centers.js: neither appends sap-client either).
-   */
-  const documentUrl = `${baseUrl}${EARMARKED_FUNDS_UPDATE_PATH}('${escapedKey}')`;
-
-  /*
-   * EarmarkedFundsIsCompleted on the header is a computed/read-only
-   * status - confirmed live: a PATCH against it returns 200 with no
-   * SAP__Messages, but silently leaves the value unchanged. The
-   * actual writable completion flag is per LINE ITEM
-   * (EmrkdFndsItmIsCompleted on _EarmarkedFundsDocumentItem), so
-   * every item has to be fetched and completed individually.
-   */
-  let items;
-
-  try {
-    const itemsResponse = await executeHttpRequest(destination, {
-      method: "GET",
-      url: `${documentUrl}/_EarmarkedFundsDocumentItem`,
-      headers: { Accept: "application/json" },
-    });
-
-    items = itemsResponse?.data?.value || [];
-  } catch (error) {
-    const detail = extractErrorDetail(error);
-
-    LOG.error(
-      "Failed to read Earmarked Funds document items before " +
-        "completing them.",
-      JSON.stringify({ documentNumber, httpStatus: error?.response?.status, detail }),
-    );
-
-    const wrapped = new Error(
-      `Earmarked Funds document ${documentNumber} items could not be ` +
-        `read: ${detail}`,
-    );
-
-    wrapped.statusCode = 502;
-    wrapped.detail = detail;
-
-    throw wrapped;
-  }
-
-  if (!items.length) {
+  if (!configuredUrl) {
     const error = new Error(
-      `Earmarked Funds document ${documentNumber} has no line items to complete.`,
+      `Destination '${DESTINATION_NAME}' has no URL configured.`,
     );
 
-    error.statusCode = 502;
+    error.statusCode = 500;
 
     throw error;
   }
 
-  const failures = [];
+  const baseUrl = String(configuredUrl).replace(/\/$/, "");
+  const url = baseUrl.endsWith(COMPLETE_RFC_ENDPOINT)
+    ? baseUrl
+    : `${baseUrl}${COMPLETE_RFC_ENDPOINT}`;
 
-  for (const item of items) {
-    const itemNumber = item.EarmarkedFundsDocumentItem;
-
-    /*
-     * The documented top-level entity set with its full composite
-     * key (see the OpenAPI spec's
-     * /EarmarkedFundsDocumentItem/{EarmarkedFundsDocument}/{EarmarkedFundsDocumentItem}
-     * path), rather than the nested navigation-property form used
-     * for the GET above - this is the exact shape PATCH is
-     * documented against.
-     */
-    const escapedItemNumber = String(itemNumber).replace(/'/g, "''");
-
-    const itemUrl =
-      `${baseUrl}${EARMARKED_FUNDS_S4_BASE_PATH}/EarmarkedFundsDocumentItem` +
-      `(EarmarkedFundsDocument='${escapedKey}',EarmarkedFundsDocumentItem='${escapedItemNumber}')`;
-
-    try {
-      let response;
-
-      // See fetchCsrfHeaders' own doc comment for why this is fetched
-      // manually rather than left to executeHttpRequest's default
-      // automatic pre-flight.
-      const csrfHeaders = await fetchCsrfHeaders(destination, itemUrl);
-
-      try {
-        /*
-         * Tried first, completion-flag only. Once this item's amount
-         * has actually been drawn down by a downstream posting (as
-         * here - this runs after the Transfer document referencing it
-         * already posted, see approve-reject-request.js), S/4 locks
-         * its account assignment: merely naming FundsCenter /
-         * CommitmentItem / CompanyCode / TransactionCurrency in the
-         * PATCH body - even resending their current, unchanged values -
-         * is treated as an attempted change and rejected with
-         * "Read-only fields must not be changed".
-         */
-        response = await executeHttpRequest(
-          destination,
-          {
-            method: "PATCH",
-            url: itemUrl,
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-              "If-Match": "*",
-              ...csrfHeaders,
-            },
-            data: {
-              EarmarkedFundsDocument: documentNumber,
-              EmrkdFndsItmIsCompleted: true,
-              EmrkdFndsItmIsApproved: true,
-            },
-          },
-          { fetchCsrfToken: false },
-        );
-      } catch (minimalError) {
-        const minimalDetail = extractErrorDetail(minimalError);
-
-        if (!/funds center/i.test(minimalDetail)) {
-          throw minimalError;
-        }
-
-        /*
-         * Before the item has been consumed by anything downstream, S/4
-         * instead rejects a completion-only PATCH with "No funds
-         * center entered/derived in item 00001 (1000//)" - it
-         * re-checks account assignment on this PATCH as if the fields
-         * not included in the body were blanked out, rather than left
-         * untouched. Resending the assignment this item was actually
-         * created with (from the GET above) alongside the completion
-         * flag avoids that case.
-         */
-        response = await executeHttpRequest(
-          destination,
-          {
-            method: "PATCH",
-            url: itemUrl,
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-              "If-Match": "*",
-              ...csrfHeaders,
-            },
-            data: {
-              EarmarkedFundsDocument: documentNumber,
-              CompanyCode: item.CompanyCode,
-              TransactionCurrency: item.TransactionCurrency,
-              FundsCenter: item.FundsCenter,
-              CommitmentItem: item.CommitmentItem,
-              EmrkdFndsItmIsCompleted: true,
-              EmrkdFndsItmIsApproved: true,
-            },
-          },
-          { fetchCsrfToken: false },
-        );
-      }
-
-      LOG.info(
-        "Earmarked Funds item completion PATCH response.",
-        JSON.stringify({
-          documentNumber,
-          itemNumber,
-          httpStatus: response?.status,
-          isCompleted: response?.data?.EmrkdFndsItmIsCompleted,
-        }),
-      );
-    } catch (error) {
-      const detail = extractErrorDetail(error);
-
-      LOG.error(
-        "Failed to mark an Earmarked Funds item complete.",
-        JSON.stringify({
-          documentNumber,
-          itemNumber,
-          httpStatus: error?.response?.status,
-          detail,
-        }),
-      );
-
-      failures.push({ itemNumber, detail });
-    }
-  }
-
-  if (failures.length) {
-    const detail = failures
-      .map(({ itemNumber, detail: itemDetail }) => `item ${itemNumber}: ${itemDetail}`)
-      .join("; ");
-
-    const wrapped = new Error(
-      `Earmarked Funds document ${documentNumber} could not be fully ` +
-        `marked complete: ${detail}`,
-    );
-
-    wrapped.statusCode = 502;
-    wrapped.detail = detail;
-
-    throw wrapped;
-  }
-
-  /*
-   * All line items are completed - now complete the header itself.
-   * EarmarkedFundsIsCompleted is listed as writable in the official
-   * API's own -update schema, so this is attempted directly (same
-   * manual CSRF handling as the item PATCHes above, and same blind
-   * If-Match: * - no prior GET/ETag for the header at this point
-   * either).
-   *
-   * Deliberately minimal - EarmarkedFundsDocument (the header's own
-   * key) plus the completion/approval flags only. A version of this
-   * that echoed back every field the header's -update schema lists
-   * (EarmarkedFundsDocumentCategory, CompanyCode, TransactionCurrency,
-   * etc.) was tried and made things worse: S/4 rejected it outright
-   * with "Read-only fields must not be changed", confirming those
-   * identity fields are genuinely immutable once the document exists.
-   * This minimal body avoids that - S/4 accepts it (200), but
-   * confirmed live to silently leave EarmarkedFundsIsCompleted
-   * unchanged regardless: a real business-logic override, not a
-   * payload-shape problem this client can work around.
-   */
-  const headerPatchBody = {
-    EarmarkedFundsDocument: documentNumber,
-    EarmarkedFundsIsCompleted: true,
-    EarmarkedFundsIsApproved: true,
-    EmrkdFndsWasAlreadyAprvdOnce: true,
-  };
-
-  const headerCsrfHeaders = await fetchCsrfHeaders(destination, documentUrl);
+  let rawResponse;
 
   try {
-    const headerResponse = await executeHttpRequest(
-      destination,
-      {
-        method: "PATCH",
-        url: documentUrl,
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "If-Match": "*",
-          ...headerCsrfHeaders,
-        },
-        data: headerPatchBody,
+    const response = await executeHttpRequest(destination, {
+      method: "POST",
+      url,
+      headers: {
+        "Content-Type": "application/xml",
+        Accept: "application/xml",
       },
-      { fetchCsrfToken: false },
-    );
+      data: buildCompleteXml({ documentNumber, test }),
+    });
 
-    LOG.info(
-      "Earmarked Funds header completion PATCH response.",
-      JSON.stringify({
-        documentNumber,
-        httpStatus: headerResponse?.status,
-        isCompleted: headerResponse?.data?.EarmarkedFundsIsCompleted,
-      }),
-    );
+    rawResponse = response?.data;
   } catch (error) {
-    const detail = extractErrorDetail(error);
-
     LOG.error(
-      "Earmarked Funds line items were completed, but the header " +
-        "could not be marked complete.",
+      "Earmarked Funds completion request to CPI failed.",
       JSON.stringify({
         documentNumber,
         httpStatus: error?.response?.status,
-        detail,
+        detail: extractErrorDetail(error),
       }),
     );
 
-    const wrapped = new Error(
-      `Earmarked Funds document ${documentNumber}'s line items were ` +
-        `marked complete, but the header could not be: ${detail}`,
+    const failure = new Error(
+      "The Earmarked Funds document could not be marked complete.",
     );
 
-    wrapped.statusCode = 502;
-    wrapped.detail = detail;
+    failure.statusCode = 502;
+    failure.detail = extractErrorDetail(error);
 
-    throw wrapped;
+    throw failure;
+  }
+
+  const messages = await parseCompleteResponse(rawResponse);
+  const errors = messages.filter(({ type }) => type === "E" || type === "A");
+
+  if (errors.length) {
+    const failure = new Error(
+      errors
+        .map(({ message }) => message)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(" ")
+        .slice(0, 1000) ||
+        "S/4 could not mark the Earmarked Funds document complete.",
+    );
+
+    failure.statusCode = 422;
+
+    throw failure;
   }
 
   LOG.info(
-    "Earmarked Funds document marked complete (all items + header).",
-    JSON.stringify({ documentNumber, itemCount: items.length }),
+    test
+      ? "Earmarked Funds completion check-only run passed."
+      : "Earmarked Funds document marked complete.",
+    JSON.stringify({ documentNumber, messages }),
   );
 }
 

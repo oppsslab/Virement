@@ -108,8 +108,8 @@ Defined end-to-end in `mta.yaml` — 7 modules, 9 bound resources.
 
 Three external systems are reached purely by *destination name* at runtime — none are declared anywhere in this repo (not in `mta.yaml`, not in `xs-security.json`); they live only as BTP subaccount destinations:
 
-- `QA1-800-S4HANA` — on-prem S/4, via Cloud Connector, for value helps and the Earmarked Funds completion PATCH
-- `CPI` — the integration flow that fronts `ZFM_FI_FMBB_UPLOAD` and the Earmarked Funds creation API
+- `QA1-800-S4HANA` — on-prem S/4, via Cloud Connector, for the live value helps (Cost Centre, GL Account, Material Group, WBS)
+- `CPI` — the integration flow that fronts `ZFM_FI_FMBB_UPLOAD`, the Earmarked Funds creation/status API, and `Z_KFM_EF_COMPLETE` (Earmarked Funds completion)
 - `sap_process_automation_service` — SAP Build Process Automation's REST API
 
 > If a value-help or posting call starts failing with a connection error rather than a business error, check the destination configuration in BTP Cockpit first — it will not be visible anywhere in this codebase.
@@ -178,7 +178,7 @@ Amount tiers (scenario 6, and identically for plain Supplement/Return): `<30,000
 
 ### The "1A–1E" lettered mechanic
 
-Whenever Level 1 is `HOD_XFER_CC`, it resolves **once per transfer-out line item**, in item order — `1A`, `1B`, ... up to `1E` (the enforced 1–5 line cap), each scoped to that line's own `costCentre` via `ApproverMatrix.departmentBranch`. These are **independent parallel approvers**, not redundant alternates — `approve-reject-request.js` waits for every sibling letter to act before the request advances past Level 1 (see §5).
+Whenever Level 1 is `HOD_XFER_CC`, it resolves **once per transfer-out line item**, in item order — `1A`, `1B`, ... up to `1E` (the enforced 1–5 Transfer-Out line cap), each scoped to that line's own `costCentre` via `ApproverMatrix.departmentBranch`. These are **independent parallel approvers**, not redundant alternates — `approve-reject-request.js` waits for every sibling letter to act before the request advances past Level 1 (see §5).
 
 ### Project Virement scenario (`classifyVirementProjectScenario`)
 
@@ -207,15 +207,16 @@ Runs `@Before(CREATE, Requests)`, on both first submission and later edit-saves 
 5. **Material/GL alignment** — first 6 digits of Material must match first 6 of GL Account (exempt: Central Fund cost centre).
 6. **Cost Centre existence** — validated live against S/4.
 7. **Transfer In/Out exclusivity** — Virement only, no single item may carry both.
-8. **Item count bounds** — Virement only, 1–5 Transfer-In and 1–5 Transfer-Out items.
+8. **Item count bounds** — Virement only, 1–50 Transfer-In and 1–5 Transfer-Out items.
 9. **Balance check** — Virement only, total Transfer-Out must equal total Transfer-In.
 10. **Zero-amount rejection** — every submission; the relevant amount for the request's type must be non-zero.
 11. **Approval-plan gap check** — first submission only; any CAP-owned level with zero current approvers hard-blocks.
-12. **Same-person conflict checks** — first submission only; Level 1 (incl. 1A–1E) vs Level 2 overlap, and requestor-is-also-an-approver, both via `resolveApprovalPlanWithApprovers`.
+12. **Same-person conflict checks** — first submission only; one person assigned to any two approval levels (L1 vs L2, L2 vs L3, etc.; lettered 1A–1E count as one level) is blocked, plus requestor-is-also-an-approver, both via `resolveApprovalPlanWithApprovers`.
 13. **Project budget cap** — RM 5,000,000 on Transfer-out/Supplement total.
 14. **Request number generation** — first submission only.
 15. **S/4 posting simulation** — `simulatePostToS4`, `IV_TEST="X"`, first submission only; a posting-time failure is caught here, before any approver sees the request.
 16. **Earmarked Funds reservation** — Virement with transfer-out amount > 0, first submission only; failure aborts the whole submission (runs Before CREATE, nothing persisted yet).
+17. **Attachment required** — first submission only; at least one attachment must be present (max 5 via `@Validation.MaxItems`).
 
 ### Approve — `approve-reject-request.js`
 
@@ -252,7 +253,9 @@ Calls the RFC-enabled function module **`ZFM_FI_FMBB_UPLOAD`** through the `CPI`
 A budget reservation created at *submit* time (before the FMBB posting exists) for any **Non-Project** Virement carrying a transfer-out amount — so the money can't be double-committed while the request is in flight. Skipped entirely for **Project** Virement (`requests-before-create-logic.js` gates creation on `budgetTypeCode !== 'P'`, and the `earmarkedFundsDocNumber` field is hidden in the UI for Project too): the Earmarked Funds API's account assignment is Fund Center/Commitment Item only, which doesn't apply to WBS-based items, and reusing the WBS's derived Cost Centre there would be semantically wrong. Two different backends, on purpose:
 
 - **Create + read status** — via the `CPI` iFlow (GET/POST only).
-- **Complete** — via the native S/4 OData V4 API directly (`QA1-800-S4HANA`), because the CPI iFlow doesn't expose PATCH. **Currently disabled** — S/4 only exposes a plain field PATCH on `EarmarkedFundsIsCompleted` which confirmed-live does nothing; `requests-after-read-logic.js`'s `refreshEarmarkedFundsStatus` derives completion *locally* instead (true once the transfer document number is set). A manual retry exists: `retryEarmarkedFundsCompletion`, callable by any approver on the request.
+- **Complete** — via the CPI iFlow route `/http/Z_KFM_EF_COMPLETE` (SOAP-RFC XML, same destination as posting), which calls the RFC `Z_KFM_EF_COMPLETE` (ABAP side wraps the standard `FMFR_CHANGE_COMPLETION_FLAG`, `ZKFM_EF` function group). The document number is padded to 10 characters with leading zeros (`200000048` → `0200000048`) before it is sent. `T_RETURN` messages of type `E`/`A` fail the call; the function is `completeEarmarkedFundsDocument` in `utils/earmarked-funds.js`.
+- **Automatic on approval** — `approve-reject-request.js` calls it right after a successful S/4 posting of a Transfer. It is best-effort: a failure is logged for manual follow-up and never blocks the approval (the posting and task completion are already committed).
+- **Manual retry is hidden** — `retryEarmarkedFundsCompletion` still exists as an action, but its UI button is unconditionally `UI.Hidden` in `annotations.cds`. Restore the condition there to bring it back.
 
 ### Live S/4 value helps
 
@@ -364,6 +367,8 @@ Errors are capped at 20 rows shown, with a rollup count beyond that, and reject 
 **WBS S/4 service path.** Three services were tried before landing on the current one (`srv/code/utils/wbs-elements.js`): `API_WBSELEMENT_SRV/A_WBSElement` worked but has no Cost Center field at all; `API_ENTERPRISE_PROJECT_SRV/A_EnterpriseProjectElement` has `ResponsibleCostCenter` but returned a clean 200 with 0 rows for every query (the destination's technical user most likely isn't authorized for Enterprise Project data); the working path is now a **purpose-built custom value help**, `/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/WBSElementVH` (fields `WBSElement,WBSDescription,ResponsibleCostCenter`), confirmed against a live sample response. It also has a live data-quality quirk: it occasionally returns a row with a blank `WBSElement` key alongside a real description (e.g. `{"WBSElement":"","WBSDescription":"INSTL. PAPANTANDA","ResponsibleCostCenter":""}`) — `readWBSElements` filters these out defensively, since a blank key breaks the value-help dialog's row binding.
 
 **SAP Build's fully-qualified-path bug.** See §7 — any new unbound action/function called by a workflow needs registering in `srv/server.js`'s workaround lists, or it will silently fail from the workflow side while SAP Build's own Test tool appears to work fine.
+
+**Attachments text tables need a base HDI file (deploy failure).** `@cap-js/attachments` ships per-language `sap.attachments-ScanStates_texts_<lang>.csv` files, but `cds build` does not emit the base `sap.attachments-ScanStates_texts.hdbtabledata`, and the HANA deployer fails with `include_filter ... not disjunct` / `defines no include_filters`. The srv build in `mta.yaml` copies the base CSV and `db/hdi-overrides/sap.attachments-ScanStates_texts.hdbtabledata` (filter `__none__`, so it imports nothing) into `gen/db/src/gen/data/`. Upgrading `@cap-js/attachments` to 3.13.3 did not remove the need for this.
 
 **Debugging `ZFM_FI_FMBB_UPLOAD` (or any RFC-invoked S/4 function) — set an External Breakpoint, not a normal one.** This function is called via RFC from the `CPI` destination (see §6), not from a dialog session — a plain Session Breakpoint set in your own SAPGUI logon will never trigger for it, even though the code genuinely executes (confirmed by matching the exact `ET_RETURN` message text back to the ABAP source). In the Q (QA1) S/4 backend, set an **External Breakpoint** instead — Utilities → Breakpoints → External Breakpoints in the ABAP editor/debugger, tied to user ID `PWC_RAY` — before triggering the request submission from the app.
 

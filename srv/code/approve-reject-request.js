@@ -13,9 +13,7 @@ const {
 const postToS4Module = require("./post-to-s4-logic");
 const { performPostToS4, businessError } = postToS4Module;
 
-// TEMPORARY: unused while the Earmarked Funds completion call below is
-// disabled - see its own comment.
-// const { completeEarmarkedFundsDocument } = require("./utils/earmarked-funds");
+const { completeEarmarkedFundsDocument } = require("./utils/earmarked-funds");
 
 const insertRequestHistory = require("./insert-request-history");
 
@@ -561,18 +559,10 @@ async function approveRequest(request) {
   }
 
   /*
-   * TEMPORARY: the actual S/4 completion call is disabled here -
-   * completeEarmarkedFundsDocument can flip the line item's own
-   * completion flag, but S/4 only exposes a plain field PATCH for the
-   * header, not the real completion business action, so
-   * EarmarkedFundsIsCompleted can never actually be set through it
-   * (confirmed live: S/4 silently keeps it false regardless of the
-   * payload sent). Until a proper backend action exists, the Object
-   * Page derives completion locally instead - see
-   * refreshEarmarkedFundsStatus in requests-after-read-logic.js -
-   * from whether the Transfer this reservation was covering has
-   * posted, which is exactly the condition below. Revisit together.
-   *
+   * Best-effort: the approval and S/4 posting are already committed,
+   * so a completion failure is logged for manual follow-up, never
+   * surfaced as a failure of the approval.
+   */
   if (s4Result?.documentNumbers?.TRAN && s4Result?.earmarkedFundsDocNumber) {
     try {
       await completeEarmarkedFundsDocument({
@@ -600,7 +590,7 @@ async function approveRequest(request) {
       );
     }
   }
-  */
+
 
   try {
     for (const taskId of taskIds) {
