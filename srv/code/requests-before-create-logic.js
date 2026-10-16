@@ -62,12 +62,11 @@ const ROLE_JKEW = "MASS_UPLOAD_ALL";
 const ROLE_FUNCTIONAL = "MASS_UPLOAD_TRANSFER";
 
 /*
- * Only a BCM team member (see ams/dcl/cap/basePolicies.dcl POLICY
- * "VR_BCM") may raise a Return request that ends up as Budget
- * Zerorise ('Z') - whether the requestor explicitly chose it
- * (Non Project) or it was system-forced (Project - see the
- * returnCategory normalization below). "Return to Central Fund" ('C')
- * is unrestricted.
+ * Only a BCM team member (role BUDGET_ZERORISE) may raise a Return
+ * request that ends up as Budget Zerorise ('Z') - whether the
+ * requestor explicitly chose it (Non Project) or it was
+ * system-forced (Project - see the returnCategory normalization
+ * below). "Return to Central Fund" ('C') is unrestricted.
  */
 const ROLE_BCM = "BUDGET_ZERORISE";
 

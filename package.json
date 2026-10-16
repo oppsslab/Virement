@@ -7,7 +7,6 @@
     "@sap-cloud-sdk/connectivity": "^4.8.0",
     "@sap-cloud-sdk/http-client": "^4.8.0",
     "@sap-cloud-sdk/util": "^4.7.0",
-    "@sap/ams": "^3",
     "@sap/cds": "^9",
     "@sap/low-code-event-handler": "^1.2.5",
     "@sap/xsenv": ">=3.3.2 <3.3.3",
@@ -19,7 +18,6 @@
   },
   "devDependencies": {
     "@cap-js/sqlite": "^2.4",
-    "@sap/ams-dev": "^2",
     "@sap/dev-cap-tools": "^1.31.0"
   },
   "scripts": {
@@ -62,11 +60,11 @@
                 "email": "chun.leong.yeap@pwc.com",
                 "groups": []
               },
-              "policies": [
-                "cap.VR_REQUEST_APPROVE",
-                "cap.VR_FUNCTIONAL",
-                "cap.VR_JKEW",
-                "cap.VR_ADMIN"
+              "roles": [
+                "REQUEST_APPROVE",
+                "MASS_UPLOAD_TRANSFER",
+                "MASS_UPLOAD_ALL",
+                "ADMIN"
               ]
             }
           }

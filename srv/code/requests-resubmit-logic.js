@@ -21,9 +21,9 @@ const LOG = cds.log("requests-resubmit-logic");
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
 /*
- * Only a BCM team member (see ams/dcl/cap/basePolicies.dcl POLICY
- * "VR_BCM") may resubmit a Return request that resolves to Budget
- * Zerorise ('Z') - same restriction as first submission (see
+ * Only a BCM team member (role BUDGET_ZERORISE) may resubmit a
+ * Return request that resolves to Budget Zerorise ('Z') - same
+ * restriction as first submission (see
  * requests-before-create-logic.js), checked again here since a
  * rejected request can be edited (including its Return Category, for
  * Non Project) before resubmission.

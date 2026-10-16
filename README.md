@@ -18,7 +18,7 @@ Approval routing for Transfer (Non-Project) requests is rule-driven: the system 
 | Frontend | SAP Fiori Elements (OData V4), List Report + Object Page |
 | Platform | SAP Business Technology Platform, Cloud Foundry |
 | Database | SAP HANA (HDI container) |
-| Auth | XSUAA + SAP Identity Authentication Service (IAS) with Authorization Management (AMS) |
+| Auth | XSUAA (role collections) + SAP Identity Authentication Service (IAS, SCIM user-directory lookup only) |
 | Workflow | SAP Build Process Automation |
 | Integration | SAP Integration Suite (CPI), on-premise S/4HANA via Cloud Connector |
 | Attachments | SAP Document Management Service (via `@cap-js/sdm`) |
@@ -39,7 +39,7 @@ mbt build
 cf deploy mta_archives/virement_1.0.0.mtar
 ```
 
-Deployment provisions the CAP service, the Fiori app, and the HANA database. The AMS authorization-policy push (`ams/dcl/`) is currently **disabled** (see §2/§8) — see §12 below for build/deploy detail, and §11 for the checks worth running before you build.
+Deployment provisions the CAP service, the Fiori app, and the HANA database. See §12 below for build/deploy detail, and §11 for the checks worth running before you build.
 
 ---
 
@@ -58,7 +58,7 @@ A working reference for anyone picking up this codebase — what each part of th
 | A button/field silently doesn't respect a condition | Check `${...}` vs `%{...}` first — see the gotcha in [§11](#11-known-gotchas--hard-won-lessons) before anything else |
 | Add a new admin-maintained master-data table (a new "Grouping") | Copy the GLGrouping five-file pattern, see [§10](#10-master-data-maintenance-pattern) |
 | Change what SAP Build Process Automation receives at workflow start | `srv/code/utils/workflow-utils.js` — `startApprovalWorkflow` context, see [§7](#7-sap-build-workflow-integration) |
-| Add a new role/permission check | Declarative: `srv/service.cds` `@requires`. Conditional-in-code: `srv/code/utils/role-check.js` + a new AMS policy in `ams/dcl/cap/basePolicies.dcl`, see [§8](#8-authorization-model) |
+| Add a new role/permission check | Declarative: `srv/service.cds` `@requires`. Conditional-in-code: `srv/code/utils/role-check.js`'s `hasRole(user, roleName)` against a BTP Cockpit role collection, see [§8](#8-authorization-model) |
 | A Fiori Elements table column, hide/disable rule, or item order | `app/virement.zui_pps_virement/annotations.cds` — 5 `UI.LineItem` qualifiers, see [§9](#9-fiori-elements-app-structure) |
 | Deploy a change | `mbt build` then `cf deploy mta_archives/virement_1.0.0.mtar`, see [§12](#12-build--deploy-process) |
 | Change a BTP destination name or the BPA workflow definition/environment ID without a redeploy | **System Configuration** admin page, see [§13](#13-admin-configuration-pages-email--system-configuration) |
@@ -83,7 +83,7 @@ Two more classifications shape almost everything downstream:
 
 ## 2. Architecture & deployment topology
 
-Defined end-to-end in `mta.yaml` — 7 modules, 9 bound resources.
+Defined end-to-end in `mta.yaml` — 6 modules, 9 bound resources.
 
 ### Modules
 
@@ -95,7 +95,6 @@ Defined end-to-end in `mta.yaml` — 7 modules, 9 bound resources.
 | `virement-aux-destinations` | content | Creates 4 subaccount destinations (UAA, app-srv, HTML5-repo, and the API source SAP Build calls) |
 | `virement-launchpad` | html5 | Separate launchpad shell app |
 | `virement-aux-ui-deployer` | content | Pushes both zipped HTML5 apps into the HTML5 Apps Repo |
-| `virement-ams-policies-deployer` | nodejs task | **Disabled** (commented out in `mta.yaml`, along with `virement-srv`'s `deployed-after`/`AMS_DCL_ROOT`) — when enabled, runs `npm start` → `deploy-dcl`, pushing `ams/dcl/` policies to IAS. See §8. |
 
 ### Bound services
 
@@ -103,7 +102,7 @@ Defined end-to-end in `mta.yaml` — 7 modules, 9 bound resources.
 |---|---|
 | `virement-service-uaa` (XSUAA) | Login/OAuth, role collections `REQUEST_APPROVE` / `ADMIN` |
 | `virement-service-db` (HANA HDI) | Persistence |
-| `virement-ias` (Identity, `authorization.enabled: true`) | AMS/DCL policy-based authorization — X.509 bindings for both `virement-srv` and the policies deployer |
+| `virement-ias` (Identity) | SCIM user-directory lookup only (IAS department/section, §11) — X.509-bound to `virement-srv`. AMS/DCL policy-based authorization has been removed from this app (§8); this binding is not used for authorization. |
 | `virement-dms` | Attachment storage (Document Management Service, via `@cap-js/sdm`) |
 | `shared-connectivity` | Cloud Connector routing to on-prem S/4 |
 | `virement-service-destination`, `virement-service-metadata`, `shared-logs` | Destination lookups, service metadata, log aggregation |
@@ -300,25 +299,19 @@ All three, after committing their own change, best-effort swap the delegate in f
 
 ## 8. Authorization model
 
-Two mechanisms populate the exact same `req.user` role-name space, so CDS `@requires` and in-code `hasRole` checks never need to know which one granted a role:
+Authorization is plain XSUAA role collections, defined in `xs-security.json`, granted entirely from BTP Cockpit → Security → Role Collections:
 
-| Mechanism | Defined in | Roles | Granted via |
-|---|---|---|---|
-| XSUAA (classic) | `xs-security.json` | `REQUEST_APPROVE`, `ADMIN` | BTP Cockpit role collections |
-| AMS / IAS (policy-based) | `ams/dcl/cap/basePolicies.dcl` | `REQUEST_APPROVE`, `MASS_UPLOAD_TRANSFER`, `MASS_UPLOAD_ALL`, `BUDGET_ZERORISE` | IAS admin console → Users & Authorizations → Groups (`cap - VR_*`) |
+| Role | Gates |
+|---|---|
+| `REQUEST_APPROVE` | Approve/Reject/Delegate/PostToS4 actions — declarative `@requires` in `service.cds` |
+| `ADMIN` | Admin-only entities/actions (`EmailConfiguration`, `SystemConfiguration`, `delegatePendingApproval`, etc.) — declarative `@requires`/`restrict`, plus front-end-only tab/tile hiding (below) |
+| `MASS_UPLOAD_TRANSFER` | Which columns a bulk item-upload template exposes — `hasRole` in code, never at the CDS transport-authorization layer |
+| `MASS_UPLOAD_ALL` | Same, broader column set — `hasRole` in code |
+| `BUDGET_ZERORISE` | Raising a Budget Zerorise Return — `hasRole` in `requests-before-create-logic.js` and `requests-resubmit-logic.js` |
 
-`ADMIN` exists only on the XSUAA side — no AMS policy counterpart. The three "mass upload"/BCM roles exist *only* as AMS policy targets and are checked purely in JS (never at the CDS transport-authorization layer):
+To check any role in code: `hasRole(user, roleName)` from `srv/code/utils/role-check.js`. For a whole-action gate instead, use CDS `@requires: ['RoleName']` in `srv/service.cds`.
 
-| AMS Policy | → Role checked | Gates |
-|---|---|---|
-| `VR_REQUEST_APPROVE` | `REQUEST_APPROVE` | Approve/Reject/Delegate/PostToS4 actions — declarative `@requires` in `service.cds` |
-| `VR_FUNCTIONAL` | `MASS_UPLOAD_TRANSFER` | Which columns a bulk item-upload template exposes — `hasRole` in code |
-| `VR_JKEW` | `MASS_UPLOAD_ALL` | Same, broader column set — `hasRole` in code |
-| `VR_BCM` | `BUDGET_ZERORISE` | Raising a Budget Zerorise Return — `hasRole` in `requests-before-create-logic.js` and `requests-resubmit-logic.js` |
-
-> To add a new role: add the AMS policy to `ams/dcl/cap/basePolicies.dcl` (this file is hand-maintained, not fully auto-generated — see the gotcha in §11 before touching `dclGenerationPackage`), then check it with `hasRole(user, roleName)` from `srv/code/utils/role-check.js`. For a whole-action gate instead, use CDS `@requires: ['RoleName']` in `srv/service.cds` and it works from either grant path automatically.
-
-> **The AMS policy deployer is currently disabled** (`virement-ams-policies-deployer` and `virement-srv`'s `deployed-after`/`AMS_DCL_ROOT` are commented out in `mta.yaml`, `ams/dcl/cap/basePolicies.dcl` left otherwise untouched). A deploy today does **not** push `VR_*` policies to IAS — so on a brand-new subaccount (e.g. a PRD deploy), `MASS_UPLOAD_TRANSFER`/`MASS_UPLOAD_ALL`/`BUDGET_ZERORISE` will have no AMS group to grant them, and anyone needing those features must be handled another way until the module is re-enabled. `REQUEST_APPROVE`/`ADMIN` are unaffected — they're plain XSUAA role collections, granted entirely from BTP Cockpit, independent of AMS. To re-enable: uncomment the module block and the two `virement-srv` properties in `mta.yaml`, then redeploy.
+> **AMS/IAS policy-based authorization has been removed from this app** (`ams/dcl/` deleted, `@sap/ams`/`@sap/ams-dev` removed from `package.json`, the already-disabled `virement-ams-policies-deployer` module deleted from `mta.yaml` rather than left commented out). It had never been wired into any live authorization check — `IdentityServiceAuthProvider` was never configured, so the DCL policies it deployed were enforced nowhere; all real authorization has always been the XSUAA checks above. **Operational gap left by this removal**: `MASS_UPLOAD_TRANSFER`, `MASS_UPLOAD_ALL`, and `BUDGET_ZERORISE` previously existed *only* as AMS policy targets (IAS groups `cap - VR_FUNCTIONAL`/`VR_JKEW`/`VR_BCM`), with no XSUAA role-collection counterpart — so on any subaccount where those IAS groups haven't already been manually assigned (in particular a fresh deploy, e.g. PRD), nobody can currently be granted these three roles until a replacement is set up (the obvious options: add them to `xs-security.json` as ordinary XSUAA scopes/role collections, or reinstate a policy mechanism). `REQUEST_APPROVE`/`ADMIN` are unaffected — they were always plain XSUAA.
 
 ### Admin-only UI visibility
 
@@ -366,12 +359,6 @@ Errors are capped at 20 rows shown, with a rollup count beyond that, and reject 
 
 **A custom form-field fragment must render exactly one root control.** Adding a second top-level sibling control to `ReturnCategoryField.fragment.xml` (alongside the existing RadioButtonGroup) made both controls disappear with no error, for every Budget Type. Fiori Elements custom field templates expect a single control — wrap multiples in one `VBox`.
 
-**AMS / IAS `authorization_instance_id` can look "enabled" yet not be provisioned.** `cf service virement-ias --params` can correctly show `authorization.enabled: true`, and every deploy already unbinds/rebinds the service — yet a bound app's actual credentials can still lack `authorization_instance_id`, producing "AMS bundle initialization failed." If this happens: check the credentials of the *specific* app binding in question (Cockpit → the `virement-ias` instance → Bound Applications → that app → View Credentials) for the property, rather than assuming instance-level config is the whole picture. A stale in-memory process can also hold old credentials after the binding itself becomes correct — try `cf restart virement-srv` before anything more drastic.
-
-**AMS-generated groups in IAS ≠ XSUAA role collections.** `VR_BCM`/`VR_FUNCTIONAL`/`VR_JKEW` will never appear in BTP Cockpit's Subaccount → Security → Roles page — that page is XSUAA-only. Find them in the IAS admin console (`https://<tenant>.accounts.ondemand.com/admin`) → Applications & Resources → *virement* → Authorization Policies tab, or under Users & Authorizations → Groups as `cap - VR_<name>`.
-
-**`ams/dcl/cap/basePolicies.dcl` is hand-maintained beyond what `@requires` annotations alone produce.** `VR_FUNCTIONAL`/`VR_JKEW`/`VR_BCM` policies exist in this file with **no corresponding `@requires` annotation anywhere in the CDS model** — they were added by hand and are preserved across rebuilds because `@sap/ams` detects manual edits and skips regeneration (confirmed by testing: renaming `dclGenerationPackage` from the default `"cap"` silently *dropped* both policies from the freshly generated file). **Never change `dclGenerationPackage`** without diffing the regenerated file against what's committed first.
-
 **WBS S/4 service path.** Three services were tried before landing on the current one (`srv/code/utils/wbs-elements.js`): `API_WBSELEMENT_SRV/A_WBSElement` worked but has no Cost Center field at all; `API_ENTERPRISE_PROJECT_SRV/A_EnterpriseProjectElement` has `ResponsibleCostCenter` but returned a clean 200 with 0 rows for every query (the destination's technical user most likely isn't authorized for Enterprise Project data); the working path is now a **purpose-built custom value help**, `/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/WBSElementVH` (fields `WBSElement,WBSDescription,ResponsibleCostCenter`), confirmed against a live sample response. It also has a live data-quality quirk: it occasionally returns a row with a blank `WBSElement` key alongside a real description (e.g. `{"WBSElement":"","WBSDescription":"INSTL. PAPANTANDA","ResponsibleCostCenter":""}`) — `readWBSElements` filters these out defensively, since a blank key breaks the value-help dialog's row binding.
 
 **SAP Build's fully-qualified-path bug.** See §7 — any new unbound action/function called by a workflow needs registering in `srv/server.js`'s workaround lists, or it will silently fail from the workflow side while SAP Build's own Test tool appears to work fine.
@@ -386,7 +373,7 @@ Errors are capped at 20 rows shown, with a rollup count beyond that, and reject 
 
 1. Confirm the right target: `cf target` — should show the correct org/space. If it shows an unrelated org, re-run `cf login`.
 2. `mbt build` from the repo root — produces `mta_archives/virement_1.0.0.mtar`.
-3. `cf deploy mta_archives/virement_1.0.0.mtar` — deploys all 7 modules. The `virement-ams-policies-deployer` module (and its `deploy-dcl` task, which would push `ams/dcl/` policy changes to IAS) is currently commented out — see §8 — so no AMS policy push happens on deploy today.
+3. `cf deploy mta_archives/virement_1.0.0.mtar` — deploys all 6 modules.
 4. A CF session can expire mid-deploy on a long-running deploy — if you see "Authentication has expired," re-run `cf login` and simply re-run the same `cf deploy` command; the built `.mtar` is still valid.
 
 > Compile-check any CDS change before building: `npx cds compile db/schema.cds srv/service.cds app/virement.zui_pps_virement/annotations.cds --to edmx`. One pre-existing, harmless warning always appears (`NonUpdateableProperties` on `Requests_RequestAttachments`, from the `@cap-js/attachments` library's own annotation) — anything beyond that line is a real problem.
