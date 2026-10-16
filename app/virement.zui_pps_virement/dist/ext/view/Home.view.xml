@@ -61,12 +61,12 @@
                             <NewsContent contentText="Request Report" subheader="Track status and history across all requestors" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/approverMatrixIcon}" frameType="TwoByOne" press=".onNavigate" app:route="ApproverMatrix">
+                    <GenericTile visible="{DashboardModel>/isAdmin}" class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/approverMatrixIcon}" frameType="TwoByOne" press=".onNavigate" app:route="ApproverMatrix">
                         <TileContent>
                             <NewsContent contentText="Approver Matrix" subheader="Maintain workflow approver" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/groupingMaintenanceIcon}" frameType="TwoByOne" press=".onNavigate" app:route="GroupingMaintenance">
+                    <GenericTile visible="{DashboardModel>/isAdmin}" class="sapUiTinyMarginBegin sapUiTinyMarginTop actionTile" backgroundImage="{ImageModel>/groupingMaintenanceIcon}" frameType="TwoByOne" press=".onNavigate" app:route="GroupingMaintenance">
                         <TileContent>
                             <NewsContent contentText="Grouping Maintenance" subheader="Maintain GL, Department, Functional Department, Building, and Region &amp; Branch groupings" />
                         </TileContent>

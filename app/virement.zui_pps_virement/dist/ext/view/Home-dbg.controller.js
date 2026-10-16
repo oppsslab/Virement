@@ -39,6 +39,7 @@ sap.ui.define(
           emailAddress: "",
           fullName: "",
           pendingCount: 0,
+          isAdmin: false,
           isLoading: true,
         });
 
@@ -81,6 +82,11 @@ sap.ui.define(
               "/fullName",
               oUserDetails.fullName || "",
             );
+
+            oDashboardModel.setProperty(
+              "/isAdmin",
+              Boolean(oUserDetails.isAdmin),
+            );
           }
 
           /*
@@ -91,6 +97,7 @@ sap.ui.define(
           console.error("Failed to load dashboard data:", oError);
           oDashboardModel.setProperty("/emailAddress", "");
           oDashboardModel.setProperty("/fullName", "");
+          oDashboardModel.setProperty("/isAdmin", false);
           oDashboardModel.setProperty("/pendingCount", 0);
         } finally {
           oDashboardModel.setProperty("/isLoading", false);
@@ -113,7 +120,7 @@ sap.ui.define(
             null,
             null,
             {
-              $select: "emailAddress,fullName",
+              $select: "emailAddress,fullName,isAdmin",
             },
           );
 

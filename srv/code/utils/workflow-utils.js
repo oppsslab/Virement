@@ -4,19 +4,23 @@ const { getDestination } = require("@sap-cloud-sdk/connectivity");
 
 const { executeHttpRequest } = require("@sap-cloud-sdk/http-client");
 
+const { getConfigValue } = require("./system-config");
+
 const LOG = cds.log("workflow-utils");
 
-const WORKFLOW_DESTINATION = "sap_process_automation_service";
+/*
+ * Defaults, used until/unless overridden via the System Configuration
+ * admin page (see utils/system-config.js) - all 3 are subaccount/
+ * BPA-package-specific, so the same deployed code can point at a
+ * different environment (e.g. PRD) by editing these there instead of
+ * a code change + redeploy.
+ */
+const WORKFLOW_DESTINATION_DEFAULT = "sap_process_automation_service";
 
-// V1 workflow - commented out while switching to V2 below.
-// const WORKFLOW_DEFINITION_ID =
-//   "ap11.epf-ent-cf-ap11-dev.virementapprovalworkflow.approvalWorkflow";
-
-const WORKFLOW_DEFINITION_ID =
+const WORKFLOW_DEFINITION_ID_DEFAULT =
   "ap11.epf-ent-cf-ap11-dev.virementapprovalworkflowv2.approvalWorkflow";
 
-const WORKFLOW_START_PATH =
-  "/workflow/rest/v1/workflow-instances?environmentId=nonprd";
+const WORKFLOW_ENVIRONMENT_ID_DEFAULT = "nonprd";
 
 const TASK_INSTANCES_PATH = "/workflow/rest/v1/task-instances";
 
@@ -124,6 +128,11 @@ function getDestinationProperty(destination, propertyNames) {
  * }>}
  */
 async function getProcessAutomationDestination() {
+  const WORKFLOW_DESTINATION = await getConfigValue(
+    "BPA_DESTINATION_NAME",
+    WORKFLOW_DESTINATION_DEFAULT,
+  );
+
   const destination = await getDestination({
     destinationName: WORKFLOW_DESTINATION,
     useCache: false,
@@ -329,6 +338,18 @@ async function startApprovalWorkflow({
     .trim()
     .toUpperCase();
 
+  const WORKFLOW_DEFINITION_ID = await getConfigValue(
+    "WORKFLOW_DEFINITION_ID",
+    WORKFLOW_DEFINITION_ID_DEFAULT,
+  );
+
+  const WORKFLOW_ENVIRONMENT_ID = await getConfigValue(
+    "WORKFLOW_ENVIRONMENT_ID",
+    WORKFLOW_ENVIRONMENT_ID_DEFAULT,
+  );
+
+  const WORKFLOW_START_PATH = `/workflow/rest/v1/workflow-instances?environmentId=${encodeURIComponent(WORKFLOW_ENVIRONMENT_ID)}`;
+
   /*
    * The context property names must exactly match the
    * workflow process input/context schema.
@@ -420,7 +441,7 @@ async function startApprovalWorkflow({
   LOG.info(
     "Starting approval workflow.",
     JSON.stringify({
-      destination: WORKFLOW_DESTINATION,
+      destination: destination.name,
 
       definitionId: WORKFLOW_DEFINITION_ID,
 

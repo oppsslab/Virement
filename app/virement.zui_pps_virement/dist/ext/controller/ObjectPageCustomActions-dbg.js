@@ -515,17 +515,35 @@ sap.ui.define(
           refreshRequestItemsBindings(oUploadView);
 
           /*
-           * Refresh the parent context too, so header totals/side effects can update.
+           * Refresh only the header fields derived from item amounts
+           * (and RequestApprovers, re-resolved from them) - matching
+           * annotations.cds's #RecalcHeaderOnAmountChange SideEffects
+           * exactly. A plain context.refresh() here previously
+           * re-fetched the WHOLE header from the server, which could
+           * silently discard any other header edit still pending on
+           * this same context (e.g. a just-selected Supplement
+           * Category not yet flushed) - requestSideEffects only
+           * touches the paths listed below, leaving unrelated pending
+           * changes alone.
            */
           if (
             oUploadContext &&
-            oUploadContext.refresh &&
-            typeof oUploadContext.refresh === "function"
+            oUploadContext.requestSideEffects &&
+            typeof oUploadContext.requestSideEffects === "function"
           ) {
             try {
-              oUploadContext.refresh();
+              oUploadContext.requestSideEffects([
+                "supplementAmount",
+                "returnAmount",
+                "transferInAmount",
+                "transferOutAmount",
+                "RequestApprovers",
+              ]);
             } catch (oRefreshError) {
-              console.warn("Could not refresh upload context:", oRefreshError);
+              console.warn(
+                "Could not refresh upload context side effects:",
+                oRefreshError,
+              );
             }
           }
 

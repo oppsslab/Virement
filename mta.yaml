@@ -108,10 +108,12 @@ modules:
             app-identifier: srv
             validity: 365
       - name: virement-dms
-    deployed-after:
-      - virement-ams-policies-deployer
-    properties:
-      AMS_DCL_ROOT: ams/dcl
+    # AMS policy deployer disabled - see the commented-out
+    # virement-ams-policies-deployer module below.
+    # deployed-after:
+    #   - virement-ams-policies-deployer
+    # properties:
+    #   AMS_DCL_ROOT: ams/dcl
 
   # ============================================================
   # SUBACCOUNT DESTINATION CONTENT DEPLOYER
@@ -228,29 +230,32 @@ modules:
           content-target: true
 
   # ============================================================
-  # AMS POLICY DEPLOYER
-  # Deploys generated DCL policies using the IAS/AMS binding.
+  # AMS POLICY DEPLOYER - disabled, not currently needed (AMS is
+  # not wired into any live authorization check in this app; see
+  # the ADMIN/REQUEST_APPROVE/etc. XSUAA scope checks used
+  # throughout instead). Commented out rather than deleted so it
+  # can be re-enabled easily if that changes.
   # ============================================================
 
-  - name: virement-ams-policies-deployer
-    type: javascript.nodejs
-    path: gen/policies
-    parameters:
-      memory: 256M
-      buildpack: nodejs_buildpack
-      no-route: true
-      no-start: true
-      tasks:
-        - name: deploy-dcl
-          command: npm start
-          memory: 256M
-    requires:
-      - name: virement-ias
-        parameters:
-          config:
-            credential-type: X509_GENERATED
-            app-identifier: ams-policy-deployer
-            validity: 365
+  # - name: virement-ams-policies-deployer
+  #   type: javascript.nodejs
+  #   path: gen/policies
+  #   parameters:
+  #     memory: 256M
+  #     buildpack: nodejs_buildpack
+  #     no-route: true
+  #     no-start: true
+  #     tasks:
+  #       - name: deploy-dcl
+  #         command: npm start
+  #         memory: 256M
+  #   requires:
+  #     - name: virement-ias
+  #       parameters:
+  #         config:
+  #           credential-type: X509_GENERATED
+  #           app-identifier: ams-policy-deployer
+  #           validity: 365
 
 # ==============================================================
 # RESOURCES

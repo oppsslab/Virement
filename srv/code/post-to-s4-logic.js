@@ -10,10 +10,12 @@ const { executeHttpRequest } = require("@sap-cloud-sdk/http-client");
 const xml2js = require("xml2js");
 
 const insertRequestHistory = require("./insert-request-history");
+const { getConfigValue } = require("./utils/system-config");
 
 const LOG = cds.log("post-to-s4-logic");
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
-const DESTINATION_NAME = "CPI";
+// Overridable via the System Configuration admin page.
+const DESTINATION_NAME_DEFAULT = "CPI";
 const RFC_ENDPOINT = "/http/ZFM_FI_FMBB_UPLOAD";
 const POSTED_STATUS_CODE = 3;
 
@@ -751,6 +753,11 @@ function buildXml(payload) {
 }
 
 async function postToCpi(payload, payloadKey) {
+  const DESTINATION_NAME = await getConfigValue(
+    "CPI_DESTINATION_NAME",
+    DESTINATION_NAME_DEFAULT,
+  );
+
   const destination = await getDestination({
     destinationName: DESTINATION_NAME,
   });

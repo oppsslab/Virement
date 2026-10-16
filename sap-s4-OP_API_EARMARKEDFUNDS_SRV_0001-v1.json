@@ -1,0 +1,3245 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Earmarked Funds",
+    "version": "1.0.0",
+    "description": "This service enables you to create, read, and update earmarked funds documents from SAP system. This service is based on the OData protocol and can be consumed by SAP Fiori apps, other user interfaces, or integration scenarios."
+  },
+  "externalDocs": {
+    "description": "Business Documentation",
+    "url": "https://help.sap.com/http.svc/ahp2/SAP_S4HANA_CLOUD_PE/2025.001/EN/9f/611087a279476c851e029ba42abc73/frameset.htm"
+  },
+  "x-sap-api-type": "ODATAV4",
+  "x-sap-shortText": "Create, read, and update earmarked funds synchronously using this inbound service",
+  "x-sap-software-min-version": "2025",
+  "x-sap-ext-overview": [
+    {
+      "name": "Authentication Methods",
+      "values": [
+        {
+          "text": "x509",
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "Service Group Name",
+      "values": [
+        {
+          "text": "API_EARMARKEDFUNDSDOCUMENT",
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "Business Object",
+      "values": [
+        {
+          "text": "Earmarked Funds Document",
+          "format": "plain"
+        }
+      ]
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://{host}:{port}/sap/opu/odata4/sap/api_earmarkedfundsdocument/srvd_a2x/sap/earmarkedfundsdocument/0001",
+      "variables": {
+        "host": {
+          "default": ""
+        },
+        "port": {
+          "default": ""
+        }
+      }
+    }
+  ],
+  "x-sap-extensible": {
+    "supported": "manual",
+    "description": "If you are working with key user extensibility, the API can be extended by custom fields on the following business contexts (field usage for this API needs to be selected):\r\n* Earmarked Funds Document (EARMARKEDFUNDSDOCUMENT)\r\n* Earmarked Funds Document Item (EARMARKEDFUNDSDOCUMENTITEM)\r\n\r\n[How to add an extension field to an API](https://help.sap.com/docs/ABAP_PLATFORM_NEW/b5670aaaa2364a29935f40b16499972d/ce819b8557194ae0aa180ba4ac6a04de.html)\r\n\r\nNote: Please make sure to match the release selected in SAP Business Accelerator Hub with the Feature Pack (FPS) on help page."
+  },
+  "tags": [
+    {
+      "name": "Remote Interface Earmarked Funds"
+    },
+    {
+      "name": "Remote Interface Earmarked Funds Item"
+    }
+  ],
+  "paths": {
+    "/EarmarkedFundsDocument": {
+      "get": {
+        "summary": "Get entities from EarmarkedFundsDocument",
+        "tags": [
+          "Remote Interface Earmarked Funds"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/top"
+          },
+          {
+            "$ref": "#/components/parameters/skip"
+          },
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "Filter items by property values, see [Filtering](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionfilter)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/count"
+          },
+          {
+            "name": "$orderby",
+            "in": "query",
+            "description": "Order items by property values, see [Sorting](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionorderby)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EarmarkedFundsDocument desc",
+                  "EmrkdFndsExtDocumentNumber",
+                  "EmrkdFndsExtDocumentNumber desc",
+                  "EmrkdFndsIntegrationScenario",
+                  "EmrkdFndsIntegrationScenario desc",
+                  "EmrkdFndsIntegScenarioVariant",
+                  "EmrkdFndsIntegScenarioVariant desc",
+                  "EarmarkedFundsDocumentCategory",
+                  "EarmarkedFundsDocumentCategory desc",
+                  "EarmarkedFundsDocumentType",
+                  "EarmarkedFundsDocumentType desc",
+                  "CompanyCode",
+                  "CompanyCode desc",
+                  "TransactionCurrency",
+                  "TransactionCurrency desc",
+                  "CompanyCodeCurrency",
+                  "CompanyCodeCurrency desc",
+                  "EarmarkedFundsDocReference",
+                  "EarmarkedFundsDocReference desc",
+                  "EarmarkedFundsDocReference2",
+                  "EarmarkedFundsDocReference2 desc",
+                  "EarmarkedFundsDocReference3",
+                  "EarmarkedFundsDocReference3 desc",
+                  "EarmarkedFundsHeaderText",
+                  "EarmarkedFundsHeaderText desc",
+                  "PostingDate",
+                  "PostingDate desc",
+                  "DocumentDate",
+                  "DocumentDate desc",
+                  "ExchangeRateDate",
+                  "ExchangeRateDate desc",
+                  "AbsoluteExchangeRate",
+                  "AbsoluteExchangeRate desc",
+                  "ExchRateIsIndirectQuotation",
+                  "ExchRateIsIndirectQuotation desc",
+                  "EmrkdFndsDocCreatedByUser",
+                  "EmrkdFndsDocCreatedByUser desc",
+                  "EmrkdFndsDocCreationDate",
+                  "EmrkdFndsDocCreationDate desc",
+                  "EmrkdFndsDocLastChangedByUser",
+                  "EmrkdFndsDocLastChangedByUser desc",
+                  "EmrkdFndsDocLastChangeDate",
+                  "EmrkdFndsDocLastChangeDate desc",
+                  "EmrkdFndsDocLastChangeDateTime",
+                  "EmrkdFndsDocLastChangeDateTime desc",
+                  "ReferenceDocumentType",
+                  "ReferenceDocumentType desc",
+                  "ReferenceDocument",
+                  "ReferenceDocument desc",
+                  "ReferenceDocumentContext",
+                  "ReferenceDocumentContext desc",
+                  "ReferenceDocumentLogicalSystem",
+                  "ReferenceDocumentLogicalSystem desc",
+                  "EmrkdFndsHasNegativeAmounts",
+                  "EmrkdFndsHasNegativeAmounts desc",
+                  "EmrkdFndsIsBlockedAgainstUsage",
+                  "EmrkdFndsIsBlockedAgainstUsage desc",
+                  "EarmarkedFundsIsCompleted",
+                  "EarmarkedFundsIsCompleted desc",
+                  "EarmarkedFundsIsApproved",
+                  "EarmarkedFundsIsApproved desc",
+                  "EmrkdFndsWasAlreadyAprvdOnce",
+                  "EmrkdFndsWasAlreadyAprvdOnce desc",
+                  "EarmarkedFundsStartWorkflow",
+                  "EarmarkedFundsStartWorkflow desc",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EmrkdFndsHasValueAdjustments desc",
+                  "EarmarkedFundsDecisionReason",
+                  "EarmarkedFundsDecisionReason desc",
+                  "EarmarkedFundsManualEditBlock",
+                  "EarmarkedFundsManualEditBlock desc",
+                  "EarmarkedFundsDocEntryStatus",
+                  "EarmarkedFundsDocEntryStatus desc",
+                  "SAP__Messages",
+                  "SAP__Messages desc"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$select",
+            "in": "query",
+            "description": "Select properties to be returned, see [Select](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionselect)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EmrkdFndsExtDocumentNumber",
+                  "EmrkdFndsIntegrationScenario",
+                  "EmrkdFndsIntegScenarioVariant",
+                  "EarmarkedFundsDocumentCategory",
+                  "EarmarkedFundsDocumentType",
+                  "CompanyCode",
+                  "TransactionCurrency",
+                  "CompanyCodeCurrency",
+                  "EarmarkedFundsDocReference",
+                  "EarmarkedFundsDocReference2",
+                  "EarmarkedFundsDocReference3",
+                  "EarmarkedFundsHeaderText",
+                  "PostingDate",
+                  "DocumentDate",
+                  "ExchangeRateDate",
+                  "AbsoluteExchangeRate",
+                  "ExchRateIsIndirectQuotation",
+                  "EmrkdFndsDocCreatedByUser",
+                  "EmrkdFndsDocCreationDate",
+                  "EmrkdFndsDocLastChangedByUser",
+                  "EmrkdFndsDocLastChangeDate",
+                  "EmrkdFndsDocLastChangeDateTime",
+                  "ReferenceDocumentType",
+                  "ReferenceDocument",
+                  "ReferenceDocumentContext",
+                  "ReferenceDocumentLogicalSystem",
+                  "EmrkdFndsHasNegativeAmounts",
+                  "EmrkdFndsIsBlockedAgainstUsage",
+                  "EarmarkedFundsIsCompleted",
+                  "EarmarkedFundsIsApproved",
+                  "EmrkdFndsWasAlreadyAprvdOnce",
+                  "EarmarkedFundsStartWorkflow",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EarmarkedFundsDecisionReason",
+                  "EarmarkedFundsManualEditBlock",
+                  "EarmarkedFundsDocEntryStatus",
+                  "SAP__Messages"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$expand",
+            "in": "query",
+            "description": "Expand related entities, see [Expand](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionexpand)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "*",
+                  "_EarmarkedFundsDocumentItem"
+                ]
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved entities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Collection of EarmarkedFundsDocument_Type",
+                  "type": "object",
+                  "properties": {
+                    "@odata.count": {
+                      "$ref": "#/components/schemas/count"
+                    },
+                    "value": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      },
+      "post": {
+        "summary": "Add new entity to EarmarkedFundsDocument",
+        "tags": [
+          "Remote Interface Earmarked Funds"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "New entity",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type-create"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      }
+    },
+    "/EarmarkedFundsDocument/{EarmarkedFundsDocument}": {
+      "parameters": [
+        {
+          "name": "EarmarkedFundsDocument",
+          "in": "path",
+          "required": true,
+          "description": "Document Number for Earmarked Funds",
+          "schema": {
+            "type": "string",
+            "maxLength": 10
+          }
+        }
+      ],
+      "get": {
+        "summary": "Get entity from EarmarkedFundsDocument by key",
+        "tags": [
+          "Remote Interface Earmarked Funds"
+        ],
+        "parameters": [
+          {
+            "name": "$select",
+            "in": "query",
+            "description": "Select properties to be returned, see [Select](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionselect)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EmrkdFndsExtDocumentNumber",
+                  "EmrkdFndsIntegrationScenario",
+                  "EmrkdFndsIntegScenarioVariant",
+                  "EarmarkedFundsDocumentCategory",
+                  "EarmarkedFundsDocumentType",
+                  "CompanyCode",
+                  "TransactionCurrency",
+                  "CompanyCodeCurrency",
+                  "EarmarkedFundsDocReference",
+                  "EarmarkedFundsDocReference2",
+                  "EarmarkedFundsDocReference3",
+                  "EarmarkedFundsHeaderText",
+                  "PostingDate",
+                  "DocumentDate",
+                  "ExchangeRateDate",
+                  "AbsoluteExchangeRate",
+                  "ExchRateIsIndirectQuotation",
+                  "EmrkdFndsDocCreatedByUser",
+                  "EmrkdFndsDocCreationDate",
+                  "EmrkdFndsDocLastChangedByUser",
+                  "EmrkdFndsDocLastChangeDate",
+                  "EmrkdFndsDocLastChangeDateTime",
+                  "ReferenceDocumentType",
+                  "ReferenceDocument",
+                  "ReferenceDocumentContext",
+                  "ReferenceDocumentLogicalSystem",
+                  "EmrkdFndsHasNegativeAmounts",
+                  "EmrkdFndsIsBlockedAgainstUsage",
+                  "EarmarkedFundsIsCompleted",
+                  "EarmarkedFundsIsApproved",
+                  "EmrkdFndsWasAlreadyAprvdOnce",
+                  "EarmarkedFundsStartWorkflow",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EarmarkedFundsDecisionReason",
+                  "EarmarkedFundsManualEditBlock",
+                  "EarmarkedFundsDocEntryStatus",
+                  "SAP__Messages"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$expand",
+            "in": "query",
+            "description": "Expand related entities, see [Expand](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionexpand)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "*",
+                  "_EarmarkedFundsDocumentItem"
+                ]
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update entity in EarmarkedFundsDocument",
+        "tags": [
+          "Remote Interface Earmarked Funds"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "New property values",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type-update"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      }
+    },
+    "/EarmarkedFundsDocument/{EarmarkedFundsDocument}/_EarmarkedFundsDocumentItem": {
+      "parameters": [
+        {
+          "name": "EarmarkedFundsDocument",
+          "in": "path",
+          "required": true,
+          "description": "Document Number for Earmarked Funds",
+          "schema": {
+            "type": "string",
+            "maxLength": 10
+          }
+        }
+      ],
+      "get": {
+        "summary": "Get entities from related _EarmarkedFundsDocumentItem",
+        "tags": [
+          "Remote Interface Earmarked Funds",
+          "Remote Interface Earmarked Funds Item"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/top"
+          },
+          {
+            "$ref": "#/components/parameters/skip"
+          },
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "Filter items by property values, see [Filtering](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionfilter)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/count"
+          },
+          {
+            "name": "$orderby",
+            "in": "query",
+            "description": "Order items by property values, see [Sorting](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionorderby)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EarmarkedFundsDocument desc",
+                  "EarmarkedFundsDocumentItem",
+                  "EarmarkedFundsDocumentItem desc",
+                  "CompanyCode",
+                  "CompanyCode desc",
+                  "TransactionCurrency",
+                  "TransactionCurrency desc",
+                  "CompanyCodeCurrency",
+                  "CompanyCodeCurrency desc",
+                  "PostingDate",
+                  "PostingDate desc",
+                  "EmrkdFndsDocItmCreatedByUser",
+                  "EmrkdFndsDocItmCreatedByUser desc",
+                  "EmrkdFndsDocItmCreationDate",
+                  "EmrkdFndsDocItmCreationDate desc",
+                  "EmrkdFndsDocItmLastChgdByUsr",
+                  "EmrkdFndsDocItmLastChgdByUsr desc",
+                  "EmrkdFndsDocItmLastChangeDate",
+                  "EmrkdFndsDocItmLastChangeDate desc",
+                  "EmrkdFndsReferenceDocumentItem",
+                  "EmrkdFndsReferenceDocumentItem desc",
+                  "GLAccount",
+                  "GLAccount desc",
+                  "CostCenter",
+                  "CostCenter desc",
+                  "WBSElementExternalID",
+                  "WBSElementExternalID desc",
+                  "ProfitCenter",
+                  "ProfitCenter desc",
+                  "InternalOrder",
+                  "InternalOrder desc",
+                  "BusinessArea",
+                  "BusinessArea desc",
+                  "Fund",
+                  "Fund desc",
+                  "BudgetPeriod",
+                  "BudgetPeriod desc",
+                  "CommitmentItem",
+                  "CommitmentItem desc",
+                  "FundsCenter",
+                  "FundsCenter desc",
+                  "FundedProgram",
+                  "FundedProgram desc",
+                  "FunctionalArea",
+                  "FunctionalArea desc",
+                  "GrantID",
+                  "GrantID desc",
+                  "Supplier",
+                  "Supplier desc",
+                  "Customer",
+                  "Customer desc",
+                  "DocumentItemText",
+                  "DocumentItemText desc",
+                  "DueDate",
+                  "DueDate desc",
+                  "USFedGovernmentUUID",
+                  "USFedGovernmentUUID desc",
+                  "FundsMgmtPeriodOfPerfStartDate",
+                  "FundsMgmtPeriodOfPerfStartDate desc",
+                  "FundsMgmtPeriodOfPerfEndDate",
+                  "FundsMgmtPeriodOfPerfEndDate desc",
+                  "USFedPromptPaytActExclude",
+                  "USFedPromptPaytActExclude desc",
+                  "PrdcssrFundsReservationDoc",
+                  "PrdcssrFundsReservationDoc desc",
+                  "PrdcssrFundsReservationDocItem",
+                  "PrdcssrFundsReservationDocItem desc",
+                  "PrdcssrFundsPreCmtmtDoc",
+                  "PrdcssrFundsPreCmtmtDoc desc",
+                  "PrdcssrFundsPreCmtmtDocItem",
+                  "PrdcssrFundsPreCmtmtDocItem desc",
+                  "EmrkdFndsItmPrdcssrCompleted",
+                  "EmrkdFndsItmPrdcssrCompleted desc",
+                  "EmrkdFndsItmIsCompleted",
+                  "EmrkdFndsItmIsCompleted desc",
+                  "EmrkdFndsItmIsStatistical",
+                  "EmrkdFndsItmIsStatistical desc",
+                  "EmrkdFndsItmIsDeleted",
+                  "EmrkdFndsItmIsDeleted desc",
+                  "EmrkdFndsItmIsSender",
+                  "EmrkdFndsItmIsSender desc",
+                  "EmrkdFndsItmIsReceiver",
+                  "EmrkdFndsItmIsReceiver desc",
+                  "EmrkdFndsItmManualEditBlock",
+                  "EmrkdFndsItmManualEditBlock desc",
+                  "EmrkdFndsItmIsBlkdAgainstUsage",
+                  "EmrkdFndsItmIsBlkdAgainstUsage desc",
+                  "EmrkdFndsItmIsUnlimited",
+                  "EmrkdFndsItmIsUnlimited desc",
+                  "EmrkdFndsItmToleranceLmtInPct",
+                  "EmrkdFndsItmToleranceLmtInPct desc",
+                  "EmrkdFndsOverrideGlobTolerance",
+                  "EmrkdFndsOverrideGlobTolerance desc",
+                  "EmrkdFndsItmIsApproved",
+                  "EmrkdFndsItmIsApproved desc",
+                  "EmrkdFndsAcctAssgmtChangeable",
+                  "EmrkdFndsAcctAssgmtChangeable desc",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EmrkdFndsHasValueAdjustments desc",
+                  "EmrkdFndsItmCnsmpnInCCCrcyOnly",
+                  "EmrkdFndsItmCnsmpnInCCCrcyOnly desc",
+                  "EmrkdFndsAmountInTransCrcy",
+                  "EmrkdFndsAmountInTransCrcy desc",
+                  "EmrkdFndsOpenAmtInTransCrcy",
+                  "EmrkdFndsOpenAmtInTransCrcy desc",
+                  "EmrkdFndsCnsmdAmtInTransCrcy",
+                  "EmrkdFndsCnsmdAmtInTransCrcy desc",
+                  "EmrkdFndsAmountInCCCrcy",
+                  "EmrkdFndsAmountInCCCrcy desc",
+                  "EmrkdFndsOpenAmtInCCCrcy",
+                  "EmrkdFndsOpenAmtInCCCrcy desc",
+                  "EmrkdFndsCnsmdAmtInCCCrcy",
+                  "EmrkdFndsCnsmdAmtInCCCrcy desc",
+                  "SAP__Messages",
+                  "SAP__Messages desc"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$select",
+            "in": "query",
+            "description": "Select properties to be returned, see [Select](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionselect)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EarmarkedFundsDocumentItem",
+                  "CompanyCode",
+                  "TransactionCurrency",
+                  "CompanyCodeCurrency",
+                  "PostingDate",
+                  "EmrkdFndsDocItmCreatedByUser",
+                  "EmrkdFndsDocItmCreationDate",
+                  "EmrkdFndsDocItmLastChgdByUsr",
+                  "EmrkdFndsDocItmLastChangeDate",
+                  "EmrkdFndsReferenceDocumentItem",
+                  "GLAccount",
+                  "CostCenter",
+                  "WBSElementExternalID",
+                  "ProfitCenter",
+                  "InternalOrder",
+                  "BusinessArea",
+                  "Fund",
+                  "BudgetPeriod",
+                  "CommitmentItem",
+                  "FundsCenter",
+                  "FundedProgram",
+                  "FunctionalArea",
+                  "GrantID",
+                  "Supplier",
+                  "Customer",
+                  "DocumentItemText",
+                  "DueDate",
+                  "USFedGovernmentUUID",
+                  "FundsMgmtPeriodOfPerfStartDate",
+                  "FundsMgmtPeriodOfPerfEndDate",
+                  "USFedPromptPaytActExclude",
+                  "PrdcssrFundsReservationDoc",
+                  "PrdcssrFundsReservationDocItem",
+                  "PrdcssrFundsPreCmtmtDoc",
+                  "PrdcssrFundsPreCmtmtDocItem",
+                  "EmrkdFndsItmPrdcssrCompleted",
+                  "EmrkdFndsItmIsCompleted",
+                  "EmrkdFndsItmIsStatistical",
+                  "EmrkdFndsItmIsDeleted",
+                  "EmrkdFndsItmIsSender",
+                  "EmrkdFndsItmIsReceiver",
+                  "EmrkdFndsItmManualEditBlock",
+                  "EmrkdFndsItmIsBlkdAgainstUsage",
+                  "EmrkdFndsItmIsUnlimited",
+                  "EmrkdFndsItmToleranceLmtInPct",
+                  "EmrkdFndsOverrideGlobTolerance",
+                  "EmrkdFndsItmIsApproved",
+                  "EmrkdFndsAcctAssgmtChangeable",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EmrkdFndsItmCnsmpnInCCCrcyOnly",
+                  "EmrkdFndsAmountInTransCrcy",
+                  "EmrkdFndsOpenAmtInTransCrcy",
+                  "EmrkdFndsCnsmdAmtInTransCrcy",
+                  "EmrkdFndsAmountInCCCrcy",
+                  "EmrkdFndsOpenAmtInCCCrcy",
+                  "EmrkdFndsCnsmdAmtInCCCrcy",
+                  "SAP__Messages"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$expand",
+            "in": "query",
+            "description": "Expand related entities, see [Expand](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionexpand)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "*",
+                  "_EarmarkedFundsDocument"
+                ]
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved entities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Collection of EarmarkedFundsDocumentItem_Type",
+                  "type": "object",
+                  "properties": {
+                    "@odata.count": {
+                      "$ref": "#/components/schemas/count"
+                    },
+                    "value": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      },
+      "post": {
+        "summary": "Add new entity to related _EarmarkedFundsDocumentItem",
+        "tags": [
+          "Remote Interface Earmarked Funds",
+          "Remote Interface Earmarked Funds Item"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "New entity",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type-create"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      }
+    },
+    "/EarmarkedFundsDocumentItem": {
+      "get": {
+        "summary": "Get entities from EarmarkedFundsDocumentItem",
+        "tags": [
+          "Remote Interface Earmarked Funds Item"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/top"
+          },
+          {
+            "$ref": "#/components/parameters/skip"
+          },
+          {
+            "name": "$filter",
+            "in": "query",
+            "description": "Filter items by property values, see [Filtering](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionfilter)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/count"
+          },
+          {
+            "name": "$orderby",
+            "in": "query",
+            "description": "Order items by property values, see [Sorting](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionorderby)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EarmarkedFundsDocument desc",
+                  "EarmarkedFundsDocumentItem",
+                  "EarmarkedFundsDocumentItem desc",
+                  "CompanyCode",
+                  "CompanyCode desc",
+                  "TransactionCurrency",
+                  "TransactionCurrency desc",
+                  "CompanyCodeCurrency",
+                  "CompanyCodeCurrency desc",
+                  "PostingDate",
+                  "PostingDate desc",
+                  "EmrkdFndsDocItmCreatedByUser",
+                  "EmrkdFndsDocItmCreatedByUser desc",
+                  "EmrkdFndsDocItmCreationDate",
+                  "EmrkdFndsDocItmCreationDate desc",
+                  "EmrkdFndsDocItmLastChgdByUsr",
+                  "EmrkdFndsDocItmLastChgdByUsr desc",
+                  "EmrkdFndsDocItmLastChangeDate",
+                  "EmrkdFndsDocItmLastChangeDate desc",
+                  "EmrkdFndsReferenceDocumentItem",
+                  "EmrkdFndsReferenceDocumentItem desc",
+                  "GLAccount",
+                  "GLAccount desc",
+                  "CostCenter",
+                  "CostCenter desc",
+                  "WBSElementExternalID",
+                  "WBSElementExternalID desc",
+                  "ProfitCenter",
+                  "ProfitCenter desc",
+                  "InternalOrder",
+                  "InternalOrder desc",
+                  "BusinessArea",
+                  "BusinessArea desc",
+                  "Fund",
+                  "Fund desc",
+                  "BudgetPeriod",
+                  "BudgetPeriod desc",
+                  "CommitmentItem",
+                  "CommitmentItem desc",
+                  "FundsCenter",
+                  "FundsCenter desc",
+                  "FundedProgram",
+                  "FundedProgram desc",
+                  "FunctionalArea",
+                  "FunctionalArea desc",
+                  "GrantID",
+                  "GrantID desc",
+                  "Supplier",
+                  "Supplier desc",
+                  "Customer",
+                  "Customer desc",
+                  "DocumentItemText",
+                  "DocumentItemText desc",
+                  "DueDate",
+                  "DueDate desc",
+                  "USFedGovernmentUUID",
+                  "USFedGovernmentUUID desc",
+                  "FundsMgmtPeriodOfPerfStartDate",
+                  "FundsMgmtPeriodOfPerfStartDate desc",
+                  "FundsMgmtPeriodOfPerfEndDate",
+                  "FundsMgmtPeriodOfPerfEndDate desc",
+                  "USFedPromptPaytActExclude",
+                  "USFedPromptPaytActExclude desc",
+                  "PrdcssrFundsReservationDoc",
+                  "PrdcssrFundsReservationDoc desc",
+                  "PrdcssrFundsReservationDocItem",
+                  "PrdcssrFundsReservationDocItem desc",
+                  "PrdcssrFundsPreCmtmtDoc",
+                  "PrdcssrFundsPreCmtmtDoc desc",
+                  "PrdcssrFundsPreCmtmtDocItem",
+                  "PrdcssrFundsPreCmtmtDocItem desc",
+                  "EmrkdFndsItmPrdcssrCompleted",
+                  "EmrkdFndsItmPrdcssrCompleted desc",
+                  "EmrkdFndsItmIsCompleted",
+                  "EmrkdFndsItmIsCompleted desc",
+                  "EmrkdFndsItmIsStatistical",
+                  "EmrkdFndsItmIsStatistical desc",
+                  "EmrkdFndsItmIsDeleted",
+                  "EmrkdFndsItmIsDeleted desc",
+                  "EmrkdFndsItmIsSender",
+                  "EmrkdFndsItmIsSender desc",
+                  "EmrkdFndsItmIsReceiver",
+                  "EmrkdFndsItmIsReceiver desc",
+                  "EmrkdFndsItmManualEditBlock",
+                  "EmrkdFndsItmManualEditBlock desc",
+                  "EmrkdFndsItmIsBlkdAgainstUsage",
+                  "EmrkdFndsItmIsBlkdAgainstUsage desc",
+                  "EmrkdFndsItmIsUnlimited",
+                  "EmrkdFndsItmIsUnlimited desc",
+                  "EmrkdFndsItmToleranceLmtInPct",
+                  "EmrkdFndsItmToleranceLmtInPct desc",
+                  "EmrkdFndsOverrideGlobTolerance",
+                  "EmrkdFndsOverrideGlobTolerance desc",
+                  "EmrkdFndsItmIsApproved",
+                  "EmrkdFndsItmIsApproved desc",
+                  "EmrkdFndsAcctAssgmtChangeable",
+                  "EmrkdFndsAcctAssgmtChangeable desc",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EmrkdFndsHasValueAdjustments desc",
+                  "EmrkdFndsItmCnsmpnInCCCrcyOnly",
+                  "EmrkdFndsItmCnsmpnInCCCrcyOnly desc",
+                  "EmrkdFndsAmountInTransCrcy",
+                  "EmrkdFndsAmountInTransCrcy desc",
+                  "EmrkdFndsOpenAmtInTransCrcy",
+                  "EmrkdFndsOpenAmtInTransCrcy desc",
+                  "EmrkdFndsCnsmdAmtInTransCrcy",
+                  "EmrkdFndsCnsmdAmtInTransCrcy desc",
+                  "EmrkdFndsAmountInCCCrcy",
+                  "EmrkdFndsAmountInCCCrcy desc",
+                  "EmrkdFndsOpenAmtInCCCrcy",
+                  "EmrkdFndsOpenAmtInCCCrcy desc",
+                  "EmrkdFndsCnsmdAmtInCCCrcy",
+                  "EmrkdFndsCnsmdAmtInCCCrcy desc",
+                  "SAP__Messages",
+                  "SAP__Messages desc"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$select",
+            "in": "query",
+            "description": "Select properties to be returned, see [Select](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionselect)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EarmarkedFundsDocumentItem",
+                  "CompanyCode",
+                  "TransactionCurrency",
+                  "CompanyCodeCurrency",
+                  "PostingDate",
+                  "EmrkdFndsDocItmCreatedByUser",
+                  "EmrkdFndsDocItmCreationDate",
+                  "EmrkdFndsDocItmLastChgdByUsr",
+                  "EmrkdFndsDocItmLastChangeDate",
+                  "EmrkdFndsReferenceDocumentItem",
+                  "GLAccount",
+                  "CostCenter",
+                  "WBSElementExternalID",
+                  "ProfitCenter",
+                  "InternalOrder",
+                  "BusinessArea",
+                  "Fund",
+                  "BudgetPeriod",
+                  "CommitmentItem",
+                  "FundsCenter",
+                  "FundedProgram",
+                  "FunctionalArea",
+                  "GrantID",
+                  "Supplier",
+                  "Customer",
+                  "DocumentItemText",
+                  "DueDate",
+                  "USFedGovernmentUUID",
+                  "FundsMgmtPeriodOfPerfStartDate",
+                  "FundsMgmtPeriodOfPerfEndDate",
+                  "USFedPromptPaytActExclude",
+                  "PrdcssrFundsReservationDoc",
+                  "PrdcssrFundsReservationDocItem",
+                  "PrdcssrFundsPreCmtmtDoc",
+                  "PrdcssrFundsPreCmtmtDocItem",
+                  "EmrkdFndsItmPrdcssrCompleted",
+                  "EmrkdFndsItmIsCompleted",
+                  "EmrkdFndsItmIsStatistical",
+                  "EmrkdFndsItmIsDeleted",
+                  "EmrkdFndsItmIsSender",
+                  "EmrkdFndsItmIsReceiver",
+                  "EmrkdFndsItmManualEditBlock",
+                  "EmrkdFndsItmIsBlkdAgainstUsage",
+                  "EmrkdFndsItmIsUnlimited",
+                  "EmrkdFndsItmToleranceLmtInPct",
+                  "EmrkdFndsOverrideGlobTolerance",
+                  "EmrkdFndsItmIsApproved",
+                  "EmrkdFndsAcctAssgmtChangeable",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EmrkdFndsItmCnsmpnInCCCrcyOnly",
+                  "EmrkdFndsAmountInTransCrcy",
+                  "EmrkdFndsOpenAmtInTransCrcy",
+                  "EmrkdFndsCnsmdAmtInTransCrcy",
+                  "EmrkdFndsAmountInCCCrcy",
+                  "EmrkdFndsOpenAmtInCCCrcy",
+                  "EmrkdFndsCnsmdAmtInCCCrcy",
+                  "SAP__Messages"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$expand",
+            "in": "query",
+            "description": "Expand related entities, see [Expand](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionexpand)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "*",
+                  "_EarmarkedFundsDocument"
+                ]
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved entities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Collection of EarmarkedFundsDocumentItem_Type",
+                  "type": "object",
+                  "properties": {
+                    "@odata.count": {
+                      "$ref": "#/components/schemas/count"
+                    },
+                    "value": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      }
+    },
+    "/EarmarkedFundsDocumentItem/{EarmarkedFundsDocument}/{EarmarkedFundsDocumentItem}": {
+      "parameters": [
+        {
+          "name": "EarmarkedFundsDocument",
+          "in": "path",
+          "required": true,
+          "description": "Document Number for Earmarked Funds",
+          "schema": {
+            "type": "string",
+            "maxLength": 10
+          }
+        },
+        {
+          "name": "EarmarkedFundsDocumentItem",
+          "in": "path",
+          "required": true,
+          "description": "Earmarked Funds: Document Item",
+          "schema": {
+            "type": "string",
+            "maxLength": 3
+          }
+        }
+      ],
+      "get": {
+        "summary": "Get entity from EarmarkedFundsDocumentItem by key",
+        "tags": [
+          "Remote Interface Earmarked Funds Item"
+        ],
+        "parameters": [
+          {
+            "name": "$select",
+            "in": "query",
+            "description": "Select properties to be returned, see [Select](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionselect)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EarmarkedFundsDocumentItem",
+                  "CompanyCode",
+                  "TransactionCurrency",
+                  "CompanyCodeCurrency",
+                  "PostingDate",
+                  "EmrkdFndsDocItmCreatedByUser",
+                  "EmrkdFndsDocItmCreationDate",
+                  "EmrkdFndsDocItmLastChgdByUsr",
+                  "EmrkdFndsDocItmLastChangeDate",
+                  "EmrkdFndsReferenceDocumentItem",
+                  "GLAccount",
+                  "CostCenter",
+                  "WBSElementExternalID",
+                  "ProfitCenter",
+                  "InternalOrder",
+                  "BusinessArea",
+                  "Fund",
+                  "BudgetPeriod",
+                  "CommitmentItem",
+                  "FundsCenter",
+                  "FundedProgram",
+                  "FunctionalArea",
+                  "GrantID",
+                  "Supplier",
+                  "Customer",
+                  "DocumentItemText",
+                  "DueDate",
+                  "USFedGovernmentUUID",
+                  "FundsMgmtPeriodOfPerfStartDate",
+                  "FundsMgmtPeriodOfPerfEndDate",
+                  "USFedPromptPaytActExclude",
+                  "PrdcssrFundsReservationDoc",
+                  "PrdcssrFundsReservationDocItem",
+                  "PrdcssrFundsPreCmtmtDoc",
+                  "PrdcssrFundsPreCmtmtDocItem",
+                  "EmrkdFndsItmPrdcssrCompleted",
+                  "EmrkdFndsItmIsCompleted",
+                  "EmrkdFndsItmIsStatistical",
+                  "EmrkdFndsItmIsDeleted",
+                  "EmrkdFndsItmIsSender",
+                  "EmrkdFndsItmIsReceiver",
+                  "EmrkdFndsItmManualEditBlock",
+                  "EmrkdFndsItmIsBlkdAgainstUsage",
+                  "EmrkdFndsItmIsUnlimited",
+                  "EmrkdFndsItmToleranceLmtInPct",
+                  "EmrkdFndsOverrideGlobTolerance",
+                  "EmrkdFndsItmIsApproved",
+                  "EmrkdFndsAcctAssgmtChangeable",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EmrkdFndsItmCnsmpnInCCCrcyOnly",
+                  "EmrkdFndsAmountInTransCrcy",
+                  "EmrkdFndsOpenAmtInTransCrcy",
+                  "EmrkdFndsCnsmdAmtInTransCrcy",
+                  "EmrkdFndsAmountInCCCrcy",
+                  "EmrkdFndsOpenAmtInCCCrcy",
+                  "EmrkdFndsCnsmdAmtInCCCrcy",
+                  "SAP__Messages"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$expand",
+            "in": "query",
+            "description": "Expand related entities, see [Expand](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionexpand)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "*",
+                  "_EarmarkedFundsDocument"
+                ]
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update entity in EarmarkedFundsDocumentItem",
+        "tags": [
+          "Remote Interface Earmarked Funds Item"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "New property values",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type-update"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      }
+    },
+    "/EarmarkedFundsDocumentItem/{EarmarkedFundsDocument}/{EarmarkedFundsDocumentItem}/_EarmarkedFundsDocument": {
+      "parameters": [
+        {
+          "name": "EarmarkedFundsDocument",
+          "in": "path",
+          "required": true,
+          "description": "Document Number for Earmarked Funds",
+          "schema": {
+            "type": "string",
+            "maxLength": 10
+          }
+        },
+        {
+          "name": "EarmarkedFundsDocumentItem",
+          "in": "path",
+          "required": true,
+          "description": "Earmarked Funds: Document Item",
+          "schema": {
+            "type": "string",
+            "maxLength": 3
+          }
+        }
+      ],
+      "get": {
+        "summary": "Get related _EarmarkedFundsDocument",
+        "tags": [
+          "Remote Interface Earmarked Funds Item",
+          "Remote Interface Earmarked Funds"
+        ],
+        "parameters": [
+          {
+            "name": "$select",
+            "in": "query",
+            "description": "Select properties to be returned, see [Select](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionselect)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "EarmarkedFundsDocument",
+                  "EmrkdFndsExtDocumentNumber",
+                  "EmrkdFndsIntegrationScenario",
+                  "EmrkdFndsIntegScenarioVariant",
+                  "EarmarkedFundsDocumentCategory",
+                  "EarmarkedFundsDocumentType",
+                  "CompanyCode",
+                  "TransactionCurrency",
+                  "CompanyCodeCurrency",
+                  "EarmarkedFundsDocReference",
+                  "EarmarkedFundsDocReference2",
+                  "EarmarkedFundsDocReference3",
+                  "EarmarkedFundsHeaderText",
+                  "PostingDate",
+                  "DocumentDate",
+                  "ExchangeRateDate",
+                  "AbsoluteExchangeRate",
+                  "ExchRateIsIndirectQuotation",
+                  "EmrkdFndsDocCreatedByUser",
+                  "EmrkdFndsDocCreationDate",
+                  "EmrkdFndsDocLastChangedByUser",
+                  "EmrkdFndsDocLastChangeDate",
+                  "EmrkdFndsDocLastChangeDateTime",
+                  "ReferenceDocumentType",
+                  "ReferenceDocument",
+                  "ReferenceDocumentContext",
+                  "ReferenceDocumentLogicalSystem",
+                  "EmrkdFndsHasNegativeAmounts",
+                  "EmrkdFndsIsBlockedAgainstUsage",
+                  "EarmarkedFundsIsCompleted",
+                  "EarmarkedFundsIsApproved",
+                  "EmrkdFndsWasAlreadyAprvdOnce",
+                  "EarmarkedFundsStartWorkflow",
+                  "EmrkdFndsHasValueAdjustments",
+                  "EarmarkedFundsDecisionReason",
+                  "EarmarkedFundsManualEditBlock",
+                  "EarmarkedFundsDocEntryStatus",
+                  "SAP__Messages"
+                ]
+              }
+            }
+          },
+          {
+            "name": "$expand",
+            "in": "query",
+            "description": "Expand related entities, see [Expand](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionexpand)",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "*",
+                  "_EarmarkedFundsDocumentItem"
+                ]
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      }
+    },
+    "/$batch": {
+      "post": {
+        "summary": "Send a group of requests",
+        "description": "Group multiple requests into a single request payload, see [Batch Requests](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_BatchRequests).\n\n*Please note that \"Try it out\" is not supported for this request.*",
+        "tags": [
+          "Batch Requests"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Batch request",
+          "content": {
+            "multipart/mixed;boundary=request-separator": {
+              "schema": {
+                "type": "string"
+              },
+              "example": "--request-separator\nContent-Type: application/http\nContent-Transfer-Encoding: binary\n\nGET EarmarkedFundsDocument HTTP/1.1\nAccept: application/json\n\n\n--request-separator--"
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch response",
+            "content": {
+              "multipart/mixed": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "--response-separator\nContent-Type: application/http\n\nHTTP/1.1 200 OK\nContent-Type: application/json\n\n{...}\n--response-separator--"
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type": {
+        "type": "object",
+        "properties": {
+          "EarmarkedFundsDocument": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Document Number",
+            "description": "Document Number for Earmarked Funds"
+          },
+          "EarmarkedFundsDocumentItem": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Document Item",
+            "description": "Earmarked Funds: Document Item"
+          },
+          "CompanyCode": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Company Code"
+          },
+          "TransactionCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Transaction Currency"
+          },
+          "CompanyCodeCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Local currency",
+            "description": "Local currency key"
+          },
+          "PostingDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Posting Date",
+            "description": "Posting Date in the Document"
+          },
+          "EmrkdFndsDocItmCreatedByUser": {
+            "type": "string",
+            "maxLength": 12,
+            "title": "Entered By"
+          },
+          "EmrkdFndsDocItmCreationDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Entered On"
+          },
+          "EmrkdFndsDocItmLastChgdByUsr": {
+            "type": "string",
+            "maxLength": 12,
+            "title": "Last Changed By"
+          },
+          "EmrkdFndsDocItmLastChangeDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Changed On",
+            "description": "Date of Last Change"
+          },
+          "EmrkdFndsReferenceDocumentItem": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference item",
+            "description": "Reference line item"
+          },
+          "GLAccount": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "G/L Account",
+            "description": "G/L Account Number"
+          },
+          "CostCenter": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Cost Center"
+          },
+          "WBSElementExternalID": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "WBS Element",
+            "description": "Work Breakdown Structure Element (WBS Element) Edited"
+          },
+          "ProfitCenter": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Profit Center"
+          },
+          "InternalOrder": {
+            "type": "string",
+            "maxLength": 12,
+            "title": "Order",
+            "description": "Order Number"
+          },
+          "BusinessArea": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Business Area"
+          },
+          "Fund": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Fund"
+          },
+          "BudgetPeriod": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Budget Period"
+          },
+          "CommitmentItem": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "Commitment Item"
+          },
+          "FundsCenter": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Funds Center"
+          },
+          "FundedProgram": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "Funded Program"
+          },
+          "FunctionalArea": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Functional Area"
+          },
+          "GrantID": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Grant"
+          },
+          "Supplier": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Supplier",
+            "description": "Account Number of Supplier"
+          },
+          "Customer": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Customer",
+            "description": "Customer Number"
+          },
+          "DocumentItemText": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Text",
+            "description": "Item Text"
+          },
+          "DueDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Due On",
+            "description": "Costs Due On"
+          },
+          "USFedGovernmentUUID": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "example": "01234567-89ab-cdef-0123-456789abcdef",
+            "title": "US Government Fields",
+            "description": "United States Federal Government Fields"
+          },
+          "FundsMgmtPeriodOfPerfStartDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Per. of Perf. Start",
+            "description": "Period of Performance Start"
+          },
+          "FundsMgmtPeriodOfPerfEndDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Per. of Perf. End",
+            "description": "Period of Performance End"
+          },
+          "USFedPromptPaytActExclude": {
+            "type": "boolean",
+            "title": "PPA Exclude",
+            "description": "PPA Exclude Indicator"
+          },
+          "PrdcssrFundsReservationDoc": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Funds Reservation",
+            "description": "Referenced Funds Reservation"
+          },
+          "PrdcssrFundsReservationDocItem": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Funds Reservation Item",
+            "description": "Item in Referenced Funds Reservation"
+          },
+          "PrdcssrFundsPreCmtmtDoc": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Funds Precommitment",
+            "description": "Referenced Funds Precommitment"
+          },
+          "PrdcssrFundsPreCmtmtDocItem": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Funds Precommitment Item",
+            "description": "Item in Referenced Funds Precommitment"
+          },
+          "EmrkdFndsItmPrdcssrCompleted": {
+            "type": "boolean",
+            "title": "Set to \"Completed\"",
+            "description": "Used earmarked funds are set to \"Completed\"."
+          },
+          "EmrkdFndsItmIsCompleted": {
+            "type": "boolean",
+            "title": "Item Completed",
+            "description": "Completion Indicator for Earmarked Funds Document Item"
+          },
+          "EmrkdFndsItmIsStatistical": {
+            "type": "boolean",
+            "title": "Statistical ID",
+            "description": "Funds Management Statistical Indicator"
+          },
+          "EmrkdFndsItmIsDeleted": {
+            "type": "boolean",
+            "title": "Deletion Indicator"
+          },
+          "EmrkdFndsItmIsSender": {
+            "type": "boolean",
+            "title": "Sender",
+            "description": "Indicator: Sender"
+          },
+          "EmrkdFndsItmIsReceiver": {
+            "type": "boolean",
+            "title": "Receiver",
+            "description": "Indicator: Receiver"
+          },
+          "EmrkdFndsItmManualEditBlock": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Item Block",
+            "description": "Item Block to Prevent Manual Processing"
+          },
+          "EmrkdFndsItmIsBlkdAgainstUsage": {
+            "type": "boolean",
+            "title": "Item Blocked",
+            "description": "Blocking Indicator (Item)"
+          },
+          "EmrkdFndsItmIsUnlimited": {
+            "type": "boolean",
+            "title": "Exceed Without Limit",
+            "description": "Usage May Exceed Reserved Amount Without Limit"
+          },
+          "EmrkdFndsItmToleranceLmtInPct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 4,
+            "x-sap-scale": 1,
+            "multipleOf": 1.0e-1,
+            "minimum": -999.9,
+            "maximum": 999.9,
+            "example": 0,
+            "title": "Overrun Tolerance",
+            "description": "Tolerance Limit for Overrun"
+          },
+          "EmrkdFndsOverrideGlobTolerance": {
+            "type": "boolean",
+            "title": "Override Global Tolerance",
+            "description": "Override Global (Percentage-Based) Tolerance"
+          },
+          "EmrkdFndsItmIsApproved": {
+            "type": "boolean",
+            "title": "Item Approved",
+            "description": "Earmarked Funds Item Is Approved"
+          },
+          "EmrkdFndsAcctAssgmtChangeable": {
+            "type": "boolean",
+            "title": "Account Assignment Changeable",
+            "description": "Account Assignment Can Be Changed in Follow-On Document"
+          },
+          "EmrkdFndsHasValueAdjustments": {
+            "type": "boolean",
+            "title": "Val.Adjust.Required",
+            "description": "Indicator: Amount Change Only with Value Adjustment Document"
+          },
+          "EmrkdFndsItmCnsmpnInCCCrcyOnly": {
+            "type": "boolean",
+            "title": "Reduction in Local Currency only"
+          },
+          "EmrkdFndsAmountInTransCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Total Amount",
+            "description": "Total Reserved Amount in Transaction Currency"
+          },
+          "EmrkdFndsOpenAmtInTransCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Open Amount",
+            "description": "Open Amount in Transaction Currency"
+          },
+          "EmrkdFndsCnsmdAmtInTransCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Reduced Amount",
+            "description": "Funds Reservation Amount Reduced"
+          },
+          "EmrkdFndsAmountInCCCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Total Amount in Local Currency",
+            "description": "Total Reserved Amount in Local Currency"
+          },
+          "EmrkdFndsOpenAmtInCCCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Open Amount in Local Currency"
+          },
+          "EmrkdFndsCnsmdAmtInCCCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Reduced Amount",
+            "description": "Funds Reservation Amount Reduced"
+          },
+          "SAP__Messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message"
+            }
+          },
+          "_EarmarkedFundsDocument": {
+            "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type"
+          }
+        },
+        "title": "Remote Interface Earmarked Funds Item"
+      },
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type-create": {
+        "type": "object",
+        "properties": {
+          "CompanyCode": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Company Code"
+          },
+          "TransactionCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Transaction Currency"
+          },
+          "CompanyCodeCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Local currency",
+            "description": "Local currency key"
+          },
+          "PostingDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Posting Date",
+            "description": "Posting Date in the Document"
+          },
+          "EmrkdFndsReferenceDocumentItem": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference item",
+            "description": "Reference line item"
+          },
+          "GLAccount": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "G/L Account",
+            "description": "G/L Account Number"
+          },
+          "CostCenter": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Cost Center"
+          },
+          "WBSElementExternalID": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "WBS Element",
+            "description": "Work Breakdown Structure Element (WBS Element) Edited"
+          },
+          "ProfitCenter": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Profit Center"
+          },
+          "InternalOrder": {
+            "type": "string",
+            "maxLength": 12,
+            "title": "Order",
+            "description": "Order Number"
+          },
+          "BusinessArea": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Business Area"
+          },
+          "Fund": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Fund"
+          },
+          "BudgetPeriod": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Budget Period"
+          },
+          "CommitmentItem": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "Commitment Item"
+          },
+          "FundsCenter": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Funds Center"
+          },
+          "FunctionalArea": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Functional Area"
+          },
+          "GrantID": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Grant"
+          },
+          "Supplier": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Supplier",
+            "description": "Account Number of Supplier"
+          },
+          "Customer": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Customer",
+            "description": "Customer Number"
+          },
+          "DocumentItemText": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Text",
+            "description": "Item Text"
+          },
+          "DueDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Due On",
+            "description": "Costs Due On"
+          },
+          "USFedGovernmentUUID": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "example": "01234567-89ab-cdef-0123-456789abcdef",
+            "title": "US Government Fields",
+            "description": "United States Federal Government Fields"
+          },
+          "FundsMgmtPeriodOfPerfStartDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Per. of Perf. Start",
+            "description": "Period of Performance Start"
+          },
+          "FundsMgmtPeriodOfPerfEndDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Per. of Perf. End",
+            "description": "Period of Performance End"
+          },
+          "USFedPromptPaytActExclude": {
+            "type": "boolean",
+            "title": "PPA Exclude",
+            "description": "PPA Exclude Indicator"
+          },
+          "PrdcssrFundsReservationDoc": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Funds Reservation",
+            "description": "Referenced Funds Reservation"
+          },
+          "PrdcssrFundsReservationDocItem": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Funds Reservation Item",
+            "description": "Item in Referenced Funds Reservation"
+          },
+          "PrdcssrFundsPreCmtmtDoc": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Funds Precommitment",
+            "description": "Referenced Funds Precommitment"
+          },
+          "PrdcssrFundsPreCmtmtDocItem": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Funds Precommitment Item",
+            "description": "Item in Referenced Funds Precommitment"
+          },
+          "EmrkdFndsItmPrdcssrCompleted": {
+            "type": "boolean",
+            "title": "Set to \"Completed\"",
+            "description": "Used earmarked funds are set to \"Completed\"."
+          },
+          "EmrkdFndsItmIsCompleted": {
+            "type": "boolean",
+            "title": "Item Completed",
+            "description": "Completion Indicator for Earmarked Funds Document Item"
+          },
+          "EmrkdFndsItmIsStatistical": {
+            "type": "boolean",
+            "title": "Statistical ID",
+            "description": "Funds Management Statistical Indicator"
+          },
+          "EmrkdFndsItmIsDeleted": {
+            "type": "boolean",
+            "title": "Deletion Indicator"
+          },
+          "EmrkdFndsItmIsSender": {
+            "type": "boolean",
+            "title": "Sender",
+            "description": "Indicator: Sender"
+          },
+          "EmrkdFndsItmIsReceiver": {
+            "type": "boolean",
+            "title": "Receiver",
+            "description": "Indicator: Receiver"
+          },
+          "EmrkdFndsItmManualEditBlock": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Item Block",
+            "description": "Item Block to Prevent Manual Processing"
+          },
+          "EmrkdFndsItmIsBlkdAgainstUsage": {
+            "type": "boolean",
+            "title": "Item Blocked",
+            "description": "Blocking Indicator (Item)"
+          },
+          "EmrkdFndsItmIsUnlimited": {
+            "type": "boolean",
+            "title": "Exceed Without Limit",
+            "description": "Usage May Exceed Reserved Amount Without Limit"
+          },
+          "EmrkdFndsItmToleranceLmtInPct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 4,
+            "x-sap-scale": 1,
+            "multipleOf": 1.0e-1,
+            "minimum": -999.9,
+            "maximum": 999.9,
+            "example": 0,
+            "title": "Overrun Tolerance",
+            "description": "Tolerance Limit for Overrun"
+          },
+          "EmrkdFndsOverrideGlobTolerance": {
+            "type": "boolean",
+            "title": "Override Global Tolerance",
+            "description": "Override Global (Percentage-Based) Tolerance"
+          },
+          "EmrkdFndsAcctAssgmtChangeable": {
+            "type": "boolean",
+            "title": "Account Assignment Changeable",
+            "description": "Account Assignment Can Be Changed in Follow-On Document"
+          },
+          "EmrkdFndsHasValueAdjustments": {
+            "type": "boolean",
+            "title": "Val.Adjust.Required",
+            "description": "Indicator: Amount Change Only with Value Adjustment Document"
+          },
+          "EmrkdFndsItmCnsmpnInCCCrcyOnly": {
+            "type": "boolean",
+            "title": "Reduction in Local Currency only"
+          },
+          "EmrkdFndsAmountInTransCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Total Amount",
+            "description": "Total Reserved Amount in Transaction Currency"
+          },
+          "EmrkdFndsAmountInCCCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Total Amount in Local Currency",
+            "description": "Total Reserved Amount in Local Currency"
+          },
+          "SAP__Messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message-create"
+            }
+          },
+          "_EarmarkedFundsDocument": {
+            "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type-create"
+          }
+        },
+        "title": "Remote Interface Earmarked Funds Item (for create)"
+      },
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type-update": {
+        "type": "object",
+        "properties": {
+          "CompanyCode": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Company Code"
+          },
+          "TransactionCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Transaction Currency"
+          },
+          "CompanyCodeCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Local currency",
+            "description": "Local currency key"
+          },
+          "PostingDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Posting Date",
+            "description": "Posting Date in the Document"
+          },
+          "EmrkdFndsReferenceDocumentItem": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference item",
+            "description": "Reference line item"
+          },
+          "GLAccount": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "G/L Account",
+            "description": "G/L Account Number"
+          },
+          "CostCenter": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Cost Center"
+          },
+          "WBSElementExternalID": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "WBS Element",
+            "description": "Work Breakdown Structure Element (WBS Element) Edited"
+          },
+          "ProfitCenter": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Profit Center"
+          },
+          "InternalOrder": {
+            "type": "string",
+            "maxLength": 12,
+            "title": "Order",
+            "description": "Order Number"
+          },
+          "BusinessArea": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Business Area"
+          },
+          "Fund": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Fund"
+          },
+          "BudgetPeriod": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Budget Period"
+          },
+          "CommitmentItem": {
+            "type": "string",
+            "maxLength": 24,
+            "title": "Commitment Item"
+          },
+          "FundsCenter": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Funds Center"
+          },
+          "FunctionalArea": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Functional Area"
+          },
+          "GrantID": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Grant"
+          },
+          "Supplier": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Supplier",
+            "description": "Account Number of Supplier"
+          },
+          "Customer": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Customer",
+            "description": "Customer Number"
+          },
+          "DocumentItemText": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Text",
+            "description": "Item Text"
+          },
+          "DueDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Due On",
+            "description": "Costs Due On"
+          },
+          "USFedGovernmentUUID": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "example": "01234567-89ab-cdef-0123-456789abcdef",
+            "title": "US Government Fields",
+            "description": "United States Federal Government Fields"
+          },
+          "FundsMgmtPeriodOfPerfStartDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Per. of Perf. Start",
+            "description": "Period of Performance Start"
+          },
+          "FundsMgmtPeriodOfPerfEndDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Per. of Perf. End",
+            "description": "Period of Performance End"
+          },
+          "USFedPromptPaytActExclude": {
+            "type": "boolean",
+            "title": "PPA Exclude",
+            "description": "PPA Exclude Indicator"
+          },
+          "PrdcssrFundsReservationDoc": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Funds Reservation",
+            "description": "Referenced Funds Reservation"
+          },
+          "PrdcssrFundsReservationDocItem": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Funds Reservation Item",
+            "description": "Item in Referenced Funds Reservation"
+          },
+          "PrdcssrFundsPreCmtmtDoc": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Funds Precommitment",
+            "description": "Referenced Funds Precommitment"
+          },
+          "PrdcssrFundsPreCmtmtDocItem": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Funds Precommitment Item",
+            "description": "Item in Referenced Funds Precommitment"
+          },
+          "EmrkdFndsItmPrdcssrCompleted": {
+            "type": "boolean",
+            "title": "Set to \"Completed\"",
+            "description": "Used earmarked funds are set to \"Completed\"."
+          },
+          "EmrkdFndsItmIsCompleted": {
+            "type": "boolean",
+            "title": "Item Completed",
+            "description": "Completion Indicator for Earmarked Funds Document Item"
+          },
+          "EmrkdFndsItmIsStatistical": {
+            "type": "boolean",
+            "title": "Statistical ID",
+            "description": "Funds Management Statistical Indicator"
+          },
+          "EmrkdFndsItmIsDeleted": {
+            "type": "boolean",
+            "title": "Deletion Indicator"
+          },
+          "EmrkdFndsItmIsSender": {
+            "type": "boolean",
+            "title": "Sender",
+            "description": "Indicator: Sender"
+          },
+          "EmrkdFndsItmIsReceiver": {
+            "type": "boolean",
+            "title": "Receiver",
+            "description": "Indicator: Receiver"
+          },
+          "EmrkdFndsItmManualEditBlock": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Item Block",
+            "description": "Item Block to Prevent Manual Processing"
+          },
+          "EmrkdFndsItmIsBlkdAgainstUsage": {
+            "type": "boolean",
+            "title": "Item Blocked",
+            "description": "Blocking Indicator (Item)"
+          },
+          "EmrkdFndsItmIsUnlimited": {
+            "type": "boolean",
+            "title": "Exceed Without Limit",
+            "description": "Usage May Exceed Reserved Amount Without Limit"
+          },
+          "EmrkdFndsItmToleranceLmtInPct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 4,
+            "x-sap-scale": 1,
+            "multipleOf": 1.0e-1,
+            "minimum": -999.9,
+            "maximum": 999.9,
+            "example": 0,
+            "title": "Overrun Tolerance",
+            "description": "Tolerance Limit for Overrun"
+          },
+          "EmrkdFndsOverrideGlobTolerance": {
+            "type": "boolean",
+            "title": "Override Global Tolerance",
+            "description": "Override Global (Percentage-Based) Tolerance"
+          },
+          "EmrkdFndsAcctAssgmtChangeable": {
+            "type": "boolean",
+            "title": "Account Assignment Changeable",
+            "description": "Account Assignment Can Be Changed in Follow-On Document"
+          },
+          "EmrkdFndsHasValueAdjustments": {
+            "type": "boolean",
+            "title": "Val.Adjust.Required",
+            "description": "Indicator: Amount Change Only with Value Adjustment Document"
+          },
+          "EmrkdFndsItmCnsmpnInCCCrcyOnly": {
+            "type": "boolean",
+            "title": "Reduction in Local Currency only"
+          },
+          "EmrkdFndsAmountInTransCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Total Amount",
+            "description": "Total Reserved Amount in Transaction Currency"
+          },
+          "EmrkdFndsAmountInCCCrcy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 15,
+            "minimum": -999999999999999,
+            "maximum": 999999999999999,
+            "example": 0,
+            "title": "Total Amount in Local Currency",
+            "description": "Total Reserved Amount in Local Currency"
+          },
+          "SAP__Messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message-update"
+            }
+          }
+        },
+        "title": "Remote Interface Earmarked Funds Item (for update)"
+      },
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type": {
+        "type": "object",
+        "properties": {
+          "EarmarkedFundsDocument": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Document Number",
+            "description": "Document Number for Earmarked Funds"
+          },
+          "EmrkdFndsExtDocumentNumber": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "External Document Number",
+            "description": "External Document Number for Earmarked Funds"
+          },
+          "EmrkdFndsIntegrationScenario": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Scenario"
+          },
+          "EmrkdFndsIntegScenarioVariant": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Scenario Variant"
+          },
+          "EarmarkedFundsDocumentCategory": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Document Category",
+            "description": "Document Category of an Earmarked Funds Document"
+          },
+          "EarmarkedFundsDocumentType": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Document Type",
+            "description": "Earmarked Fund Document Type"
+          },
+          "CompanyCode": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Company Code"
+          },
+          "TransactionCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Transaction Currency"
+          },
+          "CompanyCodeCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Local currency",
+            "description": "Local currency key"
+          },
+          "EarmarkedFundsDocReference": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Reference",
+            "description": "Reference Document Number"
+          },
+          "EarmarkedFundsDocReference2": {
+            "type": "string",
+            "maxLength": 70,
+            "title": "Reference 2"
+          },
+          "EarmarkedFundsDocReference3": {
+            "type": "string",
+            "maxLength": 70,
+            "title": "Reference 3"
+          },
+          "EarmarkedFundsHeaderText": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Document Header Text"
+          },
+          "PostingDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Posting Date",
+            "description": "Posting Date in the Document"
+          },
+          "DocumentDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Document Date",
+            "description": "Document Date in Document"
+          },
+          "ExchangeRateDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Translation Date"
+          },
+          "AbsoluteExchangeRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 9,
+            "x-sap-scale": 5,
+            "multipleOf": 1.0e-5,
+            "minimum": -9999.99999,
+            "maximum": 9999.99999,
+            "example": 0,
+            "title": "Absolute Exchange Rate"
+          },
+          "ExchRateIsIndirectQuotation": {
+            "type": "boolean",
+            "title": "Exchange Rate Is Indirect Quotation"
+          },
+          "EmrkdFndsDocCreatedByUser": {
+            "type": "string",
+            "maxLength": 12,
+            "title": "Entered By"
+          },
+          "EmrkdFndsDocCreationDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Entered On"
+          },
+          "EmrkdFndsDocLastChangedByUser": {
+            "type": "string",
+            "maxLength": 12,
+            "title": "Last Changed By"
+          },
+          "EmrkdFndsDocLastChangeDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Changed On",
+            "description": "Date of Last Change"
+          },
+          "EmrkdFndsDocLastChangeDateTime": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2017-04-13T15:51:04Z",
+            "title": "Last Changed On",
+            "description": "Change Date and Time"
+          },
+          "ReferenceDocumentType": {
+            "type": "string",
+            "maxLength": 5,
+            "title": "Reference procedure"
+          },
+          "ReferenceDocument": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference Document",
+            "description": "Reference Doc. Number"
+          },
+          "ReferenceDocumentContext": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference Org. Unit",
+            "description": "Reference Organizational Units"
+          },
+          "ReferenceDocumentLogicalSystem": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Log. system source",
+            "description": "Logical system of source document"
+          },
+          "EmrkdFndsHasNegativeAmounts": {
+            "type": "boolean",
+            "title": "Negative Values",
+            "description": "Indicator: Document Has Negative Amounts"
+          },
+          "EmrkdFndsIsBlockedAgainstUsage": {
+            "type": "boolean",
+            "title": "Document Blocked",
+            "description": "Blocking Indicator (Header)"
+          },
+          "EarmarkedFundsIsCompleted": {
+            "type": "boolean",
+            "title": "Document Completed",
+            "description": "Indicator: Final Completion (Paid)"
+          },
+          "EarmarkedFundsIsApproved": {
+            "type": "boolean",
+            "title": "Document Approved",
+            "description": "Indicator: Document Is Approved"
+          },
+          "EmrkdFndsWasAlreadyAprvdOnce": {
+            "type": "boolean",
+            "title": "Already Approved",
+            "description": "Document Already Approved Once"
+          },
+          "EarmarkedFundsStartWorkflow": {
+            "type": "boolean",
+            "title": "Start Approval by Workflow"
+          },
+          "EmrkdFndsHasValueAdjustments": {
+            "type": "boolean",
+            "title": "Val.adjust.docs req.",
+            "description": "Changes to Doc. Amounts Only Using Value Adjustment Docs"
+          },
+          "EarmarkedFundsDecisionReason": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Decision Reason",
+            "description": "Reason for Decision for Workflow"
+          },
+          "EarmarkedFundsManualEditBlock": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Document Block",
+            "description": "Funds Precommitment Document Block"
+          },
+          "EarmarkedFundsDocEntryStatus": {
+            "type": "string",
+            "maxLength": 1,
+            "title": "Entry Status",
+            "description": "Document Entry Status (Posted, Parked)"
+          },
+          "SAP__Messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message"
+            }
+          },
+          "_EarmarkedFundsDocumentItem": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type"
+            }
+          }
+        },
+        "title": "Remote Interface Earmarked Funds"
+      },
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type-create": {
+        "type": "object",
+        "properties": {
+          "EmrkdFndsExtDocumentNumber": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "External Document Number",
+            "description": "External Document Number for Earmarked Funds"
+          },
+          "EmrkdFndsIntegrationScenario": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Scenario"
+          },
+          "EmrkdFndsIntegScenarioVariant": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Scenario Variant"
+          },
+          "EarmarkedFundsDocumentCategory": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Document Category",
+            "description": "Document Category of an Earmarked Funds Document"
+          },
+          "EarmarkedFundsDocumentType": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Document Type",
+            "description": "Earmarked Fund Document Type"
+          },
+          "CompanyCode": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Company Code"
+          },
+          "TransactionCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Transaction Currency"
+          },
+          "EarmarkedFundsDocReference": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Reference",
+            "description": "Reference Document Number"
+          },
+          "EarmarkedFundsDocReference2": {
+            "type": "string",
+            "maxLength": 70,
+            "title": "Reference 2"
+          },
+          "EarmarkedFundsDocReference3": {
+            "type": "string",
+            "maxLength": 70,
+            "title": "Reference 3"
+          },
+          "EarmarkedFundsHeaderText": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Document Header Text"
+          },
+          "PostingDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Posting Date",
+            "description": "Posting Date in the Document"
+          },
+          "DocumentDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Document Date",
+            "description": "Document Date in Document"
+          },
+          "ExchangeRateDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Translation Date"
+          },
+          "AbsoluteExchangeRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 9,
+            "x-sap-scale": 5,
+            "multipleOf": 1.0e-5,
+            "minimum": -9999.99999,
+            "maximum": 9999.99999,
+            "example": 0,
+            "title": "Absolute Exchange Rate"
+          },
+          "ExchRateIsIndirectQuotation": {
+            "type": "boolean",
+            "title": "Exchange Rate Is Indirect Quotation"
+          },
+          "ReferenceDocumentType": {
+            "type": "string",
+            "maxLength": 5,
+            "title": "Reference procedure"
+          },
+          "ReferenceDocument": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference Document",
+            "description": "Reference Doc. Number"
+          },
+          "ReferenceDocumentContext": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference Org. Unit",
+            "description": "Reference Organizational Units"
+          },
+          "ReferenceDocumentLogicalSystem": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Log. system source",
+            "description": "Logical system of source document"
+          },
+          "EmrkdFndsHasNegativeAmounts": {
+            "type": "boolean",
+            "title": "Negative Values",
+            "description": "Indicator: Document Has Negative Amounts"
+          },
+          "EmrkdFndsIsBlockedAgainstUsage": {
+            "type": "boolean",
+            "title": "Document Blocked",
+            "description": "Blocking Indicator (Header)"
+          },
+          "EarmarkedFundsIsCompleted": {
+            "type": "boolean",
+            "title": "Document Completed",
+            "description": "Indicator: Final Completion (Paid)"
+          },
+          "EmrkdFndsWasAlreadyAprvdOnce": {
+            "type": "boolean",
+            "title": "Already Approved",
+            "description": "Document Already Approved Once"
+          },
+          "EarmarkedFundsStartWorkflow": {
+            "type": "boolean",
+            "title": "Start Approval by Workflow"
+          },
+          "EmrkdFndsHasValueAdjustments": {
+            "type": "boolean",
+            "title": "Val.adjust.docs req.",
+            "description": "Changes to Doc. Amounts Only Using Value Adjustment Docs"
+          },
+          "EarmarkedFundsDecisionReason": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Decision Reason",
+            "description": "Reason for Decision for Workflow"
+          },
+          "EarmarkedFundsManualEditBlock": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Document Block",
+            "description": "Funds Precommitment Document Block"
+          },
+          "EarmarkedFundsDocEntryStatus": {
+            "type": "string",
+            "maxLength": 1,
+            "title": "Entry Status",
+            "description": "Document Entry Status (Posted, Parked)"
+          },
+          "SAP__Messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message-create"
+            }
+          },
+          "_EarmarkedFundsDocumentItem": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocumentItem_Type-create"
+            }
+          }
+        },
+        "title": "Remote Interface Earmarked Funds (for create)"
+      },
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.EarmarkedFundsDocument_Type-update": {
+        "type": "object",
+        "properties": {
+          "EmrkdFndsExtDocumentNumber": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "External Document Number",
+            "description": "External Document Number for Earmarked Funds"
+          },
+          "EmrkdFndsIntegrationScenario": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Scenario"
+          },
+          "EmrkdFndsIntegScenarioVariant": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Scenario Variant"
+          },
+          "EarmarkedFundsDocumentCategory": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Document Category",
+            "description": "Document Category of an Earmarked Funds Document"
+          },
+          "EarmarkedFundsDocumentType": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Document Type",
+            "description": "Earmarked Fund Document Type"
+          },
+          "CompanyCode": {
+            "type": "string",
+            "maxLength": 4,
+            "title": "Company Code"
+          },
+          "TransactionCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "title": "Transaction Currency"
+          },
+          "EarmarkedFundsDocReference": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Reference",
+            "description": "Reference Document Number"
+          },
+          "EarmarkedFundsDocReference2": {
+            "type": "string",
+            "maxLength": 70,
+            "title": "Reference 2"
+          },
+          "EarmarkedFundsDocReference3": {
+            "type": "string",
+            "maxLength": 70,
+            "title": "Reference 3"
+          },
+          "EarmarkedFundsHeaderText": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Document Header Text"
+          },
+          "PostingDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Posting Date",
+            "description": "Posting Date in the Document"
+          },
+          "DocumentDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Document Date",
+            "description": "Document Date in Document"
+          },
+          "ExchangeRateDate": {
+            "type": "string",
+            "nullable": true,
+            "format": "date",
+            "example": "2017-04-13",
+            "title": "Translation Date"
+          },
+          "AbsoluteExchangeRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "format": "decimal",
+            "x-sap-precision": 9,
+            "x-sap-scale": 5,
+            "multipleOf": 1.0e-5,
+            "minimum": -9999.99999,
+            "maximum": 9999.99999,
+            "example": 0,
+            "title": "Absolute Exchange Rate"
+          },
+          "ExchRateIsIndirectQuotation": {
+            "type": "boolean",
+            "title": "Exchange Rate Is Indirect Quotation"
+          },
+          "ReferenceDocumentType": {
+            "type": "string",
+            "maxLength": 5,
+            "title": "Reference procedure"
+          },
+          "ReferenceDocument": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference Document",
+            "description": "Reference Doc. Number"
+          },
+          "ReferenceDocumentContext": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Reference Org. Unit",
+            "description": "Reference Organizational Units"
+          },
+          "ReferenceDocumentLogicalSystem": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Log. system source",
+            "description": "Logical system of source document"
+          },
+          "EmrkdFndsHasNegativeAmounts": {
+            "type": "boolean",
+            "title": "Negative Values",
+            "description": "Indicator: Document Has Negative Amounts"
+          },
+          "EmrkdFndsIsBlockedAgainstUsage": {
+            "type": "boolean",
+            "title": "Document Blocked",
+            "description": "Blocking Indicator (Header)"
+          },
+          "EarmarkedFundsIsCompleted": {
+            "type": "boolean",
+            "title": "Document Completed",
+            "description": "Indicator: Final Completion (Paid)"
+          },
+          "EmrkdFndsWasAlreadyAprvdOnce": {
+            "type": "boolean",
+            "title": "Already Approved",
+            "description": "Document Already Approved Once"
+          },
+          "EarmarkedFundsStartWorkflow": {
+            "type": "boolean",
+            "title": "Start Approval by Workflow"
+          },
+          "EmrkdFndsHasValueAdjustments": {
+            "type": "boolean",
+            "title": "Val.adjust.docs req.",
+            "description": "Changes to Doc. Amounts Only Using Value Adjustment Docs"
+          },
+          "EarmarkedFundsDecisionReason": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Decision Reason",
+            "description": "Reason for Decision for Workflow"
+          },
+          "EarmarkedFundsManualEditBlock": {
+            "type": "string",
+            "maxLength": 2,
+            "title": "Document Block",
+            "description": "Funds Precommitment Document Block"
+          },
+          "EarmarkedFundsDocEntryStatus": {
+            "type": "string",
+            "maxLength": 1,
+            "title": "Entry Status",
+            "description": "Document Entry Status (Posted, Parked)"
+          },
+          "SAP__Messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message-update"
+            }
+          }
+        },
+        "title": "Remote Interface Earmarked Funds (for update)"
+      },
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "nullable": true
+          },
+          "additionalTargets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "transition": {
+            "type": "boolean"
+          },
+          "numericSeverity": {
+            "type": "integer",
+            "format": "uint8"
+          },
+          "longtextUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "SAP__Message"
+      },
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message-create": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "nullable": true
+          },
+          "additionalTargets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "transition": {
+            "type": "boolean"
+          },
+          "numericSeverity": {
+            "type": "integer",
+            "format": "uint8"
+          },
+          "longtextUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "SAP__Message (for create)"
+      },
+      "com.sap.gateway.srvd_a2x.api_earmarkedfundsdocument.v0001.SAP__Message-update": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "nullable": true
+          },
+          "additionalTargets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "transition": {
+            "type": "boolean"
+          },
+          "numericSeverity": {
+            "type": "integer",
+            "format": "uint8"
+          },
+          "longtextUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "SAP__Message (for update)"
+      },
+      "count": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "The number of entities in the collection. Available when using the [$count](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptioncount) query option."
+      },
+      "error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "innererror": {
+                "type": "object",
+                "description": "The structure of this object is service-specific"
+              }
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "top": {
+        "name": "$top",
+        "in": "query",
+        "description": "Show only the first n items, see [Paging - Top](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptiontop)",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "example": 50
+      },
+      "skip": {
+        "name": "$skip",
+        "in": "query",
+        "description": "Skip the first n items, see [Paging - Skip](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionskip)",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "count": {
+        "name": "$count",
+        "in": "query",
+        "description": "Include count of items, see [Count](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptioncount)",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "search": {
+        "name": "$search",
+        "in": "query",
+        "description": "Search items by search phrases, see [Searching](http://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptionsearch)",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "error": {
+        "description": "Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/error"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "OAuth2Auth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "scopes": {},
+            "refreshUrl": "https://{host}:{port}",
+            "authorizationUrl": "https://{host}:{port}",
+            "tokenUrl": "https://{host}:{port}"
+          }
+        }
+      },
+      "BasicAuth": {
+        "type": "http",
+        "scheme": "basic"
+      }
+    }
+  },
+  "security": [
+    {
+      "OAuth2Auth": []
+    },
+    {
+      "BasicAuth": []
+    }
+  ]
+}

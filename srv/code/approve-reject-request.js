@@ -16,8 +16,18 @@ const { performPostToS4, businessError } = postToS4Module;
 const { completeEarmarkedFundsDocument } = require("./utils/earmarked-funds");
 
 const insertRequestHistory = require("./insert-request-history");
+const { formatLocalDate, formatLocalTime } = require("./utils/date-utils");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
+
+const { loadEmailContext } = require("./utils/approval-email-context");
+
+const {
+  renderEmailConfig,
+  EMAIL_TYPE,
+} = require("./utils/email-config-renderer");
+
+const { sendEmail } = require("./utils/send-email");
 
 const LOG = cds.log("approve-reject-request");
 
@@ -109,7 +119,16 @@ async function loadRequestForApproval(tx, Requests, requestId) {
   return tx.run(
     SELECT.one
       .from(Requests)
-      .columns("ID", "status_code", "workflowInstanceId", "currentApprovalLevel")
+      .columns(
+        "ID",
+        "status_code",
+        "workflowInstanceId",
+        "currentApprovalLevel",
+        "requestType_code",
+        "earmarkedFundsDocNumber",
+        "transferOutDocNumber",
+        "requestor",
+      )
       .where({ ID: requestId }),
   );
 }
@@ -361,6 +380,54 @@ async function prepareApprovalAction(request) {
  *
  * @param {cds.Request} request
  */
+/**
+ * Restores the approval state captured before this approval action, after
+ * a failed Earmarked Funds completion. The Transfer document numbers
+ * already posted are kept, so retrying only redoes the completion.
+ */
+async function revertFinalApproval({ requestId, snapshot, approverEmail, reason }) {
+  const { Requests, RequestApprovers, RequestHistory } = cds.entities(SERVICE_NAMESPACE);
+
+  await cds.tx(async (tx) => {
+    for (const row of snapshot.approvers) {
+      await tx.run(
+        UPDATE(RequestApprovers)
+          .set({
+            status_code: row.status_code,
+            comment: row.comment,
+            actionDate: row.actionDate,
+          })
+          .where({ ID: row.ID }),
+      );
+    }
+
+    await tx.run(
+      UPDATE(Requests)
+        .set({
+          status_code: snapshot.request.status_code,
+          currentApprovalLevel: snapshot.request.currentApprovalLevel,
+          workflowStatus: snapshot.request.workflowStatus,
+          approvedBy: snapshot.request.approvedBy,
+          postingDate: snapshot.request.postingDate,
+          postingPeriod: snapshot.request.postingPeriod,
+        })
+        .where({ ID: requestId }),
+    );
+
+    const now = new Date();
+
+    await tx.run(
+      INSERT.into(RequestHistory).entries({
+        request_ID: requestId,
+        date: formatLocalDate(now),
+        time: formatLocalTime(now),
+        changedBy: approverEmail,
+        changes: `Approval not completed: Earmarked Funds completion failed (${reason}). The Transfer is already posted in S/4 and is not posted again; the approver must press Approve again after the issue is resolved.`,
+      }),
+    );
+  });
+}
+
 async function approveRequest(request) {
   LOG.info("--- approveRequest started ---");
 
@@ -404,6 +471,32 @@ async function approveRequest(request) {
 
   const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
 
+  /*
+   * Snapshot of the approval state before anything changes in this
+   * action, so a failed Earmarked Funds completion after posting can
+   * restore it exactly (see revertFinalApproval).
+   */
+  const approvalSnapshot = {
+    approvers: await tx.run(
+      SELECT.from(RequestApprovers)
+        .columns("ID", "status_code", "comment", "actionDate")
+        .where({ request_ID: requestId }),
+    ),
+    request: await tx.run(
+      SELECT.one
+        .from(Requests)
+        .columns(
+          "status_code",
+          "currentApprovalLevel",
+          "workflowStatus",
+          "approvedBy",
+          "postingDate",
+          "postingPeriod",
+        )
+        .where({ ID: requestId }),
+    ),
+  };
+
   // Approve for User
   await tx.run(
     UPDATE(RequestApprovers)
@@ -423,6 +516,42 @@ async function approveRequest(request) {
         })
       .where({ level: { like: `${nextLevel}%` } })   // contains "A"
     );
+
+    /*
+     * Notify the newly-activated level's approvers directly via the
+     * S/4 Email API, now that their RequestApprovers rows are
+     * PENDING_APPROVAL - same "To Approver" content the Level 1
+     * approvers got at submission (requests-after-create-logic.js),
+     * rebuilt here since this is a separate request/transaction with
+     * only a narrowly-selected requestRow in hand.
+     */
+    const nextLevelApprovers = await tx.run(
+      SELECT.from(RequestApprovers)
+        .columns("emailAddress")
+        .where({
+          request_ID: requestId,
+          level: { like: `${nextLevel}%` },
+          status_code: REQUEST_STATUS.PENDING_APPROVAL,
+        }),
+    );
+
+    const emailContext = await loadEmailContext(tx, requestId);
+
+    if (emailContext && nextLevelApprovers.length) {
+      const toApproverEmail = await renderEmailConfig(
+        tx,
+        EMAIL_TYPE.TO_APPROVER,
+        emailContext,
+      );
+
+      if (toApproverEmail) {
+        await sendEmail({
+          subject: toApproverEmail.subject,
+          body: toApproverEmail.body,
+          recipients: nextLevelApprovers.map((row) => row.emailAddress),
+        });
+      }
+    }
   }
 
   let newStatusCode = REQUEST_STATUS.PENDING_APPROVAL;
@@ -517,27 +646,75 @@ async function approveRequest(request) {
 
   let s4Result;
 
-  if (newStatusCode === REQUEST_STATUS.APPROVED){
+  if (newStatusCode === REQUEST_STATUS.APPROVED) {
+    const isTransferWithEarmarkedFunds =
+      requestRow.requestType_code === "T" &&
+      Boolean(requestRow.earmarkedFundsDocNumber);
+
+    const alreadyPosted =
+      isTransferWithEarmarkedFunds && Boolean(requestRow.transferOutDocNumber);
+
+    /*
+     * Pre-check before posting: the Earmarked Funds completion must
+     * succeed in test mode first. request.error is raised before the
+     * transaction commits, so nothing is posted in S/4 and nothing is
+     * saved if this check fails.
+     */
+    if (isTransferWithEarmarkedFunds && !alreadyPosted) {
+      try {
+        await completeEarmarkedFundsDocument({
+          documentNumber: requestRow.earmarkedFundsDocNumber,
+          test: true,
+        });
+      } catch (error) {
+        LOG.error(
+          "Earmarked Funds pre-check failed. The approval is not processed and nothing is posted.",
+          JSON.stringify({
+            requestId,
+            earmarkedFundsDocNumber: requestRow.earmarkedFundsDocNumber,
+            message: error.message,
+          }),
+        );
+
+        request.error(
+          error.statusCode || 422,
+          `The approval cannot be processed because the Earmarked Funds document cannot be completed: ${error.message}`,
+        );
+
+        return;
+      }
+    }
+
     try {
-      const result = await performPostToS4({
-        tx,
-        request,
-        requestId,
-        emailAddress: approverEmail,
-      });
+      if (alreadyPosted) {
+        s4Result = {
+          documentNumbers: { TRAN: requestRow.transferOutDocNumber },
+          earmarkedFundsDocNumber: requestRow.earmarkedFundsDocNumber,
+        };
 
-      s4Result = result;
+        LOG.info(
+          "Transfer already posted - retrying the Earmarked Funds completion only.",
+          JSON.stringify({ requestId }),
+        );
+      } else {
+        s4Result = await performPostToS4({
+          tx,
+          request,
+          requestId,
+          emailAddress: approverEmail,
+        });
 
-      LOG.info(
-        "S/4 posting completed successfully.",
-        JSON.stringify({ requestId, documentNumbers: result.documentNumbers }),
-      );
+        LOG.info(
+          "S/4 posting completed successfully.",
+          JSON.stringify({ requestId, documentNumbers: s4Result.documentNumbers }),
+        );
+      }
 
       /*
-      * Commit the DB transaction before calling out to BPA, so the
-      * posted state is durable before we tell BPA this task/branch
-      * is done.
-      */
+       * Commit the DB transaction before calling out to BPA, so the
+       * posted state is durable before we tell BPA this task/branch
+       * is done.
+       */
       await tx.commit();
     } catch (error) {
       console.log(error)
@@ -559,9 +736,10 @@ async function approveRequest(request) {
   }
 
   /*
-   * Best-effort: the approval and S/4 posting are already committed,
-   * so a completion failure is logged for manual follow-up, never
-   * surfaced as a failure of the approval.
+   * The approval is only finished once the Earmarked Funds document is
+   * complete. If completion fails, the approval state is restored so
+   * the approver can press Approve again after the S/4 problem is fixed;
+   * the Transfer document already posted is reused, not posted again.
    */
   if (s4Result?.documentNumbers?.TRAN && s4Result?.earmarkedFundsDocNumber) {
     try {
@@ -577,19 +755,31 @@ async function approveRequest(request) {
         }),
       );
     } catch (error) {
+      await revertFinalApproval({
+        requestId,
+        snapshot: approvalSnapshot,
+        approverEmail,
+        reason: error.message,
+      });
+
       LOG.error(
-        "S/4 posting succeeded, but the Earmarked Funds document " +
-          "could not be marked complete. Manual follow-up may be " +
-          "required in S/4.",
+        "Earmarked Funds completion failed after posting. Approval reverted for retry.",
         JSON.stringify({
           requestId,
           earmarkedFundsDocNumber: s4Result.earmarkedFundsDocNumber,
           message: error.message,
-          status: error.response?.status || error.statusCode,
         }),
       );
+
+      request.error(
+        error.statusCode || 502,
+        `The Transfer is posted in S/4, but the Earmarked Funds document could not be completed: ${error.message} The approval is not finished. Resolve the issue in S/4, then press Approve again.`,
+      );
+
+      return;
     }
   }
+
 
 
   try {
@@ -624,6 +814,46 @@ async function approveRequest(request) {
       }),
     );
   }
+
+  /*
+   * Only the FINAL approval (request fully Completed, not just
+   * advanced to the next level) notifies the requestor - an
+   * intermediate level's approval has nothing to report to them yet.
+   *
+   * tx was already committed above (S/4 posting must be durable
+   * before BPA is told the task is done) - a fresh transaction is
+   * needed here rather than reusing it.
+   */
+  if (newStatusCode === REQUEST_STATUS.APPROVED) {
+    // documentNumbers is keyed by posting type (TRAN/RETN/SUPL - see
+    // post-to-s4-logic.js) - exactly one is set per request type.
+    const documentNumber = Object.values(s4Result?.documentNumbers || {})[0];
+
+    const { emailContext, approvedEmail } = await cds.tx(async (freshTx) => {
+      const context = await loadEmailContext(freshTx, requestId);
+
+      if (!context) {
+        return {};
+      }
+
+      return {
+        emailContext: context,
+        approvedEmail: await renderEmailConfig(freshTx, EMAIL_TYPE.APPROVED, {
+          ...context,
+          documentNumber,
+        }),
+      };
+    });
+
+    if (emailContext && approvedEmail && requestRow.requestor) {
+      await sendEmail({
+        subject: approvedEmail.subject,
+        body: approvedEmail.body,
+        recipients: [requestRow.requestor],
+      });
+    }
+  }
+
   request.info('Request Approved successfully');
 }
 
@@ -650,7 +880,8 @@ async function rejectRequest(request) {
     return;
   }
 
-  const { requestId, approverRow, row, lastApprover, taskIds } = prepared;
+  const { requestId, approverRow, row, lastApprover, taskIds, requestRow } =
+    prepared;
 
   const approverEmail = normalizeEmail(request.user?.id);
   // const approverEmail = "willy.angkasa@pwc.com";
@@ -741,6 +972,34 @@ async function rejectRequest(request) {
     request.error(500, "Unable to reject this request. Please try again.");
 
     return;
+  }
+
+  /*
+   * tx was already committed above - a fresh transaction is needed
+   * here, same reasoning as approveRequest's own final-approval email.
+   */
+  const { emailContext, rejectedEmail } = await cds.tx(async (freshTx) => {
+    const context = await loadEmailContext(freshTx, requestId);
+
+    if (!context) {
+      return {};
+    }
+
+    return {
+      emailContext: context,
+      rejectedEmail: await renderEmailConfig(freshTx, EMAIL_TYPE.REJECTED, {
+        ...context,
+        rejectionReason: comment || "",
+      }),
+    };
+  });
+
+  if (emailContext && rejectedEmail && requestRow.requestor) {
+    await sendEmail({
+      subject: rejectedEmail.subject,
+      body: rejectedEmail.body,
+      recipients: [requestRow.requestor],
+    });
   }
 
   try {

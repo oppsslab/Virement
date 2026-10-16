@@ -1,0 +1,64 @@
+emailType,subject,body,enabled,createdAt,modifiedAt
+"ToApprover","Permohonan Pindah Peruntukan {{RequestNumber}} - Kelulusan Pindah Peruntukan {{RequestorDepartment}}","<p>Salam Sejahtera,</p>
+    <p>Tuan/Puan,</p>
+    <p><b>PERMOHONAN PINDAH PERUNTUKAN</b></p>
+    <p>No. Rujukan : {{RequestNumber}}</p>
+    <p>2. Untuk perhatian dan tindakan pihak tuan/puan, permohonan pindah
+    peruntukan berikut telah dikemukakan untuk semakan dan kelulusan.
+    Butiran permohonan adalah seperti yang berikut:</p>
+    <table style=""border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;margin-bottom:12px;"">
+      <tr><td style=""border:1px solid #ccc;padding:4px;font-weight:bold;"">Tahun</td><td style=""border:1px solid #ccc;padding:4px;"">{{FiscalYear}}</td></tr>
+      <tr><td style=""border:1px solid #ccc;padding:4px;font-weight:bold;"">Bajet Belanja Operasi / Projek</td><td style=""border:1px solid #ccc;padding:4px;"">{{BudgetTypeDescr}}</td></tr>
+      <tr><td style=""border:1px solid #ccc;padding:4px;font-weight:bold;"">Pemohon (Jabatan / Cawangan)</td><td style=""border:1px solid #ccc;padding:4px;"">{{RequestorDepartment}}</td></tr>
+      <tr><td style=""border:1px solid #ccc;padding:4px;font-weight:bold;"">Jenis Viremen</td><td style=""border:1px solid #ccc;padding:4px;"">{{RequestTypeDescr}}</td></tr>
+      <tr><td style=""border:1px solid #ccc;padding:4px;font-weight:bold;"">Jumlah (RM)</td><td style=""border:1px solid #ccc;padding:4px;"">{{RequestAmount}}</td></tr>
+      <tr><td style=""border:1px solid #ccc;padding:4px;font-weight:bold;"">Butiran</td><td style=""border:1px solid #ccc;padding:4px;"">Refer to the Request Detail</td></tr>
+    </table>
+    {{ItemsTable}}
+    <p>Please review the details and take action by clicking the link below:<br/>
+    <a href=""{{RequestLink}}"">Click Here to Review and Approve</a></p>
+    <p>Kerjasama dan tindakan pihak tuan/puan berhubung permohonan ini amat
+    dihargai.</p>
+    <p>Sekian, terima kasih.</p>",true,"2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z"
+"Approved","Pemakluman Status Permohonan Pindah Peruntukan dalam Sistem IFAMS {{RequestNumber}}","<p>Salam Sejahtera,</p>
+    <p>Tuan/Puan,</p>
+    <p><b>PERMOHONAN PINDAH PERUNTUKAN</b></p>
+    <p>No. Rujukan : {{RequestNumber}}</p>
+    <p>Perkara di atas adalah dirujuk.</p>
+    <p>2. Sukacita dimaklumkan bahawa permohonan pindah peruntukan yang
+    telah dikemukakan oleh pihak tuan/puan telah <b>DILULUSKAN</b> dan
+    berjaya dikemaskini dalam Sistem IFAMS.</p>
+    <p>3. Butiran pindah peruntukan yang telah diluluskan adalah seperti
+    berikut:</p>
+    {{ItemsTable}}
+    <p>4. Sila hubungi Bahagian Bajet dan Pengurusan Kos (BCM) melalui
+    talian yang dinyatakan di bawah sekiranya maklumat pindah peruntukan
+    yang diluluskan masih belum dikemaskini dalam Sistem IFAMS.</p>
+    <p>Kerjasama dan perhatian pihak tuan/puan amat dihargai.</p>
+    <p>Sekian, terima kasih.</p>
+    <p>
+      Bahagian Bajet dan Pengurusan Kos (BCM)<br/>
+      Jabatan Kewangan<br/>
+      Kumpulan Wang Simpanan Pekerja<br/>
+      No Telefon: 03 – 61226602
+    </p>",true,"2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z"
+"Rejected","Pemakluman Status Permohonan Pindah Peruntukan dalam Sistem IFAMS {{RequestNumber}}","<p>Salam Sejahtera,</p>
+    <p>Tuan/Puan,</p>
+    <p><b>PERMOHONAN PINDAH PERUNTUKAN</b></p>
+    <p>No. Rujukan : {{RequestNumber}}</p>
+    <p>2. Dukacita dimaklumkan bahawa permohonan pindah peruntukan yang
+    telah dikemukakan oleh pihak tuan/puan adalah <b>TIDAK DILULUSKAN</b>.</p>
+    <p>Sebab: {{RejectionReason}}</p>
+    <p>3. Sila rujuk butiran lanjut berhubung keputusan permohonan ini
+    yang dipaparkan dalam Sistem iFAMS. Sekiranya terdapat maklumat
+    tambahan atau pindaan yang berkaitan, pihak tuan/puan boleh
+    mengemaskini dan mengemukakan semula permohonan berkenaan untuk
+    pertimbangan.</p>
+    <p>Kerjasama dan perhatian pihak tuan/puan amat dihargai.</p>
+    <p>Sekian, terima kasih.</p>
+    <p>
+      Bahagian Bajet dan Pengurusan Kos (BCM)<br/>
+      Jabatan Kewangan<br/>
+      Kumpulan Wang Simpanan Pekerja<br/>
+      No Telefon: 03 – 61226602
+    </p>",true,"2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z"

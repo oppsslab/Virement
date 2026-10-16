@@ -9,39 +9,13 @@ sap.ui.define(
     "use strict";
 
     /*
-     * Radio button order in ReturnCategoryField.fragment.xml, mapped to the
-     * ReturnCategory code list. Keep the two in sync.
+     * Index -> code mappings matching each radio group's selectedIndex
+     * binding expression (see ReturnCategoryField.fragment.xml /
+     * SupplementCategoryField.fragment.xml) - must stay in the same
+     * order as the RadioButton children in those fragments.
      */
     const RETURN_CATEGORY_CODES = ["Z", "C", "H"];
     const SUPPLEMENT_CATEGORY_CODES = ["S", "H"];
-
-    const ERROR_WORKFLOW_STATUSES = ["ERRONEOUS", "ERROR"];
-
-    /**
-     * Navigates to a named route deterministically, bypassing browser
-     * history entirely - a reliable "Back to List" for the master-data
-     * Object Pages (Approver Matrix, the 5 Groupings), since the
-     * browser's native Back button is not reliable here: Fiori
-     * Elements' own List Report -> Object Page transition replaces the
-     * current history entry rather than pushing a new one (intentional
-     * framework behaviour, so a bare "no selection" list state never
-     * sits in history), which means pressing Back from the Object Page
-     * can skip straight past the List and land on whatever page was
-     * open before this section was ever entered - reported live as
-     * "back button ... sometime ... back to another screen".
-     * getRouterFor(oControl) finds the owning component's router for
-     * any control, which works reliably from inside a controller
-     * extension.
-     *
-     * @param {sap.ui.base.Event} oEvent press event of the header action
-     * @param {string} sRouteName the List Report route to navigate to
-     * @returns {void}
-     */
-    function navigateToList(oEvent, sRouteName) {
-      const oRouter = UIComponent.getRouterFor(oEvent.getSource());
-
-      oRouter.navTo(sRouteName);
-    }
 
     return ControllerExtension.extend(
       "virement.zuippsvirement.ext.controller.ObjectPageExt",
@@ -68,6 +42,14 @@ sap.ui.define(
 
         onBackToRegionBranchGrouping: function (oEvent) {
           navigateToList(oEvent, "RegionBranchGrouping");
+        },
+
+        onBackToEmailConfiguration: function (oEvent) {
+          navigateToList(oEvent, "EmailConfiguration");
+        },
+
+        onBackToSystemConfiguration: function (oEvent) {
+          navigateToList(oEvent, "SystemConfiguration");
         },
 
         /**
@@ -195,26 +177,13 @@ sap.ui.define(
         },
 
         /**
-         * Opens a Popover showing the workflow's execution error message.
-         * Called from the WorkflowStatusField fragment's ObjectStatus
-         * press event - that control is only shown as "active"
-         * (clickable) when workflowStatus is an error status, so this is
-         * not wired to fire otherwise.
+         * Writes the picked Supplement Category back to the draft.
          *
-         * workflowError is deliberately NOT relied on to already be
-         * loaded: it is not part of this page's own $select (it is only
-         * ever read via a plain OData path, never referenced by any
-         * annotation Fiori elements scans to build $select, and marking
-         * it Hidden in a FieldGroup to force inclusion does not work -
-         * Fiori elements skips genuinely hidden fields from $select too).
-         * context.requestProperty() explicitly fetches it on demand
-         * instead, regardless of what the page originally selected.
+         * The radio group reads supplementCategory_code through a
+         * one-way expression binding, so the selection has to be
+         * persisted here.
          *
-         * The Popover is created once and reused (bound to whichever
-         * context was pressed most recently), matching the standard
-         * SAPUI5 lazy-singleton-control pattern.
-         *
-         * @param {sap.ui.base.Event} oEvent press event of the ObjectStatus
+         * @param {sap.ui.base.Event} oEvent select event of the radio group
          * @returns {void}
          */
         onSupplementCategorySelect: function (oEvent) {
@@ -223,17 +192,12 @@ sap.ui.define(
           const iSelectedIndex = oEvent.getParameter("selectedIndex");
 
           const sCode = SUPPLEMENT_CATEGORY_CODES[iSelectedIndex];
-             
+
           if (!sCode) {
             return;
           }
 
           const oContext = oGroup.getBindingContext();
-
-          // test
-          console.log("Path:", oContext.getPath());
-          console.log("Object:", oContext.getObject());
-          //test
 
           if (!oContext) {
             console.error("No binding context for the Supplement Category field.");

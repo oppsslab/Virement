@@ -140,7 +140,7 @@ module.exports = async function delegatePendingApproval(request) {
   await insertRequestHistory(
     request,
     approverRow.request_ID,
-    `${request.user?.id || "An admin"} delegated ${approverRow.emailAddress}'s ${approverRow.level} approval to ${delegateEmail}.`,
+    `${request.user?.id || "An admin"} delegated ${approverRow.emailAddress}'s Level ${approverRow.level} approval to ${delegateEmail}.`,
   );
 
   await tx.commit();

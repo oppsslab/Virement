@@ -65,3 +65,10 @@ package-lock.json
 
 # Source archive (exceeds GitHub file size limit)
 Virement.tar
+
+# Office lock files
+~$*.xlsx
+~$*.docx
+
+# mbt-generated local build Makefile (timestamped, not meant for VCS)
+Makefile_*.mta

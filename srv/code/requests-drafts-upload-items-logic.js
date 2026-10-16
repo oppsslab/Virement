@@ -3,6 +3,8 @@ const XLSX = require("xlsx");
 
 const LOG = cds.log("requests-drafts-upload-items-logic");
 
+const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
+
 const VALID_ASSET_STATUS = ["N", "A", "R"];
 const MAX_ERRORS_SHOWN = 20;
 const MAX_BASE64_LENGTH = 10 * 1024 * 1024;
@@ -291,6 +293,43 @@ function isActiveEntity(request) {
   return last.IsActiveEntity === true || last.IsActiveEntity === "true";
 }
 
+function resolveRequestId(request) {
+  return request.params?.[0]?.ID || request.data?.ID || null;
+}
+
+/**
+ * Finds the highest srNo already used by this draft's existing items,
+ * so a new upload batch continues the sequence instead of restarting
+ * at 001 - which previously collided with items already added by an
+ * earlier upload or by the "Add" button, producing duplicate SR Nos.
+ *
+ * @param {string} requestId
+ * @returns {Promise<number>} 0 if there are no existing items yet
+ */
+async function getHighestExistingSrNo(requestId) {
+  if (!requestId) {
+    return 0;
+  }
+
+  const { RequestItems } = cds.entities(SERVICE_NAMESPACE);
+
+  const rows = await SELECT.from(RequestItems.drafts)
+    .columns("srNo")
+    .where({ request_ID: requestId });
+
+  let highest = 0;
+
+  for (const row of rows || []) {
+    const n = parseInt(row.srNo, 10);
+
+    if (Number.isFinite(n) && n > highest) {
+      highest = n;
+    }
+  }
+
+  return highest;
+}
+
 function reportValidationErrors(request, allErrors) {
   const shown = allErrors.slice(0, MAX_ERRORS_SHOWN);
   const remaining = allErrors.length - shown.length;
@@ -383,12 +422,28 @@ module.exports = async function uploadItems(request) {
       return reportValidationErrors(request, allErrors);
     }
 
-    let nextSr = 1;
+    /*
+     * Always reassign srNo sequentially by row order, regardless of
+     * whatever is already in the uploaded file's SR No column - the
+     * item tables sort by srNo ascending (see annotations.cds's
+     * PresentationVariants), so that's what determines display order.
+     * Trusting an uploaded value here let stale/reused SR No values
+     * (e.g. from a previously downloaded/edited file) desync the
+     * displayed order from the actual row order in the upload.
+     *
+     * Continuing from the draft's highest existing srNo (rather than
+     * always restarting at 1) avoids colliding with items already in
+     * the draft from an earlier upload or from "Add" - that collision
+     * previously produced duplicate SR Nos once a second batch landed
+     * on top of an existing one.
+     */
+    const requestId = resolveRequestId(request);
+    const highestExisting = await getHighestExistingSrNo(requestId);
+
+    let nextSr = highestExisting + 1;
 
     for (const item of validItems) {
-      if (!item.srNo) {
-        item.srNo = String(nextSr).padStart(SR_NO_PAD_LENGTH, "0");
-      }
+      item.srNo = String(nextSr).padStart(SR_NO_PAD_LENGTH, "0");
 
       nextSr++;
     }

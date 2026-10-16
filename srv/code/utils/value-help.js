@@ -5,14 +5,17 @@ const cds = require("@sap/cds");
 const { getDestination } = require("@sap-cloud-sdk/connectivity");
 const { executeHttpRequest } = require("@sap-cloud-sdk/http-client");
 
+const { getConfigValue } = require("./system-config");
+
 const LOG = cds.log("value-help");
 
 /*
  * On-premise S/4 reached through the Cloud Connector. The destination
  * carries the Location ID, so nothing here needs to know about the
- * connector itself.
+ * connector itself. Overridable via the System Configuration admin
+ * page.
  */
-const DESTINATION_NAME = "QA1-800-S4HANA";
+const DESTINATION_NAME_DEFAULT = "QA1-800-S4HANA";
 
 /*
  * Rows fetched when the client does not ask for a specific page size.
@@ -268,6 +271,11 @@ function narrowToTerm(rows, term, { key, text = [] }) {
  * @throws {Error} with .statusCode and a message safe to show the user
  */
 async function fetchValueHelp({ path, selectFields, term, filter, top, skip, label }) {
+  const DESTINATION_NAME = await getConfigValue(
+    "S4_DESTINATION_NAME",
+    DESTINATION_NAME_DEFAULT,
+  );
+
   const destination = await getDestination({
     destinationName: DESTINATION_NAME,
   });

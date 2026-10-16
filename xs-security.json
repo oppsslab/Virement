@@ -11,9 +11,23 @@
     {
       "name": "$XSAPPNAME.BUDGET_ZERORISE",
       "description": "BUDGET_ZERORISE"
+    },
+    {
+      "name": "$XSAPPNAME.MASS_UPLOAD_TRANSFER",
+      "description": "MASS_UPLOAD_TRANSFER - Functional Department Virement routing"
+    },
+    {
+      "name": "$XSAPPNAME.MASS_UPLOAD_ALL",
+      "description": "MASS_UPLOAD_ALL - JKEW Virement routing"
     }
   ],
-  "attributes": [],
+  "attributes": [
+    {
+      "name": "costCenter",
+      "description": "Cost Center, from the IAS Employee Information profile attribute - surfaced to the app as request.user.attr.costCenter for the Department/Section header field.",
+      "valueType": "string"
+    }
+  ],
   "role-templates": [
     {
       "name": "REQUEST_APPROVE",

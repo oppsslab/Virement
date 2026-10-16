@@ -13,9 +13,21 @@ const { applyApproverPlan } = require("./utils/apply-approver-plan");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
+const {
+  renderEmailConfig,
+  EMAIL_TYPE,
+} = require("./utils/email-config-renderer");
+
+const { sendEmail } = require("./utils/send-email");
+
 const LOG = cds.log("requests-after-create-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
+
+// Matches db/data/ZDB_PPS_VIREMENT-RequestType.csv / -BudgetType.csv -
+// small, stable code lists, so resolved here rather than queried.
+const REQUEST_TYPE_DESCR = { S: "Supplement", R: "Return", T: "Transfer" };
+const BUDGET_TYPE_DESCR = { N: "Non Project", P: "Project" };
 
 /* ------------------------------------------------------------------ *
  * Helpers
@@ -227,6 +239,19 @@ module.exports = async function (results, request) {
     const projectType =
       createdRequest.budgetType_code || request.data?.budgetType_code || "";
 
+    const departmentSection =
+      createdRequest.departmentSection || request.data?.departmentSection || "";
+
+    const fiscalYear =
+      createdRequest.fiscalYear || request.data?.fiscalYear || "";
+
+    // Full item list (not filtered to a single in/out slot like
+    // transferInItems/transferOutGl above) - needed to render the
+    // approval email's item table, which shows every item regardless
+    // of request type.
+    const emailItems =
+      createdRequest.RequestItems || request.data?.RequestItems || [];
+
     const returnCategory =
       createdRequest.returnCategory_code || request.data?.returnCategory_code || "";
 
@@ -426,6 +451,40 @@ module.exports = async function (results, request) {
       "CAP-owned approval plan applied at submit:",
       JSON.stringify(appliedApproverPlan),
     );
+
+    /*
+     * 2c. Send the "To Approver" email directly to Level 1's approvers
+     * via the S/4 Email API (see utils/send-email.js) - sent here,
+     * once, rather than via the BPA workflow, since the workflow no
+     * longer receives subject/body text at all. Level 2/3's own "To
+     * Approver" email is sent later, from approve-reject-request.js,
+     * at the point each of those levels actually gets activated
+     * (their RequestApprovers rows flip from INACTIVE to
+     * PENDING_APPROVAL) - sending it here too would be premature,
+     * since those approvers cannot act yet.
+     */
+    const toApproverEmail = await renderEmailConfig(tx, EMAIL_TYPE.TO_APPROVER, {
+      requestNumber,
+      requestLink,
+      fiscalYear,
+      departmentSection,
+      budgetTypeDescr: BUDGET_TYPE_DESCR[projectType] || projectType,
+      requestTypeDescr: REQUEST_TYPE_DESCR[requestType] || requestType,
+      requestAmount,
+      items: emailItems,
+    });
+
+    if (toApproverEmail) {
+      const levelOneEmails = appliedApproverPlan
+        .filter(({ level }) => level.startsWith("1"))
+        .flatMap(({ emails }) => emails);
+
+      await sendEmail({
+        subject: toApproverEmail.subject,
+        body: toApproverEmail.body,
+        recipients: levelOneEmails,
+      });
+    }
 
     /*
      * 3. Start the approval workflow.

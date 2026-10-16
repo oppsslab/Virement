@@ -163,6 +163,10 @@ function hasText(value) {
   return String(value ?? "").trim() !== "";
 }
 
+function isDepartmentItem(item) {
+  return hasText(item.department);
+}
+
 /**
  * Priority-0 check: every item (transfer-out and transfer-in alike)
  * must resolve, via its own GL Account, to the SAME Functional
@@ -239,18 +243,21 @@ async function classifyByFunctionalDepartmentGrouping(
     return null;
   }
 
-  const transferInIsDepartment = transferInItems.every((item) =>
-    hasText(item.department),
-  );
-  const transferInIsRegionAndBranch = transferInItems.every(
-    (item) => hasText(item.region) && hasText(item.branch),
-  );
+  /*
+   * Each transfer-in item may satisfy either rule, so a mix of
+   * department-based and branch-based items still routes here.
+   */
+  const transferInItemQualifies = (item) =>
+    (groupingRow.isDepartment && hasText(item.department)) ||
+    (groupingRow.isRegionAndBranch &&
+      hasText(item.region) &&
+      hasText(item.branch));
 
-  const secondValidationPassed =
-    (groupingRow.isDepartment && transferInIsDepartment) ||
-    (groupingRow.isRegionAndBranch && transferInIsRegionAndBranch);
+  if (!transferInItems.every(transferInItemQualifies)) {
+    return null;
+  }
 
-  if (!secondValidationPassed) {
+  if (!transferOutItems.every(isDepartmentItem)) {
     return null;
   }
 
@@ -389,7 +396,10 @@ async function classifyVirementNonProjectScenario(tx, items) {
     };
   }
 
-  if (distinctValues(allItems, "functionalDepartment").size === 1) {
+  if (
+    distinctValues(allItems, "functionalDepartment").size === 1 &&
+    transferOutItems.every(isDepartmentItem)
+  ) {
     return {
       scenario: "Authorized Functional Department",
       level1Entries: buildSingleLevel1Entry(

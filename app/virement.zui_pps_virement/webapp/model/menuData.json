@@ -36,6 +36,18 @@
       "key": "GroupingMaintenance",
       "visible": true,
       "role": []
+    },
+    {
+      "titleI18nKey": "Navigation.Text.EmailConfiguration",
+      "key": "EmailConfiguration",
+      "visible": true,
+      "role": []
+    },
+    {
+      "titleI18nKey": "Navigation.Text.SystemConfiguration",
+      "key": "SystemConfiguration",
+      "visible": true,
+      "role": []
     }
   ]
 }

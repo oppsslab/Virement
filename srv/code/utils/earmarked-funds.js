@@ -4,15 +4,17 @@ const { getDestination } = require("@sap-cloud-sdk/connectivity");
 const { executeHttpRequest } = require("@sap-cloud-sdk/http-client");
 const xml2js = require("xml2js");
 
+const { getConfigValue } = require("./system-config");
+
 const LOG = cds.log("earmarked-funds");
 
 /*
  * The Earmarked Funds API is exposed through the same SAP Integration Suite
  * tenant as the FMBB posting (see post-to-s4-logic.js), so it reuses the
  * existing 'CPI' destination and its OAuth2 client-credentials flow. Only
- * the path differs.
+ * the path differs. Overridable via the System Configuration admin page.
  */
-const DESTINATION_NAME = "CPI";
+const DESTINATION_NAME_DEFAULT = "CPI";
 
 const EARMARKED_FUNDS_PATH = "/http/earmarkedfunds/EarmarkedFundsDocument";
 const COMPLETE_RFC_ENDPOINT = "/http/Z_KFM_EF_COMPLETE";
@@ -260,6 +262,11 @@ async function createEarmarkedFundsDocument({
     );
   }
 
+  const DESTINATION_NAME = await getConfigValue(
+    "CPI_DESTINATION_NAME",
+    DESTINATION_NAME_DEFAULT,
+  );
+
   const destination = await getDestination({
     destinationName: DESTINATION_NAME,
   });
@@ -449,6 +456,11 @@ async function completeEarmarkedFundsDocument({ documentNumber, test = false }) 
     throw error;
   }
 
+  const DESTINATION_NAME = await getConfigValue(
+    "CPI_DESTINATION_NAME",
+    DESTINATION_NAME_DEFAULT,
+  );
+
   const destination = await getDestination({
     destinationName: DESTINATION_NAME,
   });
@@ -569,6 +581,11 @@ async function getEarmarkedFundsDocumentStatus({ documentNumber }) {
   }
 
   try {
+    const DESTINATION_NAME = await getConfigValue(
+      "CPI_DESTINATION_NAME",
+      DESTINATION_NAME_DEFAULT,
+    );
+
     const destination = await getDestination({
       destinationName: DESTINATION_NAME,
     });

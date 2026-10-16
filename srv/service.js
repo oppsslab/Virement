@@ -18,6 +18,7 @@ const requestitems_Drafts_After_Create_Logic = require("./code/requestitems-draf
 const requestitems_Drafts_After_Update_Logic = require("./code/requestitems-drafts-after-update-logic");
 const requests_Before_Update_Logic = require("./code/requests-before-update-logic");
 const requests_Drafts_After_Read_Logic = require("./code/requests-drafts-after-read-logic");
+const requests_Drafts_After_Create_Logic = require("./code/requests-drafts-after-create-logic");
 const requests_Drafts_After_Update_Logic = require("./code/requests-drafts-after-update-logic");
 const recent_Requests_Read_Logic = require("./code/recent-requests-read-logic");
 const user_Details_Read_Logic = require("./code/user-details-read-logic");
@@ -47,6 +48,9 @@ const upload_Building_Grouping_Logic = require("./code/upload-building-grouping-
 const download_Region_Branch_Grouping_Template_Logic = require("./code/download-region-branch-grouping-template-logic");
 const upload_Region_Branch_Grouping_Logic = require("./code/upload-region-branch-grouping-logic");
 const get_Approvers_Logic = require("./code/get-approvers-logic");
+const test_Send_Email_Logic = require("./code/test-send-email-logic");
+const test_Connection_Logic = require("./code/test-connection-logic");
+const { invalidateCache: invalidate_System_Config_Cache } = require("./code/utils/system-config");
 const get_Request_Approvers_Logic = require("./code/get-request-approvers-logic");
 const delegate_Approval_Logic = require("./code/delegate-approval-logic");
 const delegate_Approval_As_Admin_Logic = require("./code/delegate-approval-as-admin-logic");
@@ -125,6 +129,10 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.after("UPDATE", "RequestItems.drafts", async (results, request) => {
       await requestitems_Drafts_After_Update_Logic(results, request);
+    });
+
+    this.after("CREATE", "Requests.drafts", async (results, request) => {
+      await requests_Drafts_After_Create_Logic(results, request);
     });
 
     this.after("UPDATE", "Requests.drafts", async (results, request) => {
@@ -243,6 +251,18 @@ class ZSVC_PPS_VIREMENT extends LCAPApplicationService {
 
     this.on("rejectRequest", "Requests", async (request) => {
       return rejectRequest(request);
+    });
+
+    this.on("testSendEmail", "EmailConfiguration", async (request) => {
+      return test_Send_Email_Logic(request);
+    });
+
+    this.on("testConnection", "SystemConfiguration", async (request) => {
+      return test_Connection_Logic(request);
+    });
+
+    this.after("UPDATE", "SystemConfiguration", async () => {
+      invalidate_System_Config_Cache();
     });
 
     this.on("delegateApproval", "Requests", async (request) => {

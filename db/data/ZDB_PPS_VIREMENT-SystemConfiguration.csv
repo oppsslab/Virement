@@ -1,0 +1,6 @@
+configKey,configValue,description,createdAt,modifiedAt
+WORKFLOW_DEFINITION_ID,ap11.epf-ent-cf-ap11-dev.virementapprovalworkflowv2.approvalWorkflow,"SAP Build Process Automation workflow definition ID - must match whatever BPA workflow package is actually deployed to this subaccount's BPA tenant.","2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z"
+WORKFLOW_ENVIRONMENT_ID,nonprd,"BPA environmentId query param used when starting a workflow instance - nonprd for dev/test subaccounts, the correct production value for a PRD subaccount.","2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z"
+S4_DESTINATION_NAME,QA1-800-S4HANA,"BTP destination name for direct S/4 OData calls (Email API, Cost Center/GL Account value help) - points at a specific S/4 system/client, must match a destination actually configured in this subaccount.","2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z"
+CPI_DESTINATION_NAME,CPI,"BTP destination name for SAP Integration Suite (CPI) calls - Supplement/Return/Transfer postings and Earmarked Funds completion.","2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z"
+BPA_DESTINATION_NAME,sap_process_automation_service,"BTP destination name for SAP Build Process Automation API calls (start/complete workflow tasks).","2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z"

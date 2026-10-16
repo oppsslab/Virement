@@ -292,19 +292,17 @@ async function refreshLiveWorkflowStatus(rows, request) {
 }
 
 /**
- * TEMPORARY: derives a Transfer's Earmarked Funds completion status
- * locally (true once the combined Transfer document has posted, i.e.
- * transferOutDocNumber is set - transferOutDocNumber and
- * transferInDocNumber are always posted together as one document, see
- * post-to-s4-logic.js) instead of checking S/4 live.
- *
- * Stands in for the real live check (see getEarmarkedFundsDocumentStatus
- * in utils/earmarked-funds.js, still imported below but unused here for
- * now) while the actual S/4 completion API is unusable - see
- * completeEarmarkedFundsDocument's own comments: S/4 only exposes a
- * plain field PATCH, not the actual completion business action, so the
- * header's EarmarkedFundsIsCompleted can never genuinely be set through
- * it. Revisit once a proper backend action exists.
+ * Derives a Transfer's Earmarked Funds completion status from
+ * status_code rather than transferOutDocNumber: the real completion
+ * RFC (Z_KFM_EF_COMPLETE, see completeEarmarkedFundsDocument) now runs
+ * synchronously as part of approveRequest, and status_code only ever
+ * reaches APPROVED (Completed) once that call has actually succeeded -
+ * any failure reverts status_code back (see revertFinalApproval in
+ * approve-reject-request.js) before the approval response is returned,
+ * while leaving transferOutDocNumber set so the already-posted
+ * Transfer is reused on retry rather than posted again. That makes
+ * transferOutDocNumber alone a false positive for "EF completed" in
+ * exactly that revert-and-retry window, which status_code is not.
  *
  * Only on a single-entity (Object Page) read, never for a list, to
  * match the shape of the real check this replaces.
@@ -327,10 +325,10 @@ async function refreshEarmarkedFundsStatus(rows, request) {
         continue;
       }
 
-      row.earmarkedFundsIsCompleted = Boolean(row.transferOutDocNumber);
+      row.earmarkedFundsIsCompleted = row.status_code === REQUEST_STATUS.APPROVED;
     }
   } catch (error) {
-    LOG.error("Error refreshing (temporary, local) Earmarked Funds status.", {
+    LOG.error("Error refreshing (local) Earmarked Funds status.", {
       message: error.message,
     });
   }

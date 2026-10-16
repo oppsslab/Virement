@@ -1,5 +1,6 @@
 const cds = require("@sap/cds");
 const { buildUserMeta } = require("./utils/user-meta");
+const { hasRole } = require("./utils/role-check");
 
 const LOG = cds.log("virement-user-details-read-logic");
 
@@ -18,7 +19,8 @@ module.exports = async function (request) {
 
         const userDetails = {
             emailAddress: userMeta.emailAddress,
-            fullName: userMeta.fullName
+            fullName: userMeta.fullName,
+            isAdmin: hasRole(request.user, "ADMIN")
         };
 
         LOG.info(

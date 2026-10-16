@@ -28,6 +28,15 @@ entity Requests : cuid, managed {
     submissionDate       : Date;
     submissionTime       : Time    @readonly;
     requestor            : String                     @readonly;
+    /*
+     * Department/Section the requestor belongs to, read from the IAS
+     * Identity Directory's Department attribute (SCIM Enterprise User
+     * extension schema) via a direct SCIM lookup at submission time -
+     * see srv/code/utils/ias-user-directory.js for why this isn't
+     * sourced from the login token. Same best-effort snapshot pattern
+     * as requestor itself. Never user-settable.
+     */
+    departmentSection    : String(500)                @readonly;
     approvedBy           : String; // Last approver (summary)
     supplementAmount     : Decimal(15, 2) default 0   @readonly;
     returnAmount         : Decimal(15, 2) default 0   @readonly;
@@ -433,4 +442,59 @@ entity RegionBranchGrouping : cuid, managed {
     branch                : String(150) @mandatory;
     costCentre            : String(10)  @mandatory;
     costCentreDescription : String(200);
+};
+
+/*
+ * Email Configuration - admin-maintained subject/body for the three
+ * approval notification emails (see srv/code/utils/send-email.js and
+ * utils/email-config-renderer.js), each independently switchable on/
+ * off. Exactly one row per emailType - emailType is the key instead
+ * of a generated UUID so a duplicate row for the same type can never
+ * exist, and there's nothing to create/delete, only update (see the
+ * srv/service.cds restriction).
+ *
+ * subject/body are free HTML text with placeholder tokens
+ * ({{RequestNumber}}, {{RequestorDepartment}}, {{FiscalYear}},
+ * {{BudgetTypeDescr}}, {{RequestTypeDescr}}, {{RequestAmount}},
+ * {{DocumentNumber}}, {{ItemsTable}}) substituted at send time - see
+ * email-config-renderer.js for the full list and what each resolves
+ * to. {{ItemsTable}} is the one exception to "free HTML": the item
+ * table is inherently repeating, per-row data that free text can't
+ * express, so that one token is replaced with a fully system-
+ * generated table rather than left to the admin to hand-author.
+ */
+entity EmailConfiguration : managed {
+    key emailType : String(20) enum {
+        ToApprover;
+        Approved;
+        Rejected;
+    };
+
+    subject       : String(500);
+    body          : LargeString;
+    enabled       : Boolean default true;
+};
+
+/*
+ * System Configuration - admin-maintained, non-secret environment-
+ * specific values that were previously hardcoded JS constants (BPA
+ * workflow identifiers, destination names for the S/4/CPI/BPA calls -
+ * see srv/code/utils/system-config.js for the full list and which
+ * file reads each one). Lets the same deployed code point at a
+ * different subaccount's destinations/workflow without a code change
+ * and redeploy - e.g. moving from the dev subaccount to PRD.
+ *
+ * Deliberately excludes anything secret (IAS_SCIM_CLIENT_ID/SECRET
+ * stay as `cf set-env` variables, never stored here) - exposing a
+ * credential in a database table an admin UI can read is a real
+ * security exposure, destination *names* are not.
+ *
+ * Exactly one row per configKey, never created or deleted, only
+ * updated - same reasoning as EmailConfiguration above.
+ */
+entity SystemConfiguration : managed {
+    key configKey   : String(100);
+
+    configValue     : String(500);
+    description     : String(500) @readonly;
 };

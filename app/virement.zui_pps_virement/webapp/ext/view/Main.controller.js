@@ -27,6 +27,84 @@ sap.ui.define(
         this._oRouter = this.getOwnerComponent().getRouter();
 
         this._oRouter.attachRouteMatched(this._onRouteChange, this);
+
+        this._applyAdminOnlyVisibility();
+      },
+
+      /*
+       * Admin-only nav tabs (menuData.json keys) - hidden from the
+       * top nav bar entirely for non-admins, not just left to the
+       * backend's own ADMIN-only write restrictions, so a regular
+       * user never sees an entry point into a screen they can only
+       * read (or nothing at all, for Email Configuration, which has
+       * no non-admin READ restriction but is still admin-only in
+       * practice).
+       */
+      ADMIN_ONLY_NAV_KEYS: [
+        "ApproverMatrix",
+        "GroupingMaintenance",
+        "EmailConfiguration",
+        "SystemConfiguration",
+      ],
+
+      /**
+       * Hides the admin-only entries in MenuModel's navigation array
+       * for a non-admin user, based on UserDetails.isAdmin.
+       *
+       * @returns {Promise<void>}
+       */
+      _applyAdminOnlyVisibility: async function () {
+        const oMenuModel = this.getOwnerComponent().getModel("MenuModel");
+
+        if (!oMenuModel) {
+          return;
+        }
+
+        let bIsAdmin = false;
+
+        try {
+          const oMainModel = this.getOwnerComponent().getModel();
+
+          /*
+           * This runs at app bootstrap, before the Home view even
+           * loads - querying the OData model this early can fail if
+           * its metadata isn't ready yet, which previously fell
+           * through to the bIsAdmin = false fallback below and hid
+           * the tabs regardless of the user's real role. Waiting for
+           * metadataLoaded() first avoids that race.
+           */
+          await oMainModel.getMetaModel().requestObject("/");
+
+          const oListBinding = oMainModel.bindList("/UserDetails", null, null, null, {
+            $select: "isAdmin",
+          });
+
+          const aContexts = await oListBinding.requestContexts(0, 1);
+
+          bIsAdmin = Boolean(
+            aContexts.length && aContexts[0].getProperty("isAdmin"),
+          );
+        } catch (oError) {
+          console.error(
+            "Failed to determine admin status for nav visibility:",
+            oError,
+          );
+        }
+
+        if (bIsAdmin) {
+          return;
+        }
+
+        const aNavigation = oMenuModel.getProperty("/navigation") || [];
+
+        aNavigation.forEach(function (oItem, iIndex) {
+          if (this.ADMIN_ONLY_NAV_KEYS.includes(oItem.key)) {
+            oMenuModel.setProperty(
+              `/navigation/${iIndex}/visible`,
+              false,
+            );
+          }
+        }, this);
       },
 
       /**

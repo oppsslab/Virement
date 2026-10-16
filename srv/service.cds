@@ -342,6 +342,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
     entity UserDetails {
         key emailAddress : String(255);
             fullName     : String(200);
+            isAdmin      : Boolean;
     }
 
     /*
@@ -595,6 +596,83 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             costCentre            : String;
             costCentreDescription : String;
         };
+    };
+
+    /*
+     * Email Configuration - admin-maintained subject/body and on/off
+     * switch for the three approval notification emails (see
+     * db/schema.cds for the field-level documentation). Exactly 3
+     * seeded rows (one per emailType), never created or deleted -
+     * ADMIN can only read and update.
+     */
+    @(restrict: [
+        {grant: 'READ'},
+        {
+            grant: ['UPDATE', 'testSendEmail'],
+            to   : 'ADMIN'
+        },
+    ])
+    @odata.draft.enabled
+    entity EmailConfiguration as
+        projection on my.EmailConfiguration {
+            *
+        }
+        actions {
+            /*
+             * Renders this row's current subject/body with sample
+             * placeholder data (not a real request) and sends it to
+             * the given recipient, so an admin can verify a template
+             * edit before it goes out for real. See
+             * test-send-email-logic.js.
+             */
+            @requires: ['ADMIN']
+            action testSendEmail(
+                                 @title: 'Send Test To'
+                                 recipient: String) returns String;
+        };
+
+    annotate EmailConfiguration with {
+        modifiedAt @odata.etag;
+    };
+
+    /*
+     * System Configuration - admin-maintained, non-secret environment
+     * -specific values (see db/schema.cds for the field-level
+     * documentation). Unlike EmailConfiguration above, READ is also
+     * ADMIN-only here, not open to every authenticated user - these
+     * values describe internal destination/workflow wiring, not
+     * something a regular requestor/approver needs visibility into.
+     * Exactly 5 seeded rows, never created or deleted.
+     */
+    @(restrict: [
+        {
+            grant: 'READ',
+            to   : 'ADMIN'
+        },
+        {
+            grant: ['UPDATE', 'testConnection'],
+            to   : 'ADMIN'
+        },
+    ])
+    @odata.draft.enabled
+    entity SystemConfiguration as
+        projection on my.SystemConfiguration {
+            *
+        }
+        actions {
+            /*
+             * Read-only connectivity check for this row's currently
+             * saved value (destination resolution, or - for
+             * S4_DESTINATION_NAME - a cheap real OData read), so an
+             * admin can verify a destination/workflow rename before
+             * anything real depends on it. See test-connection-logic.js.
+             */
+            @requires: ['ADMIN']
+            action testConnection() returns String;
+        };
+
+    annotate SystemConfiguration with {
+        modifiedAt @odata.etag;
     };
 
     /*

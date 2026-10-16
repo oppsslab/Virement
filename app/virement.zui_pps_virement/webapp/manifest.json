@@ -217,6 +217,26 @@
           "name": "RegionBranchGroupingObjectPage",
           "pattern": "RegionBranchGrouping({RegionBranchGroupingKey}):?query:",
           "target": "RegionBranchGroupingObjectPage"
+        },
+        {
+          "name": "EmailConfiguration",
+          "pattern": "EmailConfiguration:?query:",
+          "target": "EmailConfiguration"
+        },
+        {
+          "name": "EmailConfigurationObjectPage",
+          "pattern": "EmailConfiguration({EmailConfigurationKey}):?query:",
+          "target": "EmailConfigurationObjectPage"
+        },
+        {
+          "name": "SystemConfiguration",
+          "pattern": "SystemConfiguration:?query:",
+          "target": "SystemConfiguration"
+        },
+        {
+          "name": "SystemConfigurationObjectPage",
+          "pattern": "SystemConfiguration({SystemConfigurationKey}):?query:",
+          "target": "SystemConfigurationObjectPage"
         }
       ],
       "targets": {
@@ -252,12 +272,19 @@
               "contextPath": "/Requests",
               "content": {
                 "header": {
-                  "anchorBarVisible": false
+                  "anchorBarVisible": false,
+                  "actions": {
+                    "copyRequest": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageCopyActions.onCopyRequest",
+                      "text": "{i18n>CopyRequest}",
+                      "visible": "{= %{status_code} === 1 || %{status_code} === 3 }"
+                    }
+                  }
                 }
               },
               "editableHeaderContent": false,
               "controlConfiguration": {
-                "@com.sap.vocabularies.UI.v1.FieldGroup#RequestHeader": {
+                                "@com.sap.vocabularies.UI.v1.FieldGroup#RequestHeader": {
                   "fields": {
                     "ReturnCategory": {
                       "template": "virement.zuippsvirement.ext.fragment.ReturnCategoryField",
@@ -1058,6 +1085,122 @@
                   "actions": {
                     "backToRegionBranchGrouping": {
                       "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToRegionBranchGrouping",
+                      "text": "{i18n>BackToList}",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "EmailConfiguration": {
+          "type": "Component",
+          "id": "EmailConfiguration",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/EmailConfiguration",
+              "navigation": {
+                "EmailConfiguration": {
+                  "detail": {
+                    "route": "EmailConfigurationObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable"
+                  }
+                }
+              },
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "EmailConfigurationObjectPage": {
+          "type": "Component",
+          "id": "EmailConfigurationObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/EmailConfiguration",
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "backToEmailConfiguration": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToEmailConfiguration",
+                      "text": "{i18n>BackToList}",
+                      "visible": true,
+                      "enabled": true
+                    }
+                  }
+                },
+                "@com.sap.vocabularies.UI.v1.FieldGroup#Body": {
+                  "fields": {
+                    "DataField::body": {
+                      "formatOptions": {
+                        "textLinesEdit": 25,
+                        "textMaxLines": 25
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "SystemConfiguration": {
+          "type": "Component",
+          "id": "SystemConfiguration",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/SystemConfiguration",
+              "navigation": {
+                "SystemConfiguration": {
+                  "detail": {
+                    "route": "SystemConfigurationObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable"
+                  }
+                }
+              },
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "SystemConfigurationObjectPage": {
+          "type": "Component",
+          "id": "SystemConfigurationObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/SystemConfiguration",
+              "content": {
+                "header": {
+                  "anchorBarVisible": false
+                }
+              },
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "backToSystemConfiguration": {
+                      "press": "virement.zuippsvirement.ext.controller.ObjectPageExt.onBackToSystemConfiguration",
                       "text": "{i18n>BackToList}",
                       "visible": true,
                       "enabled": true

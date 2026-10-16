@@ -3,14 +3,17 @@ const cds = require("@sap/cds");
 const { getDestination } = require("@sap-cloud-sdk/connectivity");
 const { executeHttpRequest } = require("@sap-cloud-sdk/http-client");
 
+const { getConfigValue } = require("./system-config");
+
 const LOG = cds.log("cost-centers");
 
 /*
  * On-premise S/4 system reached through the Cloud Connector. The
  * destination carries the Location ID, so nothing here needs to know
- * about the connector itself.
+ * about the connector itself. Overridable via the System
+ * Configuration admin page.
  */
-const DESTINATION_NAME = "QA1-800-S4HANA";
+const DESTINATION_NAME_DEFAULT = "QA1-800-S4HANA";
 
 const COST_CENTER_PATH = "/sap/opu/odata/sap/API_COSTCENTER_SRV/A_CostCenter";
 
@@ -231,6 +234,11 @@ function dedupeByCostCentre(rows) {
  * @throws {Error} with .statusCode and a message safe to show the user
  */
 async function readCostCenters(prefix, paging = {}) {
+  const DESTINATION_NAME = await getConfigValue(
+    "S4_DESTINATION_NAME",
+    DESTINATION_NAME_DEFAULT,
+  );
+
   const destination = await getDestination({
     destinationName: DESTINATION_NAME,
   });
@@ -347,6 +355,11 @@ async function findExistingCostCentres(codes) {
   if (!uniqueCodes.length) {
     return new Set();
   }
+
+  const DESTINATION_NAME = await getConfigValue(
+    "S4_DESTINATION_NAME",
+    DESTINATION_NAME_DEFAULT,
+  );
 
   const destination = await getDestination({
     destinationName: DESTINATION_NAME,

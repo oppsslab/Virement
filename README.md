@@ -39,7 +39,7 @@ mbt build
 cf deploy mta_archives/virement_1.0.0.mtar
 ```
 
-Deployment provisions the CAP service, the Fiori app, the HANA database, and pushes the AMS authorization policies (`ams/dcl/`) to the bound Identity Authentication tenant. See §12 below for more detail, and §11 for the checks worth running before you build.
+Deployment provisions the CAP service, the Fiori app, and the HANA database. The AMS authorization-policy push (`ams/dcl/`) is currently **disabled** (see §2/§8) — see §12 below for build/deploy detail, and §11 for the checks worth running before you build.
 
 ---
 
@@ -61,6 +61,8 @@ A working reference for anyone picking up this codebase — what each part of th
 | Add a new role/permission check | Declarative: `srv/service.cds` `@requires`. Conditional-in-code: `srv/code/utils/role-check.js` + a new AMS policy in `ams/dcl/cap/basePolicies.dcl`, see [§8](#8-authorization-model) |
 | A Fiori Elements table column, hide/disable rule, or item order | `app/virement.zui_pps_virement/annotations.cds` — 5 `UI.LineItem` qualifiers, see [§9](#9-fiori-elements-app-structure) |
 | Deploy a change | `mbt build` then `cf deploy mta_archives/virement_1.0.0.mtar`, see [§12](#12-build--deploy-process) |
+| Change a BTP destination name or the BPA workflow definition/environment ID without a redeploy | **System Configuration** admin page, see [§13](#13-admin-configuration-pages-email--system-configuration) |
+| Edit an approval-notification email's subject/body | **Email Configuration** admin page, see [§13](#13-admin-configuration-pages-email--system-configuration) |
 
 ## 1. Program overview
 
@@ -93,7 +95,7 @@ Defined end-to-end in `mta.yaml` — 7 modules, 9 bound resources.
 | `virement-aux-destinations` | content | Creates 4 subaccount destinations (UAA, app-srv, HTML5-repo, and the API source SAP Build calls) |
 | `virement-launchpad` | html5 | Separate launchpad shell app |
 | `virement-aux-ui-deployer` | content | Pushes both zipped HTML5 apps into the HTML5 Apps Repo |
-| `virement-ams-policies-deployer` | nodejs task | Runs `npm start` → `deploy-dcl`, pushing `ams/dcl/` policies to IAS |
+| `virement-ams-policies-deployer` | nodejs task | **Disabled** (commented out in `mta.yaml`, along with `virement-srv`'s `deployed-after`/`AMS_DCL_ROOT`) — when enabled, runs `npm start` → `deploy-dcl`, pushing `ams/dcl/` policies to IAS. See §8. |
 
 ### Bound services
 
@@ -106,13 +108,13 @@ Defined end-to-end in `mta.yaml` — 7 modules, 9 bound resources.
 | `shared-connectivity` | Cloud Connector routing to on-prem S/4 |
 | `virement-service-destination`, `virement-service-metadata`, `shared-logs` | Destination lookups, service metadata, log aggregation |
 
-Three external systems are reached purely by *destination name* at runtime — none are declared anywhere in this repo (not in `mta.yaml`, not in `xs-security.json`); they live only as BTP subaccount destinations:
+Three external systems are reached purely by *destination name* at runtime — none are declared anywhere in `mta.yaml` or `xs-security.json`; they live only as BTP subaccount destinations. Their names default to the values below (hardcoded as fallbacks in each calling module) but are overridable per-subaccount from the **System Configuration** admin page — see §13 — without a redeploy:
 
-- `QA1-800-S4HANA` — on-prem S/4, via Cloud Connector, for the live value helps (Cost Centre, GL Account, Material Group, WBS)
-- `CPI` — the integration flow that fronts `ZFM_FI_FMBB_UPLOAD`, the Earmarked Funds creation/status API, and `Z_KFM_EF_COMPLETE` (Earmarked Funds completion)
-- `sap_process_automation_service` — SAP Build Process Automation's REST API
+- `QA1-800-S4HANA` (`S4_DESTINATION_NAME`) — on-prem S/4, via Cloud Connector, for the live value helps (Cost Centre, GL Account, Material Group, WBS) and the custom Email OData service
+- `CPI` (`CPI_DESTINATION_NAME`) — the integration flow that fronts `ZFM_FI_FMBB_UPLOAD`, the Earmarked Funds creation/status API, and `Z_KFM_EF_COMPLETE` (Earmarked Funds completion)
+- `sap_process_automation_service` (`BPA_DESTINATION_NAME`) — SAP Build Process Automation's REST API
 
-> If a value-help or posting call starts failing with a connection error rather than a business error, check the destination configuration in BTP Cockpit first — it will not be visible anywhere in this codebase.
+> If a value-help or posting call starts failing with a connection error rather than a business error, check the destination configuration in BTP Cockpit first, then the current value on the System Configuration page — it will not be visible anywhere else in this codebase.
 
 ## 3. Data model
 
@@ -316,6 +318,12 @@ Two mechanisms populate the exact same `req.user` role-name space, so CDS `@requ
 
 > To add a new role: add the AMS policy to `ams/dcl/cap/basePolicies.dcl` (this file is hand-maintained, not fully auto-generated — see the gotcha in §11 before touching `dclGenerationPackage`), then check it with `hasRole(user, roleName)` from `srv/code/utils/role-check.js`. For a whole-action gate instead, use CDS `@requires: ['RoleName']` in `srv/service.cds` and it works from either grant path automatically.
 
+> **The AMS policy deployer is currently disabled** (`virement-ams-policies-deployer` and `virement-srv`'s `deployed-after`/`AMS_DCL_ROOT` are commented out in `mta.yaml`, `ams/dcl/cap/basePolicies.dcl` left otherwise untouched). A deploy today does **not** push `VR_*` policies to IAS — so on a brand-new subaccount (e.g. a PRD deploy), `MASS_UPLOAD_TRANSFER`/`MASS_UPLOAD_ALL`/`BUDGET_ZERORISE` will have no AMS group to grant them, and anyone needing those features must be handled another way until the module is re-enabled. `REQUEST_APPROVE`/`ADMIN` are unaffected — they're plain XSUAA role collections, granted entirely from BTP Cockpit, independent of AMS. To re-enable: uncomment the module block and the two `virement-srv` properties in `mta.yaml`, then redeploy.
+
+### Admin-only UI visibility
+
+`UserDetails.isAdmin` (`srv/code/user-details-read-logic.js`, `hasRole(user, "ADMIN")`) drives a front-end-only visibility layer — independent of the backend `@requires`/`restrict` gates above, which remain the real enforcement. `Main.controller.js`'s `ADMIN_ONLY_NAV_KEYS` hides the Approver Matrix / Grouping Maintenance / Email Configuration / System Configuration nav tabs (and `Home.controller.js` hides their dashboard tiles) for a non-admin, so a regular requestor/approver never sees an entry point into a screen they either can't use or — for System Configuration — can't even read.
+
 ## 9. Fiori Elements app structure
 
 `app/virement.zui_pps_virement/webapp/manifest.json` — single OData V4 service, root shell `ext.view.Main` (side-menu `NavContainer`).
@@ -372,15 +380,41 @@ Errors are capped at 20 rows shown, with a rollup count beyond that, and reject 
 
 **Debugging `ZFM_FI_FMBB_UPLOAD` (or any RFC-invoked S/4 function) — set an External Breakpoint, not a normal one.** This function is called via RFC from the `CPI` destination (see §6), not from a dialog session — a plain Session Breakpoint set in your own SAPGUI logon will never trigger for it, even though the code genuinely executes (confirmed by matching the exact `ET_RETURN` message text back to the ABAP source). In the Q (QA1) S/4 backend, set an **External Breakpoint** instead — Utilities → Breakpoints → External Breakpoints in the ABAP editor/debugger, tied to user ID `PWC_RAY` — before triggering the request submission from the app.
 
+**IAS SCIM `costCenter` is frequently blank; `department` is not.** `srv/code/utils/ias-user-directory.js`'s `fetchUserDepartment` reads a user's own Department/Section from the IAS Identity Directory's SCIM Enterprise User extension (`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User`) rather than from the login token — confirmed live that this app's actual JWT always carries an empty `xs.user.attributes`, regardless of the IAS Application's Self-defined Attributes config, because the SaaS approuter's XSUAA `user_token` exchange doesn't carry custom IAS profile attributes through. Within that SCIM extension, `costCenter` and `department` are sibling attributes; `costCenter` comes back empty for many employees in the IAS Admin Console while `department` is reliably populated, so this field reads `department`, not `costCenter`, despite the similar field name on `Requests.departmentSection`.
+
 ## 12. Build & deploy process
 
 1. Confirm the right target: `cf target` — should show the correct org/space. If it shows an unrelated org, re-run `cf login`.
 2. `mbt build` from the repo root — produces `mta_archives/virement_1.0.0.mtar`.
-3. `cf deploy mta_archives/virement_1.0.0.mtar` — deploys all 7 modules; this also runs the `deploy-dcl` task, pushing any AMS policy changes to IAS.
-4. To confirm the AMS policy push specifically succeeded: `cf tasks virement-ams-policies-deployer` (look for `SUCCEEDED`), or `cf logs virement-ams-policies-deployer --recent` for the "Successfully uploaded DCL bundle" line.
-5. A CF session can expire mid-deploy on a long-running deploy — if you see "Authentication has expired," re-run `cf login` and simply re-run the same `cf deploy` command; the built `.mtar` is still valid.
+3. `cf deploy mta_archives/virement_1.0.0.mtar` — deploys all 7 modules. The `virement-ams-policies-deployer` module (and its `deploy-dcl` task, which would push `ams/dcl/` policy changes to IAS) is currently commented out — see §8 — so no AMS policy push happens on deploy today.
+4. A CF session can expire mid-deploy on a long-running deploy — if you see "Authentication has expired," re-run `cf login` and simply re-run the same `cf deploy` command; the built `.mtar` is still valid.
 
 > Compile-check any CDS change before building: `npx cds compile db/schema.cds srv/service.cds app/virement.zui_pps_virement/annotations.cds --to edmx`. One pre-existing, harmless warning always appears (`NonUpdateableProperties` on `Requests_RequestAttachments`, from the `@cap-js/attachments` library's own annotation) — anything beyond that line is a real problem.
+
+## 13. Admin configuration pages (Email & System Configuration)
+
+Two draft-enabled, admin-maintained entities let an admin change behaviour without a code change or redeploy. Both follow the same List Report + Object Page pattern as the Grouping entities (§10), but are single-purpose (fixed seeded rows, never created/deleted — `Capabilities.InsertRestrictions`/`DeleteRestrictions` both `false`).
+
+### Email Configuration
+
+`EmailConfiguration` (`db/schema.cds`) — one row per notification (`ToApprover`/`Approved`/`Rejected`), each with an editable `subject`/`body` (HTML) and an `enabled` switch. READ is open to any authenticated user; UPDATE and the `testSendEmail` action are `ADMIN`-only (`srv/service.cds`'s `restrict`).
+
+- `srv/code/utils/email-config-renderer.js` — `renderEmailConfig(tx, emailType, data, opts)` substitutes `{{Placeholder}}` tokens (`RequestNumber`, `RequestLink`, `RejectionReason`, `ItemsTable`, etc. — see `utils/approval-email-context.js`/`approval-email-templates.js`) against the row's current `subject`/`body`.
+- `srv/code/utils/send-email.js` — `sendEmail({subject, body, recipients, cc})` posts to the S/4 custom Email OData v4 service (`ZSB_SCA_EMAIL_O4`) via the `S4_DESTINATION_NAME` destination (CSRF-token fetched from the service root, not the action path), `IsHtml: true`. Never throws — a failed send is logged and does not block the approval/rejection it's attached to.
+- `srv/code/test-send-email-logic.js` — the `testSendEmail` action, bound to one `EmailConfiguration` row: renders that row's current template against sample data (ignoring its `enabled` switch) and sends it to an admin-given recipient, so a template edit can be verified before it goes out for real.
+
+> **CDS `@(restrict: [...])` is an allowlist for custom actions too.** `testSendEmail` needed its own entry in the `grant` array (`grant: ['UPDATE', 'testSendEmail']`) — a separate `@requires: ['ADMIN']` on the action declaration alone is not enough; without the grant entry it 403s regardless of the caller's role.
+
+### System Configuration
+
+`SystemConfiguration` (`db/schema.cds`) — `configKey`/`configValue`/`description` rows (5 seeded: `WORKFLOW_DEFINITION_ID`, `WORKFLOW_ENVIRONMENT_ID`, `S4_DESTINATION_NAME`, `CPI_DESTINATION_NAME`, `BPA_DESTINATION_NAME`), overriding the hardcoded defaults described in §2. Unlike Email Configuration, **both READ and UPDATE are `ADMIN`-only** — these values describe internal destination/workflow wiring, not something a regular user needs visibility into.
+
+- `srv/code/utils/system-config.js` — `getConfigValue(key, fallbackDefault)` is the single read path every caller uses (`workflow-utils.js`, `send-email.js`, `cost-centers.js`, `value-help.js`, `post-to-s4-logic.js`, `earmarked-funds.js`): looks up the row, falls back to the hardcoded default if missing or on any read failure (never throws), and caches all rows for 5 minutes in-process. `invalidateCache()` is called from an `after("UPDATE", "SystemConfiguration", ...)` hook in `srv/service.js` so a saved edit takes effect immediately rather than waiting out the TTL.
+- **Deliberately excluded**: `IAS_SCIM_CLIENT_ID`/`IAS_SCIM_CLIENT_SECRET` (see §11) are never stored here or anywhere DB-readable — they stay `cf set-env` environment variables only. This table is for non-secret configuration exclusively.
+- Seed CSV (`db/data/ZDB_PPS_VIREMENT-SystemConfiguration.csv`) carries fixed `createdAt`/`modifiedAt` timestamps — without them the row has no `@odata.etag` value, and Edit mode fails with "Precondition Required" (same bug class as any CSV-seeded, `managed`-aspect, draft-enabled entity — see `EmailConfiguration`'s seed for the same fix).
+- This is the mechanism to use ahead of a new subaccount deploy (e.g. PRD): update the row for whichever destination/workflow ID differs there, rather than editing a hardcoded constant and redeploying.
+
+> **A parameter-less `UI.DataFieldForAction` button needs its result pushed as a CAP message, not just returned.** Fiori Elements only displays an action's result if it arrives via the OData message protocol (`request.info(msg)` on success, `request.error(status, msg)` on failure) — a plain `return msg;` is silently never shown, even though the call succeeded. Confirmed via `testConnection` returning 200 with nothing on screen until `request.info(message)` was added alongside the `return`. Separately — and specific to this app's custom root view (`ext/view/Main.view.xml`'s `sap.tnt.ToolPage` wrapping an inner `sap.m.App#appContent`) — `sap.fe`'s own message-popover goes looking for the current page via `AppComponent.getRootContainer().getCurrentPage()`, which resolves to the `ToolPage` (no `getCurrentPage` method) and throws, unless `Component.js` overrides `getRootContainer()` to return `byId("appContent")` instead. Both fixes are needed together for any action-returned message to actually display; see `test-connection-logic.js` and `webapp/Component.js`.
 
 ## License
 

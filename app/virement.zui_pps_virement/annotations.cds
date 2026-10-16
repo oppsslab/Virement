@@ -137,6 +137,10 @@ annotate service.Requests with {
         title              : '{i18n>Requestor}',
         Common.FieldControl: #ReadOnly
     );
+    departmentSection    @(
+        title              : '{i18n>DepartmentSection}',
+        Common.FieldControl: #ReadOnly
+    );
     approvedBy           @(
         title              : '{i18n>ApprovedBy}',
         Common.FieldControl: #ReadOnly
@@ -877,6 +881,10 @@ annotate service.Requests with @(
             },
             {
                 $Type: 'UI.DataField',
+                Value: departmentSection
+            },
+            {
+                $Type: 'UI.DataField',
                 Value: fiscalYear
             },
             {
@@ -1136,7 +1144,15 @@ annotate service.Requests actions {
             // (COMPLETED/RUNNING) in the very same transaction as the
             // approval itself - refetch it so the Workflow facet stops
             // showing the stale value it had before this action ran.
-            'in/workflowStatus'
+            'in/workflowStatus',
+            // isPendingApprover is virtual, recomputed on every read
+            // from the acting user's RequestApprovers row (see
+            // requests-after-read-logic.js) - without it here, the
+            // Approve button (and anything else gated on it) stays
+            // stuck showing its pre-action state until a manual reload,
+            // since status_code alone doesn't change on a non-final
+            // approval level.
+            'in/isPendingApprover'
         ],
         TargetEntities  : [
             RequestApprovers,
@@ -1155,7 +1171,9 @@ annotate service.Requests actions {
             'in/transferOutDocNumber',
             // See approveRequest above - rejectRequest sets
             // workflowStatus to REJECTED in the same transaction.
-            'in/workflowStatus'
+            'in/workflowStatus',
+            // See approveRequest above for why this is needed.
+            'in/isPendingApprover'
         ],
         TargetEntities  : [
             RequestApprovers,
@@ -1220,6 +1238,19 @@ annotate service.Requests actions {
 // =============================================================================
 
 annotate service.RequestItems with {
+    // Internal-only parent FK - never actually edited in practice
+    // (nothing in the UI lets a user change which request an item
+    // belongs to), but selectable as a column, so give it a readable
+    // label instead of the raw "request_ID". Common.FieldControl:
+    // #ReadOnly was tried here too, but marking the association
+    // itself read-only broke Fiori Elements' automatic linking of a
+    // newly created item row to its parent request via "Add" (the
+    // row appeared transiently then vanished, never persisting) - so
+    // this stays label-only.
+    request           @(
+        title       : '{i18n>RequestID}',
+        Common.Label: '{i18n>RequestID}'
+    );
     srNo              @(
         title              : '{i18n>SRNo}',
         Common.FieldControl: #ReadOnly
@@ -1564,7 +1595,7 @@ annotate service.RequestItems with {
     // on the header, Reason) stay editable at that point.
     supplementAmount  @(
         title       : '{i18n>SupplementAmount}',
-        Common.Label: '{i18n>Amount}',
+        Common.Label: '{i18n>SupplementAmount}',
         Common.FieldControl: {$edmJson: {$If: [
             {$Eq: [
                 {$Path: 'request/status_code'},
@@ -1576,7 +1607,7 @@ annotate service.RequestItems with {
     );
     returnAmount      @(
         title       : '{i18n>ReturnAmount}',
-        Common.Label: '{i18n>Amount}',
+        Common.Label: '{i18n>ReturnAmount}',
         Common.FieldControl: {$edmJson: {$If: [
             {$Eq: [
                 {$Path: 'request/status_code'},
@@ -3520,4 +3551,252 @@ annotate service.RegionBranchGrouping with @(
     Capabilities.InsertRestrictions.Insertable: true,
     Capabilities.UpdateRestrictions.Updatable : true,
     Capabilities.DeleteRestrictions.Deletable : true
+);
+
+// =============================================================================
+// Email Configuration - admin-maintained subject/body and on/off
+// switch for the three approval notification emails. Exactly 3 seeded
+// rows (emailType is the key) - never created or deleted, only
+// updated, hence no Insertable/Deletable capability below.
+// =============================================================================
+annotate service.EmailConfiguration with {
+    emailType  @(
+        title              : 'Email Type',
+        Common.FieldControl: #ReadOnly
+    );
+    subject    @(title: 'Subject');
+    body       @(
+        title             : 'Body (HTML)',
+        UI.MultiLineText  : true
+    );
+    enabled    @(title: 'Enabled');
+    modifiedBy @(
+        title              : 'Last Changed By',
+        Common.FieldControl: #ReadOnly
+    );
+    modifiedAt @(
+        title              : 'Last Changed At',
+        Common.FieldControl: #ReadOnly
+    );
+};
+
+annotate service.EmailConfiguration with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: emailType,
+            Label: 'Email Type'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: subject,
+            Label: 'Subject'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: enabled,
+            Label: 'Enabled'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: modifiedBy,
+            Label: 'Last Changed By'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: modifiedAt,
+            Label: 'Last Changed At'
+        }
+    ],
+
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : emailType,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem']
+    },
+
+    UI.HeaderInfo: {
+        TypeName      : 'Email Configuration',
+        TypeNamePlural: 'Email Configuration',
+        Title         : {Value: emailType}
+    },
+
+    UI.Facets: [
+        {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'EmailConfigurationDetails',
+            Label : 'Email Template',
+            Target: '@UI.FieldGroup#Details'
+        },
+        {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'EmailConfigurationBody',
+            Label : 'Body',
+            Target: '@UI.FieldGroup#Body'
+        },
+        {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'EmailConfigurationAudit',
+            Label : 'Change History',
+            Target: '@UI.FieldGroup#Audit'
+        }
+    ],
+
+    UI.FieldGroup #Details: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: emailType},
+            {$Type: 'UI.DataField', Value: enabled},
+            {$Type: 'UI.DataField', Value: subject}
+        ]
+    },
+
+    // Its own full-width facet, rather than sharing a column with the
+    // other fields above - see manifest.json's controlConfiguration
+    // for this facet, which also sets the edit textarea's row count.
+    UI.FieldGroup #Body: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: body}
+        ]
+    },
+
+    /*
+     * Who last changed this template and when - the managed aspect's
+     * modifiedBy/modifiedAt already update automatically on every
+     * save, so nothing extra needed server-side to "trace" this.
+     */
+    UI.FieldGroup #Audit: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: modifiedBy},
+            {$Type: 'UI.DataField', Value: modifiedAt}
+        ]
+    },
+
+    UI.Identification: [{
+        $Type : 'UI.DataFieldForAction',
+        Action: 'service.testSendEmail',
+        Label : 'Send Test Email'
+    }],
+
+    Capabilities.InsertRestrictions.Insertable: false,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : false
+);
+
+// =============================================================================
+// System Configuration - admin-maintained overrides for values that
+// otherwise sit hardcoded in the backend (BPA workflow definition/
+// environment, S/4 and CPI/BPA destination names). Seeded rows only
+// (configKey is the key) - never created or deleted, only updated,
+// hence no Insertable/Deletable capability below. Both READ and
+// UPDATE are admin-only (see service.cds), unlike Email Configuration
+// above, which allows open READ.
+// =============================================================================
+annotate service.SystemConfiguration with {
+    configKey   @(
+        title              : 'Configuration Key',
+        Common.FieldControl: #ReadOnly
+    );
+    configValue @(title: 'Value');
+    description @(
+        title              : 'Description',
+        Common.FieldControl: #ReadOnly
+    );
+    modifiedBy  @(
+        title              : 'Last Changed By',
+        Common.FieldControl: #ReadOnly
+    );
+    modifiedAt  @(
+        title              : 'Last Changed At',
+        Common.FieldControl: #ReadOnly
+    );
+};
+
+annotate service.SystemConfiguration with @(
+    UI.LineItem: [
+        {
+            $Type: 'UI.DataField',
+            Value: configKey,
+            Label: 'Configuration Key'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: configValue,
+            Label: 'Value'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: modifiedBy,
+            Label: 'Last Changed By'
+        },
+        {
+            $Type: 'UI.DataField',
+            Value: modifiedAt,
+            Label: 'Last Changed At'
+        }
+    ],
+
+    UI.PresentationVariant: {
+        $Type         : 'UI.PresentationVariantType',
+        SortOrder     : [{
+            $Type     : 'Common.SortOrderType',
+            Property  : configKey,
+            Descending: false
+        }],
+        Visualizations: ['@UI.LineItem']
+    },
+
+    UI.HeaderInfo: {
+        TypeName      : 'System Configuration',
+        TypeNamePlural: 'System Configuration',
+        Title         : {Value: configKey}
+    },
+
+    UI.Facets: [
+        {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'SystemConfigurationDetails',
+            Label : 'Configuration',
+            Target: '@UI.FieldGroup#Details'
+        },
+        {
+            $Type : 'UI.ReferenceFacet',
+            ID    : 'SystemConfigurationAudit',
+            Label : 'Change History',
+            Target: '@UI.FieldGroup#Audit'
+        }
+    ],
+
+    UI.FieldGroup #Details: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: configKey},
+            {$Type: 'UI.DataField', Value: configValue},
+            {$Type: 'UI.DataField', Value: description}
+        ]
+    },
+
+    UI.FieldGroup #Audit: {
+        $Type: 'UI.FieldGroupType',
+        Data : [
+            {$Type: 'UI.DataField', Value: modifiedBy},
+            {$Type: 'UI.DataField', Value: modifiedAt}
+        ]
+    },
+
+    UI.Identification: [{
+        $Type : 'UI.DataFieldForAction',
+        Action: 'service.testConnection',
+        Label : 'Test Connection'
+    }],
+
+    Capabilities.InsertRestrictions.Insertable: false,
+    Capabilities.UpdateRestrictions.Updatable : true,
+    Capabilities.DeleteRestrictions.Deletable : false
 );

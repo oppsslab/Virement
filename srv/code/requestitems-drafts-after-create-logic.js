@@ -6,6 +6,40 @@ const LOG = cds.log("requestitems-drafts-after-create-logic");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
 
+/*
+ * A bulk upload (or any deep-insert of several items at once) fires
+ * this AFTER CREATE hook once per item, in quick succession. Both
+ * recalcAmountsByType's srNo resequencing and
+ * refreshDraftApproverPreview's delete-then-insert are read-modify-
+ * write sequences against the SAME parent request's siblings/
+ * approvers - running several of them concurrently for the same
+ * request_ID let them race and interleave (one invocation's DELETE
+ * running against rows another invocation had already re-inserted,
+ * or a resequence running before a sibling item from the same batch
+ * had committed), producing scrambled srNo values and duplicated
+ * approver rows.
+ *
+ * This queues invocations per requestId so they always run one at a
+ * time, however many items land in the same batch - it does not
+ * reduce how many times the recalculation runs, only guarantees none
+ * of them overlap.
+ */
+const perRequestQueue = new Map();
+
+function runSerializedPerRequest(requestId, fn) {
+  const previous = perRequestQueue.get(requestId) || Promise.resolve();
+
+  const next = previous.then(fn, fn).finally(() => {
+    if (perRequestQueue.get(requestId) === next) {
+      perRequestQueue.delete(requestId);
+    }
+  });
+
+  perRequestQueue.set(requestId, next);
+
+  return next;
+}
+
 /* ------------------------------------------------------------------ *
  * Parent resolution helper
  * ------------------------------------------------------------------ */
@@ -56,29 +90,36 @@ module.exports = async function (data, request) {
       return;
     }
 
-    // 2. Recalculate the parent amounts and resequence sibling srNo values
-    //    (shared util, same call the calculateValues action makes).
-    const amounts = await recalcAmountsByType(
-      requestId,
-      true  // doResequence
-    );
+    // 2. & 3. Recalculate amounts/resequence srNo, then refresh the
+    //    approver preview - serialized per request_ID (see
+    //    runSerializedPerRequest above) so a bulk upload's many
+    //    back-to-back item creates can't race each other here.
+    await runSerializedPerRequest(requestId, async () => {
+      // Recalculate the parent amounts and resequence sibling srNo
+      // values (shared util, same call the calculateValues action
+      // makes).
+      const amounts = await recalcAmountsByType(
+        requestId,
+        true  // doResequence
+      );
 
-    LOG.info(
-      "Recalculation completed for request",
-      `${requestId}: ${JSON.stringify(amounts)}`,
-    );
+      LOG.info(
+        "Recalculation completed for request",
+        `${requestId}: ${JSON.stringify(amounts)}`,
+      );
 
-    // 3. Refresh the CAP-owned approver preview against the new totals.
-    const tx = cds.tx(request);
+      // Refresh the CAP-owned approver preview against the new totals.
+      const tx = cds.tx(request);
 
-    const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
+      const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
 
-    await refreshDraftApproverPreview({
-      tx,
-      RequestsDraft: Requests.drafts,
-      RequestApproversDraft: RequestApprovers.drafts,
-      requestId,
-      amounts,
+      await refreshDraftApproverPreview({
+        tx,
+        RequestsDraft: Requests.drafts,
+        RequestApproversDraft: RequestApprovers.drafts,
+        requestId,
+        amounts,
+      });
     });
 
     LOG.info("--- AFTER CREATE RequestItems.drafts ended successfully ---");
