@@ -31,7 +31,7 @@
   "role-templates": [
     {
       "name": "REQUEST_APPROVE",
-      "description": "generated",
+      "description": "Approves, rejects, or delegates Virement budget-transfer requests assigned to them",
       "scope-references": [
         "$XSAPPNAME.REQUEST_APPROVE"
       ],
@@ -39,7 +39,7 @@
     },
     {
       "name": "ADMIN",
-      "description": "Maintains the Approver Matrix",
+      "description": "Maintains the Approver Matrix, master-data groupings, Email Configuration and System Configuration; can reassign a pending approval on behalf of another approver",
       "scope-references": [
         "$XSAPPNAME.ADMIN"
       ],
@@ -47,7 +47,7 @@
     },
     {
       "name": "BUDGET_ZERORISE",
-      "description": "Raises a Budget Zerorise Return (BCM team only)",
+      "description": "Raises or resubmits a Return request as Budget Zerorise (BCM team only)",
       "scope-references": [
         "$XSAPPNAME.BUDGET_ZERORISE"
       ],
