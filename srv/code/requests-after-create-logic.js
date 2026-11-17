@@ -406,10 +406,13 @@ module.exports = async function (results, request) {
           .columns(
             "costCentre",
             "responsibleCostCentre",
+            "material",
+            "glAccount",
             "glGroup",
             "department",
             "region",
             "branch",
+            "buildingName",
             "functionalDepartment",
             "transferInAmount",
             "transferOutAmount",

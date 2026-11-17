@@ -2,6 +2,10 @@
 
 const cds = require("@sap/cds");
 
+const {
+  splitGlAccounts,
+} = require("./functional-department-grouping-lookup");
+
 const LOG = cds.log("virement-scenario");
 
 const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
@@ -14,6 +18,16 @@ const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
  * - per the Virement (Non-Project) approval routing table.
  *
  * Priority order (first match wins), matching the table's row order:
+ *   Checked before everything below: every item (transfer-out and
+ *   transfer-in alike) shares the exact same Cost Centre -> Head of
+ *   Department (the shared cost centre's own Department, via the
+ *   Approver Matrix's departmentBranch column, same as scenario 2's
+ *   "Same Department" below). This is money moving within one cost
+ *   centre (e.g. reclassifying between GL accounts), so that cost
+ *   centre's own Head of Department approves it directly - overriding
+ *   even a Functional Department Grouping match below, since a
+ *   same-cost-centre transfer is a more specific signal than "this GL
+ *   Account happens to be flagged as this functional department's".
  *   0. Functional Department Grouping match (see
  *      classifyByFunctionalDepartmentGrouping below) -> Head of
  *      Functional Department. Checked BEFORE everything else below -
@@ -57,6 +71,15 @@ const SERVICE_NAMESPACE = "ZSVC_PPS_VIREMENT";
  *     Department (via GL Grouping) - it does not additionally parse
  *     Functional Department Grouping's free-text Fund Centre Scope
  *     column against the actual cost centers used.
+ *   - An item's Department qualifies a matched Functional Department
+ *     Grouping row's "Is Department" checkbox (isDepartmentItem) only
+ *     when it literally equals that Functional Department's own name
+ *     - DepartmentGrouping.department is maintained to match
+ *     FunctionalDepartmentGrouping.functionalDepartment exactly for a
+ *     functional department that is also a department in its own
+ *     right (confirmed against live data). This relies on that naming
+ *     convention being followed consistently by whoever maintains both
+ *     tables - there is no foreign-key-style reference enforcing it.
  *   - "Head of Transfer-out Cost Center (need to be limit)" - no
  *     amount ceiling is modeled for this role; it approves regardless
  *     of amount, same as everywhere else it appears in the table.
@@ -67,6 +90,29 @@ const BUDGET_TYPE_NON_PROJECT = "N";
 const BUDGET_TYPE_PROJECT = "P";
 
 const LEVEL_1_LETTERS = ["A", "B", "C", "D", "E"];
+
+/*
+ * Fund Center + Material Group identifying the Central Fund - the
+ * same account the Return-to-Central-Fund balancing line in
+ * post-to-s4-logic.js posts into (its own CENTRAL_FUND_COST_CENTRE /
+ * CENTRAL_FUND_MATERIAL constants). Hardcoded, per Finance: a
+ * Virement whose Transfer Out line moves money OUT of this account is
+ * never a normal departmental transfer, so it always routes straight
+ * through the JKEW amount-tiered chain (see resolveAmountTierRole
+ * below) at Level 1, overriding every other scenario in the chain
+ * below - including even the Same Cost Centre check, which would
+ * otherwise match whenever every item (Central Fund transfer-out
+ * included) shares one cost centre.
+ */
+const CENTRAL_FUND_COST_CENTRE = "100050500";
+const CENTRAL_FUND_MATERIAL = "760001000";
+
+function isCentralFundTransferOutItem(item) {
+  return (
+    String(item.costCentre ?? "").trim() === CENTRAL_FUND_COST_CENTRE &&
+    String(item.material ?? "").trim() === CENTRAL_FUND_MATERIAL
+  );
+}
 
 function distinctValues(items, field) {
   const values = new Set();
@@ -80,6 +126,29 @@ function distinctValues(items, field) {
   }
 
   return values;
+}
+
+/**
+ * True only when EVERY item has a non-blank value for the given field
+ * AND all of those values are identical - unlike a bare
+ * distinctValues(...).size === 1 check, which incorrectly treats "the
+ * items that happen to have a value all agree" as a match even when
+ * OTHER items have no value at all for that field. A Region & Branch
+ * item genuinely has no Department, so it must never satisfy a "Same
+ * Department" check just because every item that DOES have a
+ * Department happens to agree - this is exactly the gap that let a
+ * mixed Department/Region-Branch request wrongly match "Same
+ * Department" based on a single item's value.
+ *
+ * @param {object[]} items
+ * @param {string} field
+ * @returns {boolean}
+ */
+function allItemsShareValue(items, field) {
+  return (
+    items.every((item) => hasText(item[field])) &&
+    distinctValues(items, field).size === 1
+  );
 }
 
 /**
@@ -163,8 +232,34 @@ function hasText(value) {
   return String(value ?? "").trim() !== "";
 }
 
-function isDepartmentItem(item) {
-  return hasText(item.department);
+function normalizeForComparison(value) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+/**
+ * True when an item's own Department (Cost Centre -> Department
+ * Grouping) IS the given Functional Department - not just "has some
+ * department filled in". A Functional Department Grouping row's "Is
+ * Department" flag means that functional department is ALSO a
+ * department in its own right, and DepartmentGrouping.department is
+ * maintained to literally equal FunctionalDepartmentGrouping
+ * .functionalDepartment for that case (confirmed live: both tables
+ * use the exact same string "EPF LEARNING CENTRE" for that functional
+ * department's own cost centres) - so a straight equality check is
+ * correct here, it just needs to compare against the right value. An
+ * earlier attempt at this compared against a stale/mismatched
+ * functionalDepartment value and was wrongly reverted as a result.
+ *
+ * @param {object} item
+ * @param {string} functionalDepartment
+ * @returns {boolean}
+ */
+function isDepartmentItem(item, functionalDepartment) {
+  return (
+    hasText(item.department) &&
+    normalizeForComparison(item.department) ===
+      normalizeForComparison(functionalDepartment)
+  );
 }
 
 /**
@@ -176,17 +271,18 @@ function isDepartmentItem(item) {
  * equality check across all items, no extra GL lookup needed here.
  *
  * If that holds, EVERY Transfer In item's own Department / Region &
- * Branch attributes (computed directly from its department/region/
- * branch fields, the same way service.cds's isDepartment/
- * isRegionAndBranch calculated columns do - not read from those
- * columns themselves, since they are populated only by a live OData
- * read and are not reliably present on a plain deep-insert payload
- * item) must satisfy whichever of the matched row's isDepartment/
- * isRegionAndBranch checkboxes are set - an OR across whichever of
- * the two are checked, so a row with only one checked requires just
- * that one to match (on every Transfer In item, not just one of
- * them), and a row with neither checked can never pass this
- * validation.
+ * Branch / Building attributes (computed directly from its
+ * department/region/branch/buildingName fields, the same way
+ * service.cds's isDepartment/isRegionAndBranch/isBuilding calculated
+ * columns do - not read from those columns themselves, since they are
+ * populated only by a live OData read and are not reliably present on
+ * a plain deep-insert payload item) must satisfy whichever of the
+ * matched row's isDepartment/isRegionAndBranch/isBuildingGrouping
+ * checkboxes are set - an OR across whichever are checked, so a row
+ * with only one checked requires just that one to match (on every
+ * Transfer In item, not just one of them), and a row with none
+ * checked can never pass this validation. Transfer Out items are held
+ * to the Department or Building rule (not Region & Branch).
  *
  * @param {object} tx - an active cds.tx()
  * @param {object[]} transferOutItems
@@ -204,15 +300,7 @@ async function classifyByFunctionalDepartmentGrouping(
 ) {
   const allItems = [...transferOutItems, ...transferInItems];
 
-  const everyItemHasFunctionalDepartment = allItems.every((item) =>
-    hasText(item.functionalDepartment),
-  );
-
-  if (!everyItemHasFunctionalDepartment) {
-    return null;
-  }
-
-  if (distinctValues(allItems, "functionalDepartment").size !== 1) {
+  if (!allItemsShareValue(allItems, "functionalDepartment")) {
     return null;
   }
 
@@ -224,14 +312,27 @@ async function classifyByFunctionalDepartmentGrouping(
 
   const { FunctionalDepartmentGrouping } = cds.entities(SERVICE_NAMESPACE);
 
-  const groupingRow = await tx.run(
-    SELECT.one
-      .from(FunctionalDepartmentGrouping)
-      .columns("isDepartment", "isRegionAndBranch")
+  /*
+   * A Functional Department has one grouping row per GL Account list
+   * (e.g. JABATAN PENGURUSAN HARTA has ~33), and the Building /
+   * Department / Region & Branch flags differ from row to row - so the
+   * flags that apply to an item are those of the row(s) listing ITS OWN
+   * GL Account, never an arbitrary row of that Functional Department.
+   * An item without a glAccount falls back to every row of the
+   * Functional Department.
+   */
+  const groupingRows = await tx.run(
+    SELECT.from(FunctionalDepartmentGrouping)
+      .columns(
+        "glAccounts",
+        "isDepartment",
+        "isRegionAndBranch",
+        "isBuildingGrouping",
+      )
       .where({ functionalDepartment }),
   );
 
-  if (!groupingRow) {
+  if (!groupingRows.length) {
     LOG.warn(
       "Functional Department matched on every item, but no " +
         "Functional Department Grouping master row was found for it " +
@@ -243,21 +344,57 @@ async function classifyByFunctionalDepartmentGrouping(
     return null;
   }
 
+  const flagsForItem = (item) => {
+    const glAccount = String(item.glAccount ?? "").trim();
+
+    const rows = glAccount
+      ? groupingRows.filter((row) =>
+          splitGlAccounts(row.glAccounts).includes(glAccount),
+        )
+      : groupingRows;
+
+    return {
+      isDepartment: rows.some((row) => row.isDepartment),
+      isRegionAndBranch: rows.some((row) => row.isRegionAndBranch),
+      isBuildingGrouping: rows.some((row) => row.isBuildingGrouping),
+    };
+  };
+
   /*
-   * Each transfer-in item may satisfy either rule, so a mix of
-   * department-based and branch-based items still routes here.
+   * A building item: its GL row's "Building Grouping" checkbox is set
+   * and the item's cost centre is a Building Grouping cost centre
+   * (buildingName is resolved from it). A building cost centre has no
+   * Department/Region/Branch of its own, so without this it could never
+   * match a functional department that owns buildings.
    */
-  const transferInItemQualifies = (item) =>
-    (groupingRow.isDepartment && hasText(item.department)) ||
-    (groupingRow.isRegionAndBranch &&
-      hasText(item.region) &&
-      hasText(item.branch));
+  const isBuildingItem = (item) =>
+    flagsForItem(item).isBuildingGrouping && hasText(item.buildingName);
+
+  /*
+   * Each item may satisfy any of the rules its GL row has ticked, so a
+   * mix of department-based, branch-based and building items still
+   * routes here.
+   */
+  const transferInItemQualifies = (item) => {
+    const flags = flagsForItem(item);
+
+    return (
+      isBuildingItem(item) ||
+      (flags.isDepartment && isDepartmentItem(item, functionalDepartment)) ||
+      (flags.isRegionAndBranch && hasText(item.region) && hasText(item.branch))
+    );
+  };
 
   if (!transferInItems.every(transferInItemQualifies)) {
     return null;
   }
 
-  if (!transferOutItems.every(isDepartmentItem)) {
+  if (
+    !transferOutItems.every(
+      (item) =>
+        isBuildingItem(item) || isDepartmentItem(item, functionalDepartment),
+    )
+  ) {
     return null;
   }
 
@@ -332,12 +469,99 @@ async function classifyVirementNonProjectScenario(tx, items) {
         department: item.department,
         region: item.region,
         branch: item.branch,
+        buildingName: item.buildingName,
         functionalDepartment: item.functionalDepartment,
         transferOutAmount: item.transferOutAmount,
         transferInAmount: item.transferInAmount,
       })),
     ),
   );
+
+  /*
+   * Hardcoded override, checked before everything else in this chain
+   * (including the Same Cost Centre check right below, which would
+   * otherwise match a Central Fund transfer-out against itself): any
+   * Transfer Out line posting against the Central Fund (Fund Center
+   * 100050500 + Material Group 760001000) always routes through the
+   * JKEW amount-tiered chain at Level 1, regardless of what every
+   * item's Department/Branch/Region/Functional Department would
+   * otherwise classify as.
+   */
+  if (transferOutItems.some(isCentralFundTransferOutItem)) {
+    return {
+      scenario: "Central Fund Transfer Out (amount-tiered)",
+      level1Entries: [
+        {
+          level: "1",
+          userRole: resolveAmountTierRole(totalTransferOutAmount),
+        },
+      ],
+      level2Role: null,
+      totalTransferOutAmount,
+    };
+  }
+
+  /*
+   * Checked next, ahead of even the Functional Department Grouping
+   * match below: every item (transfer-out and transfer-in alike)
+   * using the exact same Cost Centre means this request is just
+   * reclassifying budget within one cost centre - that cost centre's
+   * own head approves it directly, regardless of whether its GL
+   * Account also happens to be functional-department-flagged.
+   *
+   * Every item shares the one same Cost Centre here, so Department/
+   * Region/Branch are necessarily identical across all of them too
+   * (both are deterministically derived from Cost Centre via the
+   * Grouping master data) - checking the first item is enough. Which
+   * head approves depends on whether this is a Department-type or a
+   * Branch-type cost centre: hardcoding "Head of Department" here
+   * regardless wrongly routed a Branch-type cost centre (Department
+   * blank, Branch populated) to a department head with no real
+   * department to scope the approval to.
+   */
+  /*
+   * Only when every item is also in the same GL Group: a request whose
+   * items share one Cost Centre but span different GL Groups is the
+   * "Different GL Group, regardless of Cost Center" rule below (Head of
+   * Transfer-out Cost Center -> Head of JKEW -> CEO/CFO), not a plain
+   * same-cost-centre reclassification.
+   */
+  if (
+    allItemsShareValue(allItems, "costCentre") &&
+    allItemsShareValue(allItems, "glGroup")
+  ) {
+    const [sharedCostCentreItem] = allItems;
+
+    if (hasText(sharedCostCentreItem.department)) {
+      return {
+        scenario: "Same Cost Centre (Transfer In = Transfer Out) - Department",
+        level1Entries: buildSingleLevel1Entry(
+          "HOD",
+          sharedCostCentreItem.department,
+        ),
+        level2Role: null,
+        totalTransferOutAmount,
+      };
+    }
+
+    if (hasText(sharedCostCentreItem.branch)) {
+      return {
+        scenario: "Same Cost Centre (Transfer In = Transfer Out) - Branch",
+        level1Entries: buildSingleLevel1Entry(
+          "HOB",
+          sharedCostCentreItem.branch,
+        ),
+        level2Role: null,
+        totalTransferOutAmount,
+      };
+    }
+
+    /*
+     * Neither Department nor Branch is populated for this shared cost
+     * centre - fall through to the rest of the chain below instead of
+     * guessing a role with no real departmentBranch to scope it to.
+     */
+  }
 
   const functionalDepartmentGroupingMatch =
     await classifyByFunctionalDepartmentGrouping(
@@ -350,7 +574,7 @@ async function classifyVirementNonProjectScenario(tx, items) {
     return functionalDepartmentGroupingMatch;
   }
 
-  const isSameGLGroup = distinctValues(allItems, "glGroup").size === 1;
+  const isSameGLGroup = allItemsShareValue(allItems, "glGroup");
 
   if (!isSameGLGroup) {
     return {
@@ -362,7 +586,7 @@ async function classifyVirementNonProjectScenario(tx, items) {
     };
   }
 
-  if (distinctValues(allItems, "department").size === 1) {
+  if (allItemsShareValue(allItems, "department")) {
     return {
       scenario: "Same Department",
       level1Entries: buildSingleLevel1Entry(
@@ -374,7 +598,7 @@ async function classifyVirementNonProjectScenario(tx, items) {
     };
   }
 
-  if (distinctValues(allItems, "branch").size === 1) {
+  if (allItemsShareValue(allItems, "branch")) {
     return {
       scenario: "Same Branch",
       level1Entries: buildSingleLevel1Entry(
@@ -386,7 +610,7 @@ async function classifyVirementNonProjectScenario(tx, items) {
     };
   }
 
-  if (distinctValues(allItems, "region").size === 1) {
+  if (allItemsShareValue(allItems, "region")) {
     return {
       scenario: "Same Region, Different Branch",
       level1Entries: buildTransferOutCostCentreEntries(transferOutItems),
@@ -396,19 +620,27 @@ async function classifyVirementNonProjectScenario(tx, items) {
     };
   }
 
-  if (
-    distinctValues(allItems, "functionalDepartment").size === 1 &&
-    transferOutItems.every(isDepartmentItem)
-  ) {
-    return {
-      scenario: "Authorized Functional Department",
-      level1Entries: buildSingleLevel1Entry(
-        "HOD_FUNC",
-        singleValue(allItems, "functionalDepartment"),
-      ),
-      level2Role: null,
-      totalTransferOutAmount,
-    };
+  if (allItemsShareValue(allItems, "functionalDepartment")) {
+    const authorizedFunctionalDepartment = singleValue(
+      allItems,
+      "functionalDepartment",
+    );
+
+    if (
+      transferOutItems.every((item) =>
+        isDepartmentItem(item, authorizedFunctionalDepartment),
+      )
+    ) {
+      return {
+        scenario: "Authorized Functional Department",
+        level1Entries: buildSingleLevel1Entry(
+          "HOD_FUNC",
+          authorizedFunctionalDepartment,
+        ),
+        level2Role: null,
+        totalTransferOutAmount,
+      };
+    }
   }
 
   return {

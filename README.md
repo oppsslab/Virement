@@ -155,7 +155,7 @@ All admin-maintained, `cuid, managed`, explicitly "not sourced from S/4."
 | `RegionBranchGrouping` | Cost Centre → Region/State/Branch | Item `region`/`branch`; "Same Region/Branch" routing |
 | `GLGrouping` | GL Account → GL Group, Asset Type | Item `glGroup`/`assetType`; "Same GL Group" routing |
 | `FunctionalDepartmentGrouping` | GL Accounts list → Functional Department | Priority-0 and fallback "authorized functional department" routing |
-| `BuildingGrouping` | Cost Centre → State/building | Item `buildingName` (display only, not yet a routing input) |
+| `BuildingGrouping` | Cost Centre → State/building | Item `buildingName`; also a routing input via a Functional Department Grouping row's **Building Grouping** flag (below) |
 | `ApproverMatrix` | Role + scope → current approver email | Every approval lookup — see §4 |
 | `ApproverDelegation` | Temporary cover for one `ApproverMatrix` row | Substituted live at lookup time, not retroactive to already-pending requests |
 
@@ -167,7 +167,7 @@ Three files, read together: `utils/virement-scenario.js` (Transfer/Non-Project o
 
 | # | Scenario | Level 1 | Level 2 |
 |---|---|---|---|
-| 0 | Functional Department Grouping match (all items share one FD, master-row flags confirm dept/region+branch) | `HOD_FUNC` | — |
+| 0 | Functional Department Grouping match (all items share one FD; every Transfer In item satisfies a ticked flag — Department, Region & Branch, or Building; every Transfer Out item satisfies Department or Building) | `HOD_FUNC` | — |
 | 1 | Different GL Group | `HOD_XFER_CC` × transfer-out line (lettered) | `HOD_JKEW` → L3 `CEO_CFO` |
 | 2 | Same Department | `HOD` | — |
 | 3 | Same Branch | `HOB` | — |

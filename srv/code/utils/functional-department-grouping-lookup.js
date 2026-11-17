@@ -45,12 +45,7 @@ async function resolveFunctionalDepartment(tx, glAccount) {
   );
 
   for (const row of rows) {
-    const tokens = String(row.glAccounts || "")
-      .split(GL_ACCOUNT_LIST_SEPARATOR)
-      .map((token) => token.trim())
-      .filter(Boolean);
-
-    if (tokens.includes(trimmed)) {
+    if (splitGlAccounts(row.glAccounts).includes(trimmed)) {
       return row.functionalDepartment;
     }
   }
@@ -58,4 +53,18 @@ async function resolveFunctionalDepartment(tx, glAccount) {
   return null;
 }
 
-module.exports = { resolveFunctionalDepartment };
+/**
+ * Splits a Functional Department Grouping row's GL Accounts cell into
+ * its individual account tokens (see GL_ACCOUNT_LIST_SEPARATOR above).
+ *
+ * @param {string} glAccounts
+ * @returns {string[]}
+ */
+function splitGlAccounts(glAccounts) {
+  return String(glAccounts || "")
+    .split(GL_ACCOUNT_LIST_SEPARATOR)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+module.exports = { resolveFunctionalDepartment, splitGlAccounts };
