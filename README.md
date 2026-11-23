@@ -204,9 +204,20 @@ Deliberately much simpler than the Non-Project chain above: a Project item is id
 
 #### Step 1 — Reproduce it on a draft (nothing is sent to anyone)
 
-1. In the portal, click **Create Request** → **Virement**, and enter the same lines as the problem request (same cost centre, GL account, material, amounts).
-2. Scroll down to the **Approvers** table. It updates by itself every time you change a line, and it is only a preview — nobody is notified.
-3. When finished, click **Discard Draft**.
+1. In the portal, click **Create Request** and choose **Virement** as the Request Type.
+
+   ![The New Request dialog with the Request Type dropdown open](docs/images/debug-01-new-request-dialog.jpg)
+
+2. Add the same lines as the problem request (same cost centre, GL account, material, amounts). One line is "transfer out" (amount in *Transfer Out Amount*), the other is "transfer in" (amount in *Transfer In Amount*).
+
+   ![Two line items on the same cost centre and GL account](docs/images/debug-02-line-items.png)
+
+3. Scroll down to the **Approvers** table. It updates by itself every time you change a line, and it is only a preview — nobody is notified.
+4. When finished, click **Discard Draft**.
+
+Example of a **wrong result** (a request that should have gone to the Head of Functional Department but fell to the last-resort rule — two JKEW Officers at level 2). Taken on DEV before the building fix was deployed there:
+
+![Approvers table showing the last-resort result, JKEW Officer PG14 at level 2](docs/images/debug-04-approvers-last-resort.png)
 
 Look at who appears in the Approvers table. This tells you which rule fired:
 
@@ -226,6 +237,10 @@ The app fills these in by itself from the cost centre / GL account. They are hid
 
 If any of these is **empty** or **different from what you expected**, that is almost always the cause. (Is Building = Yes just means the cost centre was found in the Building list.)
 
+![Derived columns: GL Group, Functional Department, Is Building and Building Name for the two lines](docs/images/debug-03-derived-columns.png)
+
+In this example the cost centre is a building, so *Department*, *Region* and *Branch* are all empty (those columns sit just to the left of the ones shown) and *Is Building* is Yes. That combination is exactly what the building fix handles. Also notice *Functional Department* — it came back as JABATAN PELABURAN HARTANAH, not JABATAN PENGURUSAN HARTA (see the "same GL under two departments" warning in Step 3).
+
 #### Step 3 — Fix or check the lists these facts come from
 
 These facts come from lists that admins maintain under **Grouping Maintenance** in the portal:
@@ -237,6 +252,14 @@ These facts come from lists that admins maintain under **Grouping Maintenance** 
 | GL Group | GL Grouping (GL account → group) |
 | Functional Department | Functional Department Grouping (GL account → functional department) |
 | Building Name | Building Grouping (cost centre → building) |
+
+![Grouping Maintenance: one tile per list](docs/images/debug-05-grouping-maintenance.jpg)
+
+Open **Functional Department Grouping** and search for the GL account. This is what it looks like for GL 741011 (DEV data):
+
+![Functional Department Grouping filtered on GL 741011, showing the Building Grouping / Department / Region & Branch ticks per row](docs/images/debug-06-functional-department-grouping.jpg)
+
+Look at the three tick columns on the right (**Building Grouping, Department, Region & Branch**). Note that GL 741011 appears under **two** departments, with **different ticks** (the Pelaburan Hartanah row has Building = Yes; the Pengurusan Harta (JPH) row has Building = No). This screenshot is from DEV. **DEV and PRD master data are not identical** — always check the environment you are actually debugging.
 
 Two things that often catch people out in **Functional Department Grouping**:
 
