@@ -51,6 +51,7 @@ A working reference for anyone picking up this codebase — what each part of th
 
 | Task | Go to |
 |---|---|
+| A request went to the wrong approver / wrong level / nobody | Follow the plain-language checklist in [§4 — Debugging a wrong approver](#debugging-a-wrong-approver--step-by-step) |
 | Add or adjust a submission validation | `srv/code/requests-before-create-logic.js` — one function per rule, see [§5](#5-submission--approval-lifecycle) |
 | Change who approves a Virement request, or at what amount | `srv/code/utils/virement-scenario.js` (Non-Project scenarios) and `utils/approver-routing.js` (Supplement/Return bands), see [§4](#4-approval-routing-engine) |
 | Add a new item-list field derived from Cost Centre / GL Account / Material | `srv/code/utils/*-lookup.js` + wire into `requestitems-drafts-before-create/update-logic.js`, see [§3](#3-data-model) |
@@ -194,6 +195,108 @@ Deliberately much simpler than the Non-Project chain above: a Project item is id
 `getManagedLevels(requestType, budgetType)` returns the full universe of levels a combo could *ever* use (e.g. `["1","1A".."1E","2","3"]` for Transfer/Non-Project, `["1A".."1E"]` for Transfer/Project) so `applyApproverPlan` can wipe every stale level from an earlier classification, not just the ones the current plan happens to use — important when item edits mid-draft change which scenario applies.
 
 > Two read-only helpers built on the same plan, both used at submission (§5): `previewApprovalPlanGaps` (any level resolving to zero current approvers — hard blocks) and `resolveApprovalPlanWithApprovers` (levels with actual resolved emails — used for the same-person conflict checks).
+
+### Debugging a wrong approver — step by step
+
+**The problem this section solves:** someone raised a Virement request and it went to the wrong approver (or to nobody). This guide shows how to find out why, in plain steps. You do **not** need to submit a real request to test — use a **draft** (see Step 1).
+
+**How routing works, in one paragraph.** The app does not pick an approver by guessing. For each line in the request it looks up a few facts (which department the cost centre belongs to, which GL group the GL account is in, whether the cost centre is a building, and so on). It then goes down a fixed list of rules, from most specific to least specific, and uses the **first rule that fits**. If no specific rule fits, it falls to the last rule, which sends the request to JKEW. So a request landing at JKEW usually means *a more specific rule should have fitted but one of the facts was missing or different from what you expected.* Debugging = finding which fact.
+
+#### Step 1 — Reproduce it on a draft (nothing is sent to anyone)
+
+1. In the portal, click **Create Request** → **Virement**, and enter the same lines as the problem request (same cost centre, GL account, material, amounts).
+2. Scroll down to the **Approvers** table. It updates by itself every time you change a line, and it is only a preview — nobody is notified.
+3. When finished, click **Discard Draft**.
+
+Look at who appears in the Approvers table. This tells you which rule fired:
+
+| What you see in Approvers | Which rule fired (in plain words) |
+|---|---|
+| One approver, level 1, **Head of Functional Department** | The request belongs to one functional department (e.g. Property Management) |
+| One approver, level 1, **Head of Department** or **Head of Branch** | Everything is inside the same department / branch / cost centre |
+| Several level-1 approvers (1A, 1B…) **plus** a level 2 **JKEW Officer** or **Head of JKEW** | **The last-resort rule.** No specific rule fitted. This is the usual "wrong approver" symptom. |
+| Level-1 approvers → level 2 **Head of JKEW** → level 3 **CEO/CFO** | The lines are in different GL groups |
+| Level-1 approvers → level 2 **Regional Director** | Same region, different branches |
+| Only a **JKEW Officer** or **Head of JKEW** at level 1 | Money is being taken out of the Central Fund (special rule) |
+| Nobody | Either the request is incomplete (needs at least one "transfer out" and one "transfer in" line), or the role has nobody assigned (see Step 6) |
+
+#### Step 2 — Look at the facts the app found for each line
+
+The app fills these in by itself from the cost centre / GL account. They are hidden by default. To see them: in the line-item table click the **gear icon** (column settings) and tick **Department, Region, Branch, GL Group, Functional Department, Is Building, Building Name**.
+
+If any of these is **empty** or **different from what you expected**, that is almost always the cause. (Is Building = Yes just means the cost centre was found in the Building list.)
+
+#### Step 3 — Fix or check the lists these facts come from
+
+These facts come from lists that admins maintain under **Grouping Maintenance** in the portal:
+
+| If this fact is wrong or empty | Check this list |
+|---|---|
+| Department | Department Grouping (cost centre → department) |
+| Region / Branch | Region & Branch Grouping (cost centre → region, branch) |
+| GL Group | GL Grouping (GL account → group) |
+| Functional Department | Functional Department Grouping (GL account → functional department) |
+| Building Name | Building Grouping (cost centre → building) |
+
+Two things that often catch people out in **Functional Department Grouping**:
+
+- **One department has many rows — one per GL account — and the ticks (Building / Department / Region & Branch) can be different on each row.** The app uses the row for the line's *own* GL account. So when checking, find the row for that exact GL account, not just any row for the department.
+- **The same GL account must not be listed under two different departments.** If it is, the app simply takes whichever it finds first, and the result can look random. (Example found in real data: GL 741011 appears under both JABATAN PENGURUSAN HARTA and JABATAN PELABURAN HARTANAH.)
+
+#### Step 4 — Walk down the rule list yourself
+
+This is the exact order the app uses. It stops at the first rule that fits. "Same X" means **every** line (both transfer-out and transfer-in) has a value for X and they are **all identical**.
+
+| Order | Rule | It fits when… | Approver |
+|---|---|---|---|
+| 1 | Central Fund | Any "transfer out" line is from the Central Fund (cost centre 100050500, material 760001000) | JKEW (by amount) |
+| 2 | Same cost centre | All lines have the same cost centre **and** the same GL group, and that cost centre has a department (or, failing that, a branch) | Head of Department / Head of Branch |
+| 3 | Functional department | All lines belong to the same functional department, **and** each line is the right "type" for that GL's row in Functional Department Grouping (see below) | Head of Functional Department |
+| 4 | Different GL group | The lines are not all in the same GL group | Cost centre heads → Head of JKEW → CEO/CFO |
+| 5 | Same department | All lines in the same department | Head of Department |
+| 6 | Same branch | All lines in the same branch | Head of Branch |
+| 7 | Same region | All lines in the same region | Cost centre heads → Regional Director |
+| 8 | Functional department (loose) | All lines in one functional department and every "transfer out" line is that department's own | Head of Functional Department |
+| 9 | Last resort | Nothing above fitted | Cost centre heads → JKEW (by amount) |
+
+*"Right type" in rule 3* means: the GL's row in Functional Department Grouping has at least one of these ticked, and the line matches it —
+- **Department** ticked → the line's department is that functional department.
+- **Region & Branch** ticked → the line has a region and a branch.
+- **Building Grouping** ticked → the line is a building (has a Building Name).
+
+Every "transfer in" line may match any one of the ticked types. Every "transfer out" line must be a Department line or a Building line.
+
+Find the first rule your request *should* have matched, then use Step 2's facts to see which fact stopped it.
+
+#### Step 5 — Confirm in the application logs (optional)
+
+If the screen doesn't explain it, the app writes down what it saw. Open the application log in BTP (the Cloud Logging dashboard, or run `cf logs virement-srv --recent` for a quick look), filter on `virement-srv`, and search for **`virement-scenario`**:
+
+| Log message | What it means |
+|---|---|
+| "Classifying scenario from items:" + a list | The exact facts the app used for each line. Compare with Step 2. If they differ from the screen, the line was saved before its facts finished filling in. |
+| "Not yet classifiable - missing a transfer-out or transfer-in item" | Normal — the request is incomplete. |
+| "…no Functional Department Grouping master row was found" | The functional department name on the lines no longer exists in the list (renamed or deleted). |
+
+Also search **`apply-approver-plan`** for *"no current Approver Matrix approver was found for the role"* — the app chose the right role but nobody holds it (Step 6).
+
+#### Step 6 — Right role, but wrong person or nobody
+
+The rules decide the **role**. The **person** comes from **Approver Matrix** in the portal. Check that there is a row for that role **and** for the right scope (the department / branch / functional department / cost centre / region the rule picked), that it is current, and that no delegation is sending it to someone else. If a required role has nobody, the app refuses to submit the request.
+
+#### Step 7 — Old requests are not fixed automatically
+
+The approver list is worked out while the request is being drafted and once more when it is submitted. If you fix a list or the code afterwards, requests **already submitted** keep their old approvers. Raise a new request (or edit a draft) to see the corrected result.
+
+#### Real example
+
+A Virement had two lines on cost centre 10812B001, GL 741011, functional department JABATAN PENGURUSAN HARTA, Is Building = Yes. It went to a JKEW Officer instead of the Head of Functional Department.
+
+Walking the list: rule 1 no; rule 2 no (a building cost centre has no department or branch, so it cannot use it); rule 3 — the functional department matched, but at that time the app only understood the "Department" and "Region & Branch" ticks and a building line has neither, so it failed; rules 4–8 all need a department, branch or region, which a building doesn't have; rule 9 — last resort → JKEW.
+
+**Cause:** the "Building Grouping" tick existed on Functional Department Grouping but the routing never read it. **Fix:** routing now reads it (code: `classifyByFunctionalDepartmentGrouping` in `srv/code/utils/virement-scenario.js`, commit `7fb190a`). Checked by creating the same request as a draft on PRD and seeing Head of Functional Department in Approvers, then discarding the draft.
+
+**Where the code lives (for developers):** rules → `srv/code/utils/virement-scenario.js`; Supplement/Return amount bands → `srv/code/utils/approver-routing.js`; turning the result into approver rows → `srv/code/utils/apply-approver-plan.js`; the facts looked up per line → `srv/code/utils/*-lookup.js`.
 
 ## 5. Submission & approval lifecycle
 
