@@ -53,6 +53,7 @@ A working reference for anyone picking up this codebase — what each part of th
 |---|---|
 | A request went to the wrong approver / wrong level / nobody | Follow the plain-language checklist in [§4 — Debugging a wrong approver](#debugging-a-wrong-approver--step-by-step) |
 | Understand the tables, every field, and how they link | The ER diagram and field reference in [§3](#3-data-model) |
+| Debug the CAP backend (logs, breakpoints, API calls, database) | [§11 — Debugging the backend](#debugging-the-backend-cap-service) |
 | Add or adjust a submission validation | `srv/code/requests-before-create-logic.js` — one function per rule, see [§5](#5-submission--approval-lifecycle) |
 | Change who approves a Virement request, or at what amount | `srv/code/utils/virement-scenario.js` (Non-Project scenarios) and `utils/approver-routing.js` (Supplement/Return bands), see [§4](#4-approval-routing-engine) |
 | Add a new item-list field derived from Cost Centre / GL Account / Material | `srv/code/utils/*-lookup.js` + wire into `requestitems-drafts-before-create/update-logic.js`, see [§3](#3-data-model) |
@@ -852,6 +853,121 @@ Errors are capped at 20 rows shown, with a rollup count beyond that, and reject 
 **Debugging `ZFM_FI_FMBB_UPLOAD` (or any RFC-invoked S/4 function) — set an External Breakpoint, not a normal one.** This function is called via RFC from the `CPI` destination (see §6), not from a dialog session — a plain Session Breakpoint set in your own SAPGUI logon will never trigger for it, even though the code genuinely executes (confirmed by matching the exact `ET_RETURN` message text back to the ABAP source). In the Q (QA1) S/4 backend, set an **External Breakpoint** instead — Utilities → Breakpoints → External Breakpoints in the ABAP editor/debugger, tied to user ID `PWC_RAY` — before triggering the request submission from the app.
 
 **IAS SCIM `costCenter` is frequently blank; `department` is not.** `srv/code/utils/ias-user-directory.js`'s `fetchUserDepartment` reads a user's own Department/Section from the IAS Identity Directory's SCIM Enterprise User extension (`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User`) rather than from the login token — confirmed live that this app's actual JWT always carries an empty `xs.user.attributes`, regardless of the IAS Application's Self-defined Attributes config, because the SaaS approuter's XSUAA `user_token` exchange doesn't carry custom IAS profile attributes through. Within that SCIM extension, `costCenter` and `department` are sibling attributes; `costCenter` comes back empty for many employees in the IAS Admin Console while `department` is reliably populated, so this field reads `department`, not `costCenter`, despite the similar field name on `Requests.departmentSection`.
+
+### Debugging the backend (CAP service)
+
+The "backend" is the **CAP service** — a Node.js app deployed as `virement-srv`. Every business rule lives in `srv/code/*.js`, hooked up in `srv/service.js` with `this.before(...)`, `this.after(...)` and `this.on(...)`. Debugging it means three things: **find which handler ran**, **read what it logged**, and **step through it** if the log is not enough.
+
+**Two things to know first**
+- A request has two lives. While the user is editing, it is a **draft** (handlers registered on `Requests.drafts` / `RequestItems.drafts`). Pressing **Submit** *activates* it (handlers on `Requests`, e.g. `requests-before-create-logic.js`). A bug that "only happens on submit" is in the second set; one that "happens as I type" is in the first.
+- Almost every message the user sees on a failed save comes from `request.error(...)` in one of those files, so **the message text is searchable** (see Step 1).
+
+#### Step 1 — Find the code that ran
+
+Search the source for the exact words of the error message the user saw: `grep -rn "part of the message" srv/`. If there is no message, use this map:
+
+| What went wrong | Open this file |
+|---|---|
+| An item field (department, GL group, description…) is blank or wrong | `requestitems-drafts-before-create-logic.js` / `requestitems-drafts-before-update-logic.js`, then the matching `utils/*-lookup.js` |
+| Wrong approver or wrong level | `utils/virement-scenario.js`, `utils/approver-routing.js`, `utils/apply-approver-plan.js` — see "Debugging a wrong approver" in §4 |
+| Person missing for a role | `get-approvers-logic.js` and the Approver Matrix data |
+| Submit is blocked with a message | `requests-before-create-logic.js` (one function per rule, §5) |
+| Totals / amounts wrong | `requests-calculateValues-logic.js`, `requests-drafts-calculateValues-logic.js`, `utils/requests-calculation-utils.js` |
+| Approve / Reject / Delegate | `approve-reject-request.js`, `delegate-*-logic.js` |
+| Posting to S/4 fails | `post-to-s4-logic.js` (`buildPayloads`, `simulatePostToS4`) |
+| Earmarked Funds problem | `utils/earmarked-funds.js` |
+| Workflow does not start or finish | `utils/workflow-utils.js`, and the fully-qualified-path workaround in `srv/server.js` (§7) |
+| Email not sent or wrong text | `utils/send-email.js`, `utils/email-config-renderer.js` |
+| Value help (cost centre, GL, material, WBS) empty | `*-read-logic.js` and `utils/value-help.js` |
+| Template upload rejects rows | `upload-<entity>-logic.js` |
+| "Not authorised" / 403 | `srv/service.cds` `@requires` / `@restrict`, `utils/role-check.js`, and the user's role collections (§8) |
+
+#### Step 2 — Read the error the client received
+
+Open the browser's Developer Tools → **Network**, repeat the action, click the red request and read **Response**. CAP answers errors as JSON: `{"error":{"code":"…","message":"…","target":"…"}}`.
+- **400** — a rule the code enforces on purpose (`request.error`). The message tells you which rule.
+- **401 / 403** — login or permissions, not a code bug.
+- **404** — wrong path or an id that no longer exists (a discarded draft returns "Not Found").
+- **500** — something unexpected threw. Go to the logs for the stack trace.
+
+#### Step 3 — Read the logs
+
+Every module writes to a named logger (`cds.log("<name>")`), and the name is the file name, so you can search by it. Useful ones:
+
+| Logger | Tells you |
+|---|---|
+| `request-user` | **Who** did **what**: every non-READ call (create / update / action) with the user id and entity. Start here to find the moment a request was touched. |
+| `virement-scenario` | Which routing rule fired and the exact item facts it used |
+| `apply-approver-plan`, `get-approvers-logic` | Which approvers were resolved, and warnings when a role has nobody |
+| `requests-before-create-logic` | Submission validations |
+| `post-to-s4-logic` | Payload and result of the S/4 posting (and the simulation) |
+| `earmarked-funds` | Earmarked Funds create / complete calls |
+| `workflow-utils` | Calls to SAP Build Process Automation |
+| `send-email`, `email-config-renderer` | Notification emails |
+| `ias-user-directory` | The requestor's department lookup from IAS |
+| `system-config` | Which destination names / workflow ids are in use |
+
+Where to read them:
+- **Live while you reproduce:** `cf logs virement-srv` (leave it running, then repeat the action).
+- **Recent history:** `cf logs virement-srv --recent` (the last few hundred lines only).
+- **Searchable history:** the Cloud Logging dashboard (the `shared-logs` service bound to the app). Filter `component_name: virement-srv`, then search the logger name or the request number.
+
+#### Step 4 — Turn up the detail (debug level)
+
+By default only `info`, `warn` and `error` lines appear. To see `debug` lines for one module, or the SQL CAP sends to the database, raise the level with the `CDS_LOG_LEVELS` setting (checked against the installed CAP version, 9.x):
+
+| Where | Command |
+|---|---|
+| Local | `CDS_LOG_LEVELS='{"virement-scenario":"debug"}' cds watch` (JSON form — needed because logger names contain hyphens) |
+| Local, SQL | `CDS_LOG_LEVELS_SQL=debug cds watch` |
+| BTP (DEV) | `cf set-env virement-srv CDS_LOG_LEVELS '{"sql":"debug"}'` then `cf restart virement-srv` |
+| BTP, switch back | `cf unset-env virement-srv CDS_LOG_LEVELS` then `cf restart virement-srv` |
+
+> **Do not leave debug on, and do not use SQL debug on PRD.** It writes real business data (amounts, emails) into the logs.
+
+#### Step 5 — Run it locally and step through the code
+
+This is the fastest way to find a logic bug, because you can set a breakpoint.
+
+1. `npm install`, then `npm run start-local` (or just `cds watch`). It serves at `http://localhost:4004`, restarts when you save a file, and uses an in-memory SQLite database loaded from the seed files in `db/data/`.
+2. Sign in with one of the **mocked users** defined under `cds.requires` → `[development]` → `auth` in `package.json` (they carry the roles you need, e.g. approver and admin). Locally there is no XSUAA/IAS.
+3. **Set a breakpoint:** in VS Code open a *JavaScript Debug Terminal*, run `cds watch` there, click in the gutter beside a line (for example the start of `classifyVirementNonProjectScenario` in `utils/virement-scenario.js`), then repeat the action in the browser. Execution stops at the breakpoint and you can inspect the variables. (Without VS Code: `node --inspect ./node_modules/.bin/cds-serve`, then attach any Node debugger to port 9229.)
+4. **What does not work locally:** anything that calls out — S/4 value helps and posting (CPI), SAP Build workflow, IAS directory, Earmarked Funds. Those need real destinations. Use the **hybrid** profile (`cds watch --profile hybrid`, configured in the git-ignored `.cdsrc-private.json`) after `cf login` and `cds bind`, which connects the local app to the bound cloud services. Without that, expect those parts to fail with connection errors that say nothing about your change.
+
+#### Step 6 — Call the API without the UI
+
+Faster than clicking through the app, and it separates "backend bug" from "screen bug". The service root is `/service/ZSVC_PPS_VIREMENT/` (locally `http://localhost:4004/service/ZSVC_PPS_VIREMENT/`).
+- `…/$metadata` lists every entity, field and action.
+- `…/Requests?$top=5` reads requests. A **draft** is addressed with `IsActiveEntity=false`, e.g. `…/Requests(ID=<uuid>,IsActiveEntity=false)`.
+- Actions are `POST`s, e.g. `…/Requests(ID=<uuid>,IsActiveEntity=true)/ZSVC_PPS_VIREMENT.approveRequest`.
+- Use any HTTP client (Postman, curl, VS Code REST client). Locally, send the mocked user as Basic auth.
+
+#### Step 7 — Look at the data
+
+Open **SAP HANA Database Explorer** on the `virement-db` HDI container. Real tables are `ZDB_PPS_VIREMENT_<ENTITY>` (e.g. `ZDB_PPS_VIREMENT_REQUESTS`); the service views are `ZSVC_PPS_VIREMENT_<ENTITY>`; **drafts live in separate tables** named `ZSVC_PPS_VIREMENT_<ENTITY>_DRAFTS`. A value that looks right in the UI but is missing after submit is often still sitting in the draft table. Table and field meanings are in §3 (data model).
+
+#### Step 8 — When the problem is in another system
+
+The app calls out to S/4 (value helps), CPI (posting, Earmarked Funds), SAP Build Process Automation (workflow) and IAS (user department). The destination names are on the **System Configuration** admin page, which also has a **test** action per setting (`test-connection-logic.js`) that reads one harmless row to prove the destination works. If a test fails, the problem is the destination, credentials or network — not the app code. For the S/4 side of a posting, set an **External Breakpoint** (see the gotcha earlier in this section).
+
+#### Step 9 — Debug a running DEV instance (advanced)
+
+If a problem only happens on BTP and you cannot reproduce it locally, you can attach to the deployed app. **DEV only — never PRD**, and your organisation may not allow SSH:
+1. `cf enable-ssh virement-srv`, then `cf restart virement-srv`.
+2. `cf ssh virement-srv`, and inside it `pkill -USR1 -f node` to start Node's inspector (port 9229).
+3. From your laptop: `cf ssh -N -L 9229:127.0.0.1:9229 virement-srv`, then attach VS Code (*Attach to Node Process*, `localhost:9229`).
+4. When done: `cf disable-ssh virement-srv` and restart.
+
+#### Quick symptom table
+
+| Symptom | Most likely cause | First thing to check |
+|---|---|---|
+| Works for you, "not authorised" for a colleague | Missing role collection | BTP Cockpit role collections (§8) |
+| Approvers differ between the draft and after submit | Item facts changed, or master data edited in between | `virement-scenario` log lines for both moments |
+| Posting says "document not posted" after approval | S/4 rejected the payload | `post-to-s4-logic` log; the simulation at submit would have caught most cases |
+| Workflow never starts | Wrong workflow id/destination, or SAP Build path bug | System Configuration test; `srv/server.js` workaround list (§7) |
+| Field blank only on uploaded rows | Uploaded rows fill their derived fields through `utils/request-item-enrichment.js`, not the per-item handlers — a new derived field must be added in **both** places | `requests-drafts-upload-items-logic.js`, `utils/request-item-enrichment.js` |
+| Change works locally, not on BTP | Different master data / destinations | Compare Grouping and System Configuration between environments |
 
 ## 12. Build & deploy process
 
