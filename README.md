@@ -52,6 +52,7 @@ A working reference for anyone picking up this codebase — what each part of th
 | Task | Go to |
 |---|---|
 | A request went to the wrong approver / wrong level / nobody | Follow the plain-language checklist in [§4 — Debugging a wrong approver](#debugging-a-wrong-approver--step-by-step) |
+| Understand the tables, every field, and how they link | The ER diagram and field reference in [§3](#3-data-model) |
 | Add or adjust a submission validation | `srv/code/requests-before-create-logic.js` — one function per rule, see [§5](#5-submission--approval-lifecycle) |
 | Change who approves a Virement request, or at what amount | `srv/code/utils/virement-scenario.js` (Non-Project scenarios) and `utils/approver-routing.js` (Supplement/Return bands), see [§4](#4-approval-routing-engine) |
 | Add a new item-list field derived from Cost Centre / GL Account / Material | `srv/code/utils/*-lookup.js` + wire into `requestitems-drafts-before-create/update-logic.js`, see [§3](#3-data-model) |
@@ -159,6 +160,363 @@ All admin-maintained, `cuid, managed`, explicitly "not sourced from S/4."
 | `BuildingGrouping` | Cost Centre → State/building | Item `buildingName`; also a routing input via a Functional Department Grouping row's **Building Grouping** flag (below) |
 | `ApproverMatrix` | Role + scope → current approver email | Every approval lookup — see §4 |
 | `ApproverDelegation` | Temporary cover for one `ApproverMatrix` row | Substituted live at lookup time, not retroactive to already-pending requests |
+
+### Entity relationship diagram
+
+Solid lines are **real links** (a foreign-key column or a CDS composition). Dotted lines are **soft links** — no foreign key exists; the app matches on a *value* (e.g. a cost centre number) at the moment it needs it. Grouping/master tables are always soft-linked, which is why a typo in one of them changes routing silently instead of raising a database error.
+
+```mermaid
+erDiagram
+    Requests ||--o{ RequestItems : "composition (request_ID)"
+    Requests ||--o{ RequestApprovers : "composition (request_ID)"
+    Requests ||--o{ RequestHistory : "composition (request_ID)"
+    ApproverMatrix ||--o{ ApproverDelegation : "composition (approverMatrix_ID)"
+
+    RequestType ||--o{ Requests : "requestType_code"
+    BudgetType ||--o{ Requests : "budgetType_code"
+    ReturnCategory |o--o{ Requests : "returnCategory_code"
+    SupplementCategory |o--o{ Requests : "supplementCategory_code"
+    RequestStatus ||--o{ Requests : "status_code"
+    ApproverStatus ||--o{ RequestApprovers : "status_code"
+    AssetStatus |o--o{ RequestItems : "assetStatus_code"
+    UserRoles ||--o{ ApproverMatrix : "userRole_code"
+
+    RequestItems }o..o| DepartmentGrouping : "costCentre gives department"
+    RequestItems }o..o| RegionBranchGrouping : "costCentre gives region and branch"
+    RequestItems }o..o| BuildingGrouping : "costCentre gives buildingName"
+    RequestItems }o..o| GLGrouping : "glAccount gives glGroup and assetType"
+    RequestItems }o..o| FunctionalDepartmentGrouping : "glAccount found in glAccounts list"
+    RequestApprovers }o..o| ApproverMatrix : "emailAddress and role text"
+    RequestApprovers }o..o| UserRoles : "userRole text (not a code)"
+
+    Requests {
+        uuid ID PK
+        string requestNumber UK
+        string requestType_code FK
+        string budgetType_code FK
+        string returnCategory_code FK
+        string supplementCategory_code FK
+        int status_code FK
+        string workflowInstanceId
+    }
+    RequestItems {
+        uuid ID PK
+        uuid request_ID FK
+        string srNo
+        string costCentre
+        string glAccount
+        string material
+        string wbs
+        string assetStatus_code FK
+    }
+    RequestApprovers {
+        uuid ID PK
+        uuid request_ID FK
+        string emailAddress
+        string userRole
+        string level
+        int status_code FK
+    }
+    RequestHistory {
+        uuid ID PK
+        uuid request_ID FK
+    }
+    ApproverMatrix {
+        uuid ID PK
+        string userRole_code FK
+        string departmentBranch
+        string emailAddress
+    }
+    ApproverDelegation {
+        uuid ID PK
+        uuid approverMatrix_ID FK
+    }
+    UserRoles {
+        string code PK
+    }
+    DepartmentGrouping {
+        uuid ID PK
+        string costCentre
+        string department
+    }
+    RegionBranchGrouping {
+        uuid ID PK
+        string costCentre
+        string region
+        string branch
+    }
+    BuildingGrouping {
+        uuid ID PK
+        string costCentre
+        string state
+    }
+    GLGrouping {
+        uuid ID PK
+        string glAccount
+        string glGroup
+    }
+    FunctionalDepartmentGrouping {
+        uuid ID PK
+        string functionalDepartment
+        string glAccounts
+    }
+    EmailConfiguration {
+        string emailType PK
+    }
+    SystemConfiguration {
+        string configKey PK
+    }
+```
+
+`EmailConfiguration` and `SystemConfiguration` stand alone — nothing links to them by key; code reads them by their key (`emailType` / `configKey`) when it needs a setting.
+
+#### How the tables link — in plain words
+
+| From | To | Linked by | Kind | What it means |
+|---|---|---|---|---|
+| `Requests` | `RequestItems` | `RequestItems.request_ID` | Composition (parent → children) | A request owns its line items. Delete/discard the request and its items go with it. |
+| `Requests` | `RequestApprovers` | `RequestApprovers.request_ID` | Composition | One row per approver per level for that request. |
+| `Requests` | `RequestHistory` | `RequestHistory.request_ID` | Composition | The audit trail of changes. |
+| `ApproverMatrix` | `ApproverDelegation` | `ApproverDelegation.approverMatrix_ID` | Composition | Temporary cover for one approver. |
+| `Requests` | the six code lists | `requestType_code`, `budgetType_code`, `returnCategory_code`, `supplementCategory_code`, `status_code` | Foreign key | Each request stores a short code; the code list gives its name. |
+| `RequestApprovers` | `ApproverStatus` | `status_code` | Foreign key | Inactive / Rejected / Pending Approval / Completed. |
+| `RequestItems` | `AssetStatus` | `assetStatus_code` | Foreign key | New / Addition / Replacement. |
+| `ApproverMatrix` | `UserRoles` | `userRole_code` | Foreign key | Which role this person holds. |
+| `RequestItems` | `DepartmentGrouping` | `costCentre` = `costCentre` | **Soft** (value match) | Fills the item's `department`. |
+| `RequestItems` | `RegionBranchGrouping` | `costCentre` = `costCentre` | Soft | Fills `region` and `branch`. |
+| `RequestItems` | `BuildingGrouping` | `costCentre` = `costCentre` | Soft | Fills `buildingName`. |
+| `RequestItems` | `GLGrouping` | `glAccount` = `glAccount` | Soft | Fills `glGroup` and `assetType`. |
+| `RequestItems` | `FunctionalDepartmentGrouping` | `glAccount` is one of the row's `glAccounts` list | Soft | Fills `functionalDepartment`; its three tick-boxes then steer routing (§4). |
+| `RequestApprovers` | `ApproverMatrix` | `emailAddress` (and the role's name text) | Soft | `ApproverMatrix.PendingApprovals` is a **computed** association: every `RequestApprovers` row for that email with status Pending Approval. Nothing is stored. |
+| `RequestApprovers` | `UserRoles` | `userRole` holds the role's **name text**, not its code | Soft | Descriptive text copied at assignment time. |
+| `ApproverMatrix` | request item values | `departmentBranch` is matched against a cost centre, department, branch, region or functional department, depending on the role | Soft | This is how the routing rules pick *which person* holds a role for *this* request (§4). |
+| `Requests` | SAP Build workflow log | `workflowInstanceId` | Live read, not stored | The `WorkflowLogs` facet is read from SAP Build Process Automation on demand. |
+
+**Column naming:** a link field appears in the database as `<field>_<key>`, e.g. `requestType` → column `requestType_code`, `request` → `request_ID`. Tables are named `ZDB_PPS_VIREMENT_<ENTITY>` (e.g. `ZDB_PPS_VIREMENT_REQUESTS`).
+
+### Field reference — every table
+
+Every entity below also carries the standard fields from the aspects it uses:
+
+- **`cuid`** — `ID` (UUID, the primary key, generated automatically).
+- **`managed`** — `createdAt`, `modifiedAt` (timestamps) and `createdBy`, `modifiedBy` (user ids), filled in automatically.
+- **`CodeList`** (code lists only) — `code` (the key), `name`, `descr`; each code list also gets a `_texts` table for translations.
+
+"Read-only" means the server fills the field and the UI/API cannot write it. "Derived" means it is looked up from another field (see the derived-field table above).
+
+#### Requests (the request header)
+
+| Field | Type | Required / default | Meaning |
+|---|---|---|---|
+| `ID` | UUID | Key, generated | Internal id. |
+| `requestNumber` | String(10) | Read-only, unique | Human-readable request number, generated at first submission (e.g. `N26000135`). |
+| `requestType` | → `RequestType` (`requestType_code`) | Immutable after create | Supplement (S), Return (R) or Transfer/Virement (T). |
+| `budgetType` | → `BudgetType` (`budgetType_code`) | Default `N` | Project (P) or Non-Project (N). |
+| `returnCategory` | → `ReturnCategory` (`returnCategory_code`) | Optional | Return requests only: Zerorise (Z), Central Fund (C) or Half-Year Excess (H). |
+| `supplementCategory` | → `SupplementCategory` (`supplementCategory_code`) | Optional | Supplement requests: Supplement (S) or Half-Year (H). |
+| `transferCategory` | String(1) | Set at first submission, Virement only | `J` if the requestor holds a JKEW role, else `F` if a Functional role, else `P` / `N` from the budget type. It becomes the **first letter of the request number** for Virements (Return requests start with `R`, Supplements with `S`), e.g. `N26000135`. |
+| `status` | → `RequestStatus` (`status_code`) | Default `0` (Draft) | Draft / Rejected / Pending Approval / Completed. |
+| `currentApprovalLevel` | Integer | Optional | The approval level currently waiting for action. |
+| `fiscalYear` | String(4) | Read-only, 4 digits | Fiscal year of the request. |
+| `submissionPeriod` | Integer | Optional | Month of submission (1–12). |
+| `submissionDate` | Date | Optional | Date submitted. |
+| `submissionTime` | Time | Read-only | Time submitted. |
+| `requestor` | String | Read-only | Requestor's email, snapshotted at submission. |
+| `departmentSection` | String(500) | Read-only | Requestor's Department/Section, read from the IAS directory at submission. |
+| `approvedBy` | String | Optional | Last approver (summary). |
+| `supplementAmount` | Decimal(15,2) | Read-only, default 0 | Total supplement amount. |
+| `returnAmount` | Decimal(15,2) | Read-only, default 0 | Total return amount. |
+| `transferInAmount` | Decimal(15,2) | Read-only, default 0 | Total transfer-in amount. |
+| `transferOutAmount` | Decimal(15,2) | Read-only, default 0 | Total transfer-out amount. |
+| `aging` | Integer | Read-only, default 0 | Days since submission; stops counting once the request is Rejected or finished. |
+| `supplementDocNumber` | String | Read-only | S/4 budget document number for a supplement posting. |
+| `returnDocNumber` | String | Read-only | S/4 document number for a return posting. |
+| `transferInDocNumber` | String | Read-only | S/4 document number, transfer-in side. |
+| `transferOutDocNumber` | String | Read-only | S/4 document number, transfer-out side. |
+| `earmarkedFundsDocNumber` | String | Read-only | S/4 Earmarked Funds (fund reservation) document, created at submit for Virements with a transfer-out amount. |
+| `postingDate` | Date | Optional | Date posted to S/4. |
+| `postingPeriod` | Integer | Optional | Month posted (1–12). |
+| `reason` | String(500) | Optional | Requestor's reason. |
+| `approverComment` | String(500) | Optional | Latest approver comment. |
+| `requestLink` | String(1000) | Optional | Link back to the request. |
+| `workflowInstanceId` | String | Optional | SAP Build Process Automation instance id. |
+| `workflowStatus` | String | Optional | Last known workflow status (polled, not pushed). |
+| `workflowError` | LargeString | Optional | Last workflow error text. |
+| `RequestItems` | Composition of many `RequestItems` | — | The line items. |
+| `RequestApprovers` | Composition of many `RequestApprovers` | — | The approvers. |
+| `RequestHistory` | Composition of many `RequestHistory` | — | The change history. |
+
+#### RequestItems (line items)
+
+| Field | Type | Required / default | Meaning |
+|---|---|---|---|
+| `request` | → `Requests` (`request_ID`) | — | Parent request. |
+| `srNo` | String(3) | Optional | Line number (001, 002 …). |
+| `budgetTypeCode` | String(1) | Read-only | Copy of the parent's budget type, kept in sync by the server so the UI can show/hide Cost Centre/GL/Material vs WBS columns. |
+| `costCentre` | String(10) | User-entered | Cost centre (Non-Project). |
+| `costCentreDescription` | String(100) | Read-only, derived | From the live S/4 Cost Centre search help. |
+| `department` | String(150) | Read-only, derived | From `DepartmentGrouping` via `costCentre`. |
+| `region` | String(150) | Read-only, derived | From `RegionBranchGrouping` via `costCentre`. |
+| `branch` | String(150) | Read-only, derived | From `RegionBranchGrouping` via `costCentre`. |
+| `glAccount` | String | User-entered | GL account. |
+| `glAccountName` | String(100) | Read-only, derived | From the live S/4 GL Account search help. |
+| `glGroup` | String(100) | Read-only, derived | From `GLGrouping` via `glAccount`. |
+| `assetType` | String(10) | Read-only, derived | From `GLGrouping`; `NON ASSET` hides Asset Status. |
+| `functionalDepartment` | String(200) | Read-only, derived | From `FunctionalDepartmentGrouping` (GL found in its list). |
+| `buildingName` | String(200) | Read-only, derived | From `BuildingGrouping` via `costCentre`. |
+| `material` | String | User-entered | Material / commitment-item group. |
+| `materialGroupDescription` | String(200) | Read-only, derived | From the live S/4 Material Group search help. |
+| `wbs` | String | User-entered | WBS element (Project budget). |
+| `wbsDescription` | String(40) | Read-only, derived | From the live S/4 WBS Element search help. |
+| `responsibleCostCentre` | String(10) | Read-only, derived | The WBS's responsible cost centre; used only for Project Virement routing. |
+| `assetStatus` | → `AssetStatus` (`assetStatus_code`) | Optional | New / Addition / Replacement. |
+| `supplementAmount` | Decimal(15,2) | Default 0, range 0 – 9,999,999,999,999.99 | Supplement amount for this line. |
+| `returnAmount` | Decimal(15,2) | Default 0, same range | Return amount for this line. |
+| `transferInAmount` | Decimal(15,2) | Default 0, same range | Transfer-in amount for this line. |
+| `transferOutAmount` | Decimal(15,2) | Default 0, same range | Transfer-out amount for this line. |
+| `description` | String(500) | Optional | Line description (truncated to 50 characters when sent to S/4 Earmarked Funds). |
+
+#### RequestApprovers (who must approve, per level)
+
+| Field | Type | Required / default | Meaning |
+|---|---|---|---|
+| `request` | → `Requests` (`request_ID`) | — | Parent request. |
+| `emailAddress` | String | — | The approver's email. |
+| `userRole` | String | — | The role's **name text** (e.g. "Head of Department"), not its code. |
+| `level` | String | — | `1`, `1A`–`1E` (parallel sub-levels), `2`, `3`. |
+| `status` | → `ApproverStatus` (`status_code`) | Default `0` (Inactive) | Inactive / Rejected / Pending Approval / Completed. Empty on a draft preview. |
+| `taskId` | String | Optional | SAP Build workflow task id. |
+| `actionDate` | DateTime | Optional | When the approver acted. |
+| `comment` | String(500) | Optional | The approver's comment. |
+
+#### RequestHistory (audit trail)
+
+| Field | Type | Meaning |
+|---|---|---|
+| `request` | → `Requests` (`request_ID`) | Parent request. |
+| `date` | Date | Date of the change. |
+| `time` | Time | Time of the change. |
+| `changedBy` | String | Who made the change. |
+| `changes` | String(500) | What changed. |
+
+#### ApproverMatrix (who holds each role)
+
+| Field | Type | Required / default | Meaning |
+|---|---|---|---|
+| `userRole` | → `UserRoles` (`userRole_code`) | Mandatory | The role. |
+| `departmentBranch` | String(100) | Optional | The scope the person covers (a department, branch, cost centre, region or functional department). Blank for roles that are not scoped. |
+| `emailAddress` | String(100) | Mandatory | Approver's email. |
+| `name` | String(100) | Mandatory | Approver's name. |
+| `isActive` | Boolean | Default `true` | A row is used for routing only while it is active **and** today falls within its start/end dates. |
+| `startDate` | Date | Optional | First day the person holds the role. Blank = no start limit. |
+| `endDate` | Date | Optional | Last day the person holds the role. Blank = no end limit. |
+| `Delegations` | Composition of many `ApproverDelegation` | — | Planned cover for this person. |
+| `PendingApprovals` | Association to many `RequestApprovers` (computed) | — | Every `RequestApprovers` row for this email currently Pending Approval. Computed at read time; not a stored column. |
+
+#### ApproverDelegation (planned cover)
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `approverMatrix` | → `ApproverMatrix` (`approverMatrix_ID`) | — | The approver being covered. |
+| `delegateEmail` | String(100) | Mandatory | Who covers. |
+| `delegateName` | String(100) | Optional | Cover's name. |
+| `startDate` | Date | Mandatory | First day of cover. |
+| `endDate` | Date | Mandatory | Last day of cover. |
+
+#### GLGrouping
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `expenditureGroup` | String(100) | Mandatory | The wider expenditure group above the GL group. |
+| `glGroup` | String(100) | Mandatory | GL group (used for "Same / Different GL Group" routing). |
+| `glAccount` | String(10) | Mandatory | GL account. |
+| `glAccountDescription` | String(200) | Optional | GL account description. |
+| `assetType` | String(10) | Optional | `ASSET` or `NON ASSET`. |
+| `functional` | String(20) | Optional | Functional marker. |
+
+#### DepartmentGrouping
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `department` | String(150) | Mandatory | Department name. |
+| `costCentre` | String(10) | Mandatory | Cost centre that belongs to it. |
+| `costCentreDescription` | String(200) | Optional | Cost centre description. |
+
+#### RegionBranchGrouping
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `region` | String(150) | Mandatory | Region. |
+| `state` | String(50) | Optional | State. |
+| `branch` | String(150) | Mandatory | Branch. |
+| `costCentre` | String(10) | Mandatory | Cost centre in that branch. |
+| `costCentreDescription` | String(200) | Optional | Cost centre description. |
+
+#### BuildingGrouping
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `state` | String(50) | Mandatory | State where the building is. |
+| `costCentre` | String(10) | Mandatory | Cost centre of the building. |
+| `costCentreDescription` | String(200) | Optional | Becomes the item's `buildingName`. |
+
+#### FunctionalDepartmentGrouping
+
+| Field | Type | Required / default | Meaning |
+|---|---|---|---|
+| `functionalDepartment` | String(200) | Mandatory | Functional department name. |
+| `itemType` | String(500) | Optional | What kind of items it covers. |
+| `glAccounts` | String(2000) | Optional | The GL accounts it covers — a multi-value list separated by new lines, commas, `/` or `&`. |
+| `isBuildingGrouping` | Boolean | Default `false` | Ticked: a line that is a building cost centre counts as this department's own. |
+| `isDepartment` | Boolean | Default `false` | Ticked: a line whose department equals this functional department counts as its own. |
+| `isRegionAndBranch` | Boolean | Default `false` | Ticked: a line with both a region and a branch counts as its own. |
+| `remarks` | String(1000) | Optional | Free-text notes. |
+
+#### EmailConfiguration (one row per email type)
+
+| Field | Type | Required / default | Meaning |
+|---|---|---|---|
+| `emailType` | String(20) | **Key**: `ToApprover`, `Approved` or `Rejected` | Which notification this row configures. Exactly one row per type; rows are edited, never created or deleted. |
+| `subject` | String(500) | Optional | Email subject (supports placeholders such as `{{RequestNumber}}`). |
+| `body` | LargeString | Optional | Email body, HTML with placeholders; `{{ItemsTable}}` is replaced by a system-built table. |
+| `enabled` | Boolean | Default `true` | Switches this email on or off. |
+
+#### SystemConfiguration (one row per setting)
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `configKey` | String(100) | **Key** | The setting's name (e.g. a destination name or workflow id). |
+| `configValue` | String(500) | Optional | The value for this environment. |
+| `description` | String(500) | Read-only | What the setting is for. |
+
+Secrets (such as the IAS SCIM client id/secret) are deliberately **not** stored here — they stay as `cf set-env` variables.
+
+#### Code lists and their values
+
+| Code list | Key type | Values |
+|---|---|---|
+| `RequestType` | String(1) | `S` Supplement · `R` Return · `T` Transfer (Virement) |
+| `RequestStatus` | Integer | `0` Draft · `1` Rejected · `2` Pending Approval · `3` Completed |
+| `ApproverStatus` | Integer | `0` Inactive · `1` Rejected · `2` Pending Approval · `3` Completed |
+| `BudgetType` | String(1) | `P` Project · `N` Non-Project |
+| `ReturnCategory` | String(1) | `Z` Zerorise · `C` Central Fund · `H` Half-Year Excess |
+| `SupplementCategory` | String(1) | `S` Supplement · `H` Half-Year |
+| `AssetStatus` | String(3) | `001` New · `002` Addition · `003` Replacement |
+| `UserRoles` | String(60) | `HOD_XFER_CC` Head of Transfer-out Cost Center · `HOD` Head of Department · `HOB` Head of Branch · `REG_DIR` Regional Director · `HOD_FUNC` Head of Functional Department · `HOD_JKEW` Head of JKEW · `JKEW_PG14` / `JKEW_PG19` / `JKEW_PG21` JKEW Officer PG14 / 19 / 21 and above · `JKEW_BCM` JKEW Officer (BCM) · `CEO_CFO` CEO/CFO |
+
+> `db/data/ZDB_PPS_VIREMENT-RequestItemType.csv` is a leftover seed file: there is **no** `RequestItemType` entity in `db/schema.cds`, so it loads nothing. It can be deleted safely.
+
+#### Entities that are *not* database tables
+
+These exist only in the service layer (`srv/service.cds`); they are never stored.
+
+| Entity / field | What it is |
+|---|---|
+| `Requests` extra fields: `isPendingApprover`, `isJKEW`, `isFunctional`, `isAdmin`, `isMyRequest`, `earmarkedFundsIsCompleted` | Virtual flags worked out per user/per read (e.g. "is the current user a pending approver of this request"). Never persisted. |
+| `Requests.WorkflowLogs` → `WorkflowLogs` | Live workflow execution log read from SAP Build Process Automation: `logId`, `workflowInstanceId`, `timestamp`, `type`, `activityName`, `message`. |
+| `RequestItems` extra fields: `isDepartment`, `isRegionAndBranch`, `isBuilding` | "Yes"/"No" display helpers calculated from `department`, `region`+`branch`, `buildingName`. |
+| `CostCenters`, `GLAccounts`, `MaterialGroups`, `WBSElements` | Live S/4 value-help lists (cost centre / GL account / material group / WBS element with their names). |
+| `RecentRequests`, `PendingApprovalCount`, `UserDetails` | Home-page helpers: recent requests, the "N approvals need your review" count, and the signed-in user's name and admin/approver/BCM flags. |
 
 ## 4. Approval routing engine
 
