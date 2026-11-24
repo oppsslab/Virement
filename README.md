@@ -890,6 +890,10 @@ Open the browser's Developer Tools → **Network**, repeat the action, click the
 - **404** — wrong path or an id that no longer exists (a discarded draft returns "Not Found").
 - **500** — something unexpected threw. Go to the logs for the stack trace.
 
+This is what a CAP error looks like. A validation error (400) has the same shape, with the rule's text in `message`:
+
+![A 404 Not Found response from the service: a JSON body with message, code and severity](docs/images/debug-cap-02-error-json-404.png)
+
 #### Step 3 — Read the logs
 
 Every module writes to a named logger (`cds.log("<name>")`), and the name is the file name, so you can search by it. Useful ones:
@@ -923,15 +927,33 @@ By default only `info`, `warn` and `error` lines appear. To see `debug` lines fo
 | BTP (DEV) | `cf set-env virement-srv CDS_LOG_LEVELS '{"sql":"debug"}'` then `cf restart virement-srv` |
 | BTP, switch back | `cf unset-env virement-srv CDS_LOG_LEVELS` then `cf restart virement-srv` |
 
+When running locally, add `CDS_REQUIRES_DB_KIND=sqlite` to these commands too (see Step 5).
+
 > **Do not leave debug on, and do not use SQL debug on PRD.** It writes real business data (amounts, emails) into the logs.
 
 #### Step 5 — Run it locally and step through the code
 
 This is the fastest way to find a logic bug, because you can set a breakpoint.
 
-1. `npm install`, then `npm run start-local` (or just `cds watch`). It serves at `http://localhost:4004`, restarts when you save a file, and uses an in-memory SQLite database loaded from the seed files in `db/data/`.
+1. `npm install`, then start it **with the SQLite override**: `CDS_REQUIRES_DB_KIND=sqlite npx cds watch`. It serves at `http://localhost:4004`, restarts when you save a file, and uses an in-memory SQLite database loaded from the seed files in `db/data/`.
+
+   > **Why the override:** on a machine where `cds bind` has been run (the git-ignored `.cdsrc-private.json` exists), plain `cds watch` — and `npm run start-local`, which runs it — tries to connect to HANA and stops with *Database kind "hana" configured, but no HDI container or Service Manager instance bound*. Forcing `sqlite` avoids that. (Tested with CAP 9.9.)
+
+   A healthy start prints these lines (the port may differ):
+
+   ```
+   [cds] - connect to db > sqlite { url: 'db.sqlite' }
+   [cds] - using auth strategy { kind: 'mocked' }
+   [cds] - serving ZSVC_PPS_VIREMENT { at: [ '/service/ZSVC_PPS_VIREMENT' ], impl: 'srv/service.js' }
+   [cds] - server listening on { url: 'http://localhost:4004' }
+   ```
+
+   Open `http://localhost:4004/` — the project preview page lists the service and its entities:
+
+   ![The local project preview page listing the ZSVC_PPS_VIREMENT service and its entities](docs/images/debug-cap-05-local-preview.jpg)
+
 2. Sign in with one of the **mocked users** defined under `cds.requires` → `[development]` → `auth` in `package.json` (they carry the roles you need, e.g. approver and admin). Locally there is no XSUAA/IAS.
-3. **Set a breakpoint:** in VS Code open a *JavaScript Debug Terminal*, run `cds watch` there, click in the gutter beside a line (for example the start of `classifyVirementNonProjectScenario` in `utils/virement-scenario.js`), then repeat the action in the browser. Execution stops at the breakpoint and you can inspect the variables. (Without VS Code: `node --inspect ./node_modules/.bin/cds-serve`, then attach any Node debugger to port 9229.)
+3. **Set a breakpoint:** in VS Code open a *JavaScript Debug Terminal*, run the Step 5 command (`CDS_REQUIRES_DB_KIND=sqlite npx cds watch`) there, click in the gutter beside a line (for example the start of `classifyVirementNonProjectScenario` in `utils/virement-scenario.js`), then repeat the action in the browser. Execution stops at the breakpoint and you can inspect the variables. (Without VS Code: `CDS_REQUIRES_DB_KIND=sqlite node --inspect ./node_modules/.bin/cds-serve`, then attach any Node debugger to port 9229.)
 4. **What does not work locally:** anything that calls out — S/4 value helps and posting (CPI), SAP Build workflow, IAS directory, Earmarked Funds. Those need real destinations. Use the **hybrid** profile (`cds watch --profile hybrid`, configured in the git-ignored `.cdsrc-private.json`) after `cf login` and `cds bind`, which connects the local app to the bound cloud services. Without that, expect those parts to fail with connection errors that say nothing about your change.
 
 #### Step 6 — Call the API without the UI
@@ -940,7 +962,11 @@ Faster than clicking through the app, and it separates "backend bug" from "scree
 - `…/$metadata` lists every entity, field and action.
 - `…/Requests?$top=5` reads requests. A **draft** is addressed with `IsActiveEntity=false`, e.g. `…/Requests(ID=<uuid>,IsActiveEntity=false)`.
 - Actions are `POST`s, e.g. `…/Requests(ID=<uuid>,IsActiveEntity=true)/ZSVC_PPS_VIREMENT.approveRequest`.
-- Use any HTTP client (Postman, curl, VS Code REST client). Locally, send the mocked user as Basic auth.
+- Use any HTTP client (Postman, curl, VS Code REST client). Locally, send the mocked user as Basic auth — without it the service answers `401`.
+
+Example: reading one request from the DEV service (email addresses and internal values masked). Note the fields beyond the database columns, such as `isAdmin` and `HasDraftEntity`, which are the virtual flags described in the data model:
+
+![A GET on Requests with $top=1 returning one request as JSON](docs/images/debug-cap-06-api-requests.png)
 
 #### Step 7 — Look at the data
 
@@ -949,6 +975,8 @@ Open **SAP HANA Database Explorer** on the `virement-db` HDI container. Real tab
 #### Step 8 — When the problem is in another system
 
 The app calls out to S/4 (value helps), CPI (posting, Earmarked Funds), SAP Build Process Automation (workflow) and IAS (user department). The destination names are on the **System Configuration** admin page, which also has a **test** action per setting (`test-connection-logic.js`) that reads one harmless row to prove the destination works. If a test fails, the problem is the destination, credentials or network — not the app code. For the S/4 side of a posting, set an **External Breakpoint** (see the gotcha earlier in this section).
+
+![A System Configuration setting (CPI_DESTINATION_NAME) with its Edit and Test Connection buttons](docs/images/debug-cap-08-system-configuration-test.png)
 
 #### Step 9 — Debug a running DEV instance (advanced)
 
