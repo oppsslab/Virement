@@ -1,5 +1,7 @@
 const cds = require("@sap/cds");
 const XLSX = require("xlsx");
+const { enrichItemData } = require("./utils/request-item-enrichment");
+const requestItemsAfterCreate = require("./requestitems-drafts-after-create-logic");
 
 const LOG = cds.log("requests-drafts-upload-items-logic");
 
@@ -165,7 +167,11 @@ function parsePositiveAmount(row, fieldName, errors) {
     return null;
   }
 
-  return amount;
+  /*
+   * Excel stores numbers as binary floats (e.g. 117146.64000000001); the
+   * Decimal(15,2) columns reject those, so round to cents here.
+   */
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
 
 function validateRequiredAmountByTemplate(row, uploadedFields, errors) {
@@ -448,11 +454,59 @@ module.exports = async function uploadItems(request) {
       nextSr++;
     }
 
-    LOG.info(`Returning ${validItems.length} validated item(s) to the UI.`);
+    /*
+     * Insert every row here, in the request's own transaction (one
+     * database connection), instead of handing the rows back for the
+     * browser to create one by one. Hundreds of separate item creates
+     * each ran their own lookups and recalculation and could exhaust the
+     * connection pool for every other user. Lookups are cached per
+     * distinct value, and the header totals / approver preview are
+     * recalculated once at the end.
+     */
+    const { Requests, RequestItems } = cds.entities(SERVICE_NAMESPACE);
+    const tx = cds.tx(request);
+
+    const parent = await tx.run(
+      SELECT.one
+        .from(Requests.drafts)
+        .columns("ID", "budgetType_code", "DraftAdministrativeData_DraftUUID")
+        .where({ ID: requestId }),
+    );
+
+    if (!parent) {
+      return request.error(404, "The draft request could not be found.");
+    }
+
+    const lookupCache = new Map();
+    const newRows = [];
+
+    for (const item of validItems) {
+      newRows.push(
+        await enrichItemData(
+          tx,
+          {
+            ...item,
+            ID: cds.utils.uuid(),
+            request_ID: requestId,
+            budgetTypeCode: parent.budgetType_code || null,
+            IsActiveEntity: false,
+            DraftAdministrativeData_DraftUUID:
+              parent.DraftAdministrativeData_DraftUUID,
+          },
+          lookupCache,
+        ),
+      );
+    }
+
+    await tx.run(INSERT.into(RequestItems.drafts).entries(newRows));
+
+    await requestItemsAfterCreate({ request_ID: requestId }, request);
+
+    LOG.info(`Inserted ${newRows.length} item(s) for request ${requestId}.`);
     LOG.info("--- ON uploadItems Requests.drafts ended successfully ---");
 
     return {
-      items: validItems,
+      items: validItems.map((item) => ({ srNo: item.srNo })),
     };
   } catch (error) {
     if (

@@ -340,6 +340,107 @@ async function fetchValueHelp({ path, selectFields, term, filter, top, skip, lab
   }
 }
 
+/**
+ * Direct keyed GET against a value-help entity set - S/4's own
+ * exact-match lookup, bypassing its fuzzy search entirely. Returns
+ * null (never throws) when the key doesn't exist (404) or the call
+ * otherwise fails, since "not found" here just means the typed code
+ * really is invalid - the caller treats that the same as any other
+ * miss.
+ *
+ * @param {object} options
+ * @param {string} options.path - service path on the destination
+ * @param {string} options.selectFields - comma separated $select
+ * @param {string} options.key - the exact key value to fetch
+ * @param {string} options.label - used in log messages
+ * @returns {Promise<object|null>}
+ */
+async function fetchExactByKey({ path, selectFields, key, label }) {
+  const DESTINATION_NAME = await getConfigValue(
+    "S4_DESTINATION_NAME",
+    DESTINATION_NAME_DEFAULT,
+  );
+
+  const destination = await getDestination({
+    destinationName: DESTINATION_NAME,
+  });
+
+  if (!destination) {
+    return null;
+  }
+
+  // OData V2 string-literal key: single quotes inside the value are
+  // escaped by doubling them, per the key-literal syntax already seen
+  // in this same service's own __metadata.uri ("...('760001007')").
+  const escapedKey = String(key).replace(/'/g, "''");
+
+  const query = `$select=${encodeURIComponent(selectFields)}`;
+
+  try {
+    const response = await executeHttpRequest(destination, {
+      method: "GET",
+      url: `${path}('${encodeURIComponent(escapedKey)}')?${query}`,
+      headers: { Accept: "application/json" },
+    });
+
+    const data = response && response.data;
+    const row = (data && data.d) || data;
+
+    return row && Object.keys(row).length ? row : null;
+  } catch (error) {
+    LOG.warn(
+      `Exact ${label} lookup for "${key}" failed or was not found.`,
+      JSON.stringify({ status: error?.response?.status }),
+    );
+
+    return null;
+  }
+}
+
+/**
+ * Guarantees that a complete, genuinely valid code the user typed
+ * directly appears in the result set - even when S/4's own fuzzy
+ * search ranks it below (or entirely omits it from the page behind)
+ * near-miss neighbours. This matters specifically for Fiori Elements'
+ * own validation call after a user types a full code into a
+ * value-help-bound field and tabs out ("field eq '<value>'"): if the
+ * typed code isn't found among the narrowed rows, the UI silently
+ * treats it as invalid and reverts the field to its previous value -
+ * without ever sending a PATCH, so nothing is saved and no error is
+ * shown.
+ *
+ * @param {object[]} rows - already-narrowed rows
+ * @param {string} term
+ * @param {object} options
+ * @param {string} options.key - property holding the code
+ * @param {() => Promise<object|null>} options.fetchExact - looks the
+ *   exact code up directly (a keyed GET, not a fuzzy search)
+ * @returns {Promise<object[]>}
+ */
+async function ensureExactMatch(rows, term, { key, fetchExact }) {
+  const needle = String(term ?? "").trim().toUpperCase();
+
+  if (!needle) {
+    return rows || [];
+  }
+
+  const hasExact = (rows || []).some(
+    (row) => String(row?.[key] ?? "").trim().toUpperCase() === needle,
+  );
+
+  if (hasExact) {
+    return rows;
+  }
+
+  const exactRow = await fetchExact();
+
+  if (!exactRow) {
+    return rows || [];
+  }
+
+  return [exactRow, ...(rows || [])];
+}
+
 module.exports = {
   extractRows,
   extractSearchTerm,
@@ -347,6 +448,8 @@ module.exports = {
   extractPaging,
   buildQueryString,
   fetchValueHelp,
+  fetchExactByKey,
+  ensureExactMatch,
   DEFAULT_RESULTS,
   MAX_RESULTS,
 };

@@ -710,12 +710,20 @@ Runs `@Before(CREATE, Requests)`, on both first submission and later edit-saves 
 2. **Waits for every parallel sibling** — if other lettered sub-levels (e.g. `1B`/`1C`) at the same numeric level are still Pending, the request does *not* advance yet.
 3. Marks this approver's row(s) Approved; if this really was the last outstanding sibling, activates the next level's rows (`LIKE '${nextLevel}%'` — the wildcard is what activates a whole lettered family together).
 4. Auto-resolves any remaining same-letter duplicate approvers as "not required to act."
-5. **Only once the last configured level has genuinely closed**, calls `performPostToS4` in-process (no BPA round trip) — builds the FMBB payload, posts via CPI, stamps the document number, commits the DB transaction.
-6. Completes the BPA task *last*, after S/4 posting has already committed — a BPA-completion failure is logged but does not fail the request.
+5. **Only once the last configured level has genuinely closed**, and only for a Virement that has an Earmarked Funds document, **completes that document first** (it checks the live status in S/4 so a document is never completed twice). While the document is open it still holds its budget reservation, which would collide with the posting's own budget check. **If completion fails, the approval is not processed and nothing is posted**; the approver sees the S/4 message and can try again.
+6. Calls `performPostToS4` in-process (no BPA round trip) — builds the FMBB payload, posts via CPI, stamps the document number, commits the DB transaction. If the posting fails here, the request stays Pending Approval while its Earmarked Funds document is already complete; the retry skips the completion.
+7. Completes the BPA task *last*, after S/4 posting has already committed — a BPA-completion failure is logged but does not fail the request.
 
 ### Reject
 
-Unconditional and terminal — no level-advancement logic. Sets the request straight to Rejected, auto-resolves every other Pending sibling at the same level as "not required to act," commits, then completes the BPA task with a reject decision.
+Unconditional and terminal — no level-advancement logic. Sets the request straight to Rejected, auto-resolves every other Pending sibling at the same level as "not required to act," commits, then emails the requestor and completes the BPA task with a reject decision.
+
+**Reject by System** (`reject-by-system-logic.js`, admin only) does the same on the system's behalf for a request stuck in Pending Approval: it rejects the pending approver rows, records the history as "System", closes any open BPA task and commits (no email).
+
+**Earmarked Funds on rejection** — both paths then call `completeEarmarkedFundsAfterRejection` (`utils/earmarked-funds-rejection.js`) so the reserved budget is released. A rejected request cannot be reopened in the app, so nothing else would close the document.
+- It runs only **after** the rejection is saved, and is **best-effort**: an S/4 failure never blocks or undoes the rejection.
+- Success ("Earmarked Funds document <number> has been marked complete by System") and failure are both written to the request history (changed by "System"). On failure the person rejecting also gets a warning, and the document **needs manual follow-up** because it still holds budget.
+- A document that is already complete is left alone; requests without one (Project Virement, Supplement, Return) are skipped.
 
 ## 6. S/4 & Earmarked Funds integration
 
@@ -740,7 +748,10 @@ A budget reservation created at *submit* time (before the FMBB posting exists) f
 
 - **Create + read status** — via the `CPI` iFlow (GET/POST only).
 - **Complete** — via the CPI iFlow route `/http/Z_KFM_EF_COMPLETE` (SOAP-RFC XML, same destination as posting), which calls the RFC `Z_KFM_EF_COMPLETE` (ABAP side wraps the standard `FMFR_CHANGE_COMPLETION_FLAG`, `ZKFM_EF` function group). The document number is padded to 10 characters with leading zeros (`200000048` → `0200000048`) before it is sent. `T_RETURN` messages of type `E`/`A` fail the call; the function is `completeEarmarkedFundsDocument` in `utils/earmarked-funds.js`.
-- **Automatic on approval** — `approve-reject-request.js` calls it right after a successful S/4 posting of a Transfer. It is best-effort: a failure is logged for manual follow-up and never blocks the approval (the posting and task completion are already committed).
+- **Automatic on approval** — `approve-reject-request.js` completes the document **before** posting the Transfer. A failure **blocks the approval** (nothing is posted); see §5.
+- **Automatic on rejection** — both reject paths complete it **after** the rejection is saved, best-effort; see §5 "Reject". For rejections made **before this was added**, or where it failed, an admin uses the button below.
+- **Completion flag on the Object Page** (`requests-after-read-logic.js`) — Completed requests show it as complete; **Rejected** requests are checked live against S/4; all others show not complete.
+- **Admin button "Complete Earmarked Funds"** (`completeRejectedEarmarkedFunds`, `complete-rejected-earmarked-funds-logic.js`) — in bulk on **Request Report** (admins tick the Rejected requests; the button is enabled only when **every** selected row is a **Virement** with status **Rejected**; `webapp/ext/controller/VirementRequestsListReportActions.js` runs them one at a time and confirms each against S/4; the list loads rows as you scroll, so scroll to load them all before *Select All*), and on the request page, shown only to **admins**, only on a **Rejected Virement** that has an Earmarked Funds document which is not yet complete. It asks for confirmation, completes the document (never twice) and records "Earmarked Funds document <number> has been marked complete by System" in the request history. The admin who clicked is recorded in the application log (`complete-rejected-earmarked-funds-logic`, `triggeredBy`). The role and status rules are enforced on the server, not just by hiding the button.
 - **Manual retry is hidden** — `retryEarmarkedFundsCompletion` still exists as an action, but its UI button is unconditionally `UI.Hidden` in `annotations.cds`. Restore the condition there to bring it back.
 
 ### Live S/4 value helps
@@ -875,7 +886,7 @@ Search the source for the exact words of the error message the user saw: `grep -
 | Totals / amounts wrong | `requests-calculateValues-logic.js`, `requests-drafts-calculateValues-logic.js`, `utils/requests-calculation-utils.js` |
 | Approve / Reject / Delegate | `approve-reject-request.js`, `delegate-*-logic.js` |
 | Posting to S/4 fails | `post-to-s4-logic.js` (`buildPayloads`, `simulatePostToS4`) |
-| Earmarked Funds problem | `utils/earmarked-funds.js` |
+| Earmarked Funds problem | `utils/earmarked-funds.js`; after a rejection also `utils/earmarked-funds-rejection.js` |
 | Workflow does not start or finish | `utils/workflow-utils.js`, and the fully-qualified-path workaround in `srv/server.js` (§7) |
 | Email not sent or wrong text | `utils/send-email.js`, `utils/email-config-renderer.js` |
 | Value help (cost centre, GL, material, WBS) empty | `*-read-logic.js` and `utils/value-help.js` |
@@ -906,6 +917,7 @@ Every module writes to a named logger (`cds.log("<name>")`), and the name is the
 | `requests-before-create-logic` | Submission validations |
 | `post-to-s4-logic` | Payload and result of the S/4 posting (and the simulation) |
 | `earmarked-funds` | Earmarked Funds create / complete calls |
+| `earmarked-funds-rejection` | A rejected request whose Earmarked Funds document could not be completed (needs manual follow-up) |
 | `workflow-utils` | Calls to SAP Build Process Automation |
 | `send-email`, `email-config-renderer` | Notification emails |
 | `ias-user-directory` | The requestor's department lookup from IAS |

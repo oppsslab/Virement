@@ -40,6 +40,8 @@ sap.ui.define(
           fullName: "",
           pendingCount: 0,
           isAdmin: false,
+          isApprover: false,
+          isBCM: false,
           isLoading: true,
         });
 
@@ -87,6 +89,13 @@ sap.ui.define(
               "/isAdmin",
               Boolean(oUserDetails.isAdmin),
             );
+
+            oDashboardModel.setProperty(
+              "/isApprover",
+              Boolean(oUserDetails.isApprover),
+            );
+
+            oDashboardModel.setProperty("/isBCM", Boolean(oUserDetails.isBCM));
           }
 
           /*
@@ -98,6 +107,8 @@ sap.ui.define(
           oDashboardModel.setProperty("/emailAddress", "");
           oDashboardModel.setProperty("/fullName", "");
           oDashboardModel.setProperty("/isAdmin", false);
+          oDashboardModel.setProperty("/isApprover", false);
+          oDashboardModel.setProperty("/isBCM", false);
           oDashboardModel.setProperty("/pendingCount", 0);
         } finally {
           oDashboardModel.setProperty("/isLoading", false);
@@ -120,7 +131,7 @@ sap.ui.define(
             null,
             null,
             {
-              $select: "emailAddress,fullName,isAdmin",
+              $select: "emailAddress,fullName,isAdmin,isApprover,isBCM",
             },
           );
 

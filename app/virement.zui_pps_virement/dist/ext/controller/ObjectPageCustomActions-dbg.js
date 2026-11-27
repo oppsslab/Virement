@@ -137,23 +137,6 @@ sap.ui.define(
       });
     }
 
-    function getItemsBinding(oModel, oContext) {
-      if (!oModel || !oContext) {
-        return null;
-      }
-
-      const sUpdateGroupId =
-        oModel.getUpdateGroupId && oModel.getUpdateGroupId();
-
-      /*
-       * Create a dedicated relative list binding for RequestItems.
-       * This avoids relying on whichever Object Page table is visible.
-       */
-      return oModel.bindList("RequestItems", oContext, null, null, null, {
-        $$updateGroupId: sUpdateGroupId || "$auto",
-      });
-    }
-
     function refreshRequestItemsBindings(oView) {
       if (!oView || !oView.findAggregatedObjects) {
         return;
@@ -463,48 +446,11 @@ sap.ui.define(
           }
 
           /*
-           * Do not use the visible table binding here.
-           * With multiple role/category-based tables, some table bindings may be
-           * hidden, not initialized, or unresolved.
+           * The server has already created every item in one transaction
+           * (uploadItems); nothing is created from the browser any more,
+           * so only the refresh below is needed.
            */
-          const oItemsBinding = getItemsBinding(oUploadModel, oUploadContext);
-
-          if (!oItemsBinding) {
-            oUploadDialog.setBusy(false);
-            MessageBox.error("Could not create the items binding.");
-            return Promise.reject(new Error("__handled__"));
-          }
-
-          aItems.forEach(function (oItem) {
-            oItemsBinding.create({
-              srNo: oItem.srNo,
-              costCentre: oItem.costCentre,
-              glAccount: oItem.glAccount,
-              material: oItem.material,
-              wbs: oItem.wbs,
-
-              /*
-               * Template header: Asset Status
-               * CAP field: assetStatus_code
-               */
-              assetStatus_code: oItem.assetStatus_code,
-
-              /*
-               * Amount fields from uploaded template.
-               */
-              supplementAmount: oItem.supplementAmount,
-              returnAmount: oItem.returnAmount,
-              transferInAmount: oItem.transferInAmount,
-              transferOutAmount: oItem.transferOutAmount,
-
-              description: oItem.description,
-            });
-          });
-
-          const sUpdateGroupId =
-            oUploadModel.getUpdateGroupId && oUploadModel.getUpdateGroupId();
-
-          return oUploadModel.submitBatch(sUpdateGroupId || "$auto");
+          return Promise.resolve();
         })
         .then(function () {
           /*

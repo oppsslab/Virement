@@ -15,6 +15,6 @@
     <Link
         id="workflowInstanceIdLink"
         text="{workflowInstanceId}"
-        href="{= 'https://epf-ent-cf-ap11-dev.ap11.build.cloud.sap/monitoring/workflow-instances/' + %{workflowInstanceId} }"
+        href="{= 'https://' + ${env>/subdomain} + '.ap11.build.cloud.sap/monitoring/workflow-instances/' + %{workflowInstanceId} }"
         target="_blank" />
 </core:FragmentDefinition>

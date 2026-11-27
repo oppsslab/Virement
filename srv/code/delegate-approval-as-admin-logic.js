@@ -119,8 +119,23 @@ module.exports = async function delegateApprovalAsAdmin(request) {
     return;
   }
 
+  /*
+   * Only the approvers at the request's current level are delegated:
+   * the lowest level that still has a Pending approver. Later-level
+   * rows that were flagged Pending early (an earlier bug) are left
+   * alone, so they are not handed to the delegate by mistake.
+   */
+  const levelNumbers = pendingRows
+    .map((row) => parseInt(String(row.level).match(/\d+/)?.[0], 10))
+    .filter(Number.isFinite);
+
+  const currentLevel = levelNumbers.length ? Math.min(...levelNumbers) : null;
+
   const rowsToDelegate = pendingRows.filter(
-    (row) => normalizeEmail(row.emailAddress) !== delegateEmail,
+    (row) =>
+      normalizeEmail(row.emailAddress) !== delegateEmail &&
+      (currentLevel === null ||
+        parseInt(String(row.level).match(/\d+/)?.[0], 10) === currentLevel),
   );
 
   if (!rowsToDelegate.length) {

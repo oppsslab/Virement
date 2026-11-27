@@ -25,6 +25,11 @@
     fields (see annotations.cds), on top of the standard ui>/isEditable
     edit-mode check.
 
+    Budget Supplement (Half Yearly) is BCM-only (role BUDGET_ZERORISE, exposed
+    as userRoles>/isBCM - see Component.js); other users do not see that
+    option, except when the request already carries it, so it still displays.
+    The hidden button keeps its position, so selectedIndex is unaffected.
+
     A Project-budget Supplement is always Budget Supplement so for
     budgetType_code 'P' the radio choice is replaced by a plain,
     non-interactive "Budget Supplement" label instead of the group. The
@@ -58,6 +63,7 @@
             <RadioButton
                 id="supplementCategoryHalfYear"
                 text="{i18n>SupplementHalfYear}"
+                visible="{= ${userRoles>/isBCM} === true || %{supplementCategory_code} === 'H' }"
                 wrapping="true" />
         </RadioButtonGroup>
         <Text

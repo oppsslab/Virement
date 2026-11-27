@@ -191,6 +191,17 @@ entity RequestItems : cuid, managed {
     returnAmount      : Decimal(15, 2) default 0 @assert.range: [0, 9999999999999.99];
     transferInAmount  : Decimal(15, 2) default 0 @assert.range: [0, 9999999999999.99];
     transferOutAmount : Decimal(15, 2) default 0 @assert.range: [0, 9999999999999.99];
+    /*
+     * Stays String(500): existing data already exceeds 50 characters
+     * for non-Transfer request types (confirmed by a failed HANA
+     * shadow-table migration attempting to shrink this to 50 - it
+     * failed cleanly with no data touched). A 50-character UI input
+     * cap, if still wanted, needs a Fiori Elements UI extension
+     * instead of a schema change - utils/earmarked-funds.js's
+     * buildItem already truncates to 50 server-side as the real
+     * enforcement point for the one downstream system that actually
+     * requires it (S/4's EarmarkedFundsDocumentItem.DocumentItemText).
+     */
     description       : String(500);
 }
 

@@ -353,6 +353,20 @@
                     "type": "ResponsiveTable"
                   }
                 },
+                "RequestApprovers/@com.sap.vocabularies.UI.v1.LineItem#Approvers": {
+                  "tableSettings": {
+                    "selectionMode": "Multi"
+                  },
+                  "actions": {
+                    "delegateSelectedApprovers": {
+                      "press": "virement.zuippsvirement.ext.controller.ApproverMatrixObjectPageActions.onDelegateSelected",
+                      "text": "{i18n>DelegateSelected}",
+                      "requiresSelection": true,
+                      "enabled": true,
+                      "visible": "{= ${userRoles>/isAdmin} === true }"
+                    }
+                  }
+                },
                 "RequestItems/@com.sap.vocabularies.UI.v1.LineItem#SupplementItems": {
                   "tableSettings": {
                     "type": "GridTable"
@@ -526,7 +540,17 @@
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
                     "disableCopyToClipboard": true,
-                    "type": "ResponsiveTable"
+                    "type": "ResponsiveTable",
+                    "selectionMode": "Multi"
+                  },
+                  "actions": {
+                    "completeEarmarkedFunds": {
+                      "press": "virement.zuippsvirement.ext.controller.VirementRequestsListReportActions.onCompleteEarmarkedFunds",
+                      "text": "Complete Earmarked Funds",
+                      "requiresSelection": true,
+                      "enabled": "virement.zuippsvirement.ext.controller.VirementRequestsListReportActions.isCompleteEarmarkedFundsEnabled",
+                      "visible": "{= %{userRoles>/isAdmin} === true }"
+                    }
                   }
                 }
               },

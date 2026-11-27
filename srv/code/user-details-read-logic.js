@@ -20,7 +20,9 @@ module.exports = async function (request) {
         const userDetails = {
             emailAddress: userMeta.emailAddress,
             fullName: userMeta.fullName,
-            isAdmin: hasRole(request.user, "ADMIN")
+            isAdmin: hasRole(request.user, "ADMIN"),
+            isApprover: hasRole(request.user, "REQUEST_APPROVE"),
+            isBCM: hasRole(request.user, "BUDGET_ZERORISE")
         };
 
         LOG.info(

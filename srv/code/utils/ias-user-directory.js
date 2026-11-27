@@ -6,8 +6,23 @@ const xsenv = require("@sap/xsenv");
 
 const LOG = cds.log("ias-user-directory");
 
-const ENTERPRISE_SCHEMA =
-  "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User";
+const CUSTOM_ATTRIBUTES_SCHEMA =
+  "urn:sap:cloud:scim:schemas:extension:custom:2.0:User";
+
+/*
+ * Department/Section is sourced from IAS's own numbered "Custom
+ * Attribute 9" (IAS Admin Console: Identity Providers > a user >
+ * Custom Attributes), not the SCIM Enterprise User extension's
+ * "department" field this originally read - that field is populated
+ * with a generic value ("Administration") for every employee here,
+ * while Custom Attribute 9 carries the real Jabatan/Section value.
+ * Confirmed via a raw SCIM response dump: custom attributes live
+ * under their own schema as an array of {name, value} pairs (not a
+ * flat object like the enterprise extension), keyed by a fixed
+ * technical name "customAttribute9" rather than the human label
+ * ("Custom Attribute 9") shown in the admin console.
+ */
+const DEPARTMENT_CUSTOM_ATTRIBUTE_NAME = "customAttribute9";
 
 /*
  * Confirmed live (a full raw JWT payload dump) that this app's actual
@@ -133,16 +148,16 @@ async function getAccessToken() {
 }
 
 /**
- * Looks up a user's Department directly from the IAS Identity
- * Directory's SCIM API, by email - see this file's header comment
- * for why the login token itself can't be used instead.
+ * Looks up a user's Department/Section directly from the IAS
+ * Identity Directory's SCIM API, by email - see this file's header
+ * comment for why the login token itself can't be used instead.
  *
- * Was originally Cost Center, but that field is empty for many
- * employees in the live directory (confirmed via the IAS Admin
- * Console's own Employee Information screen) while Department is
- * reliably populated - both are plain sibling attributes on the same
- * SCIM Enterprise User extension schema, so this is a one-field
- * change, not a different lookup mechanism.
+ * Reads IAS's numbered "Custom Attribute 9" (see
+ * DEPARTMENT_CUSTOM_ATTRIBUTE_NAME above) - earlier revisions read
+ * Cost Center, then the SCIM Enterprise User extension's "department"
+ * field, both abandoned because they were empty or genericized for
+ * many employees in the live directory; Custom Attribute 9 is what
+ * actually carries the real Jabatan/Section value.
  *
  * Best-effort: never throws - a lookup failure (missing API
  * permission, network error, user not found) is logged and resolves
@@ -177,11 +192,15 @@ async function fetchUserDepartment(email) {
     });
 
     const user = response?.Resources?.[0];
-    const department = user?.[ENTERPRISE_SCHEMA]?.department;
 
-    const result = Array.isArray(department)
-      ? department.filter(Boolean).join(", ")
-      : String(department ?? "").trim();
+    const customAttributes =
+      user?.[CUSTOM_ATTRIBUTES_SCHEMA]?.attributes || [];
+
+    const departmentAttribute = customAttributes.find(
+      (attribute) => attribute?.name === DEPARTMENT_CUSTOM_ATTRIBUTE_NAME,
+    );
+
+    const result = String(departmentAttribute?.value ?? "").trim();
 
     LOG.info(
       "Looked up Department from IAS Identity Directory.",

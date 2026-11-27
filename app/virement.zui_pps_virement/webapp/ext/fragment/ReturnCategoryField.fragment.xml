@@ -20,6 +20,12 @@
     selectedIndex is one-way, so the write back happens in
     onReturnCategorySelect on the ObjectPage controller extension.
 
+    Budget Zerorise and Excess Budget Return (Half Yearly) are BCM-only
+    (role BUDGET_ZERORISE, exposed as userRoles>/isBCM - see Component.js);
+    other users do not see those two options, except when the request
+    already carries that value, so it still displays. Hidden buttons keep
+    their position, so selectedIndex below is unaffected.
+
     Once Pending Approval (status_code 2), only Reason and Asset
     Status stay editable - this locks with the rest of the header/item
     fields (see annotations.cds), on top of the standard ui>/isEditable
@@ -63,6 +69,7 @@
             <RadioButton
                 id="returnCategoryZerorise"
                 text="{i18n>BudgetZerorise}"
+                visible="{= ${userRoles>/isBCM} === true || %{returnCategory_code} === 'Z' }"
                 wrapping="true" />
             <RadioButton
                 id="returnCategoryCentralFund"
@@ -71,6 +78,7 @@
             <RadioButton
                 id="returnCategoryHalfYearly"
                 text="{i18n>BudgetReturnHalfYearly}"
+                visible="{= ${userRoles>/isBCM} === true || %{returnCategory_code} === 'H' }"
                 wrapping="true" />
         </RadioButtonGroup>
         <Text

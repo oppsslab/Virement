@@ -12,6 +12,10 @@ const APPROVER_FLAG = "isPendingApprover";
 
 const MY_REQUEST_FLAG = "isMyRequest";
 
+const REPORT_ROLE_ADMIN = "ADMIN";
+
+const REPORT_ROLE_BCM = "BUDGET_ZERORISE";
+
 /*
  * Well-formed UUID that cannot match a row, used to force an empty
  * result while still sending the database valid SQL.
@@ -138,6 +142,38 @@ async function loadMyPendingRequestIds(userEmail) {
 }
 
 /**
+ * Loads the request ids the given user has already approved (a real
+ * action, not a sibling auto-resolved in the same parallel level -
+ * those have no actionDate), whatever the request's status is now.
+ *
+ * @param {string} userEmail
+ * @returns {Promise<string[]>}
+ */
+async function loadMyApprovedRequestIds(userEmail) {
+  const approverRows = await cds.db.run(
+    SELECT.from(REQUEST_APPROVER_DATABASE_ENTITY)
+      .columns("request_ID", "emailAddress")
+      .where({
+        status_code: APPROVER_STATUS.APPROVED,
+        actionDate: { "!=": null },
+      })
+  );
+
+  return [
+    ...new Set(
+      (approverRows || [])
+        .filter((row) => normalizeEmail(row.emailAddress) === userEmail)
+        .map((row) => row.request_ID)
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function idList(ids) {
+  return { list: ids.map((val) => ({ val })) };
+}
+
+/**
  * Scopes collection reads of Requests.
  *
  * Three lists share this entity, so the incoming filter decides which
@@ -203,20 +239,59 @@ module.exports = async function scopeRequestsList(request) {
       return;
     }
 
-    const myRequestIds = await loadMyPendingRequestIds(userEmail);
+    const [myRequestIds, myApprovedIds] = await Promise.all([
+      loadMyPendingRequestIds(userEmail),
+      loadMyApprovedRequestIds(userEmail),
+    ]);
 
     LOG.info(
-      `Pending Approvals for ${userEmail}: ${myRequestIds.length} request(s).`
+      `Pending Approvals for ${userEmail}: ${myRequestIds.length} pending, ` +
+        `${myApprovedIds.length} already approved.`
     );
 
-    request.query.where(
-      myRequestIds.length
-        ? {
-            ID: { in: myRequestIds },
-            status_code: REQUEST_STATUS.PENDING_APPROVAL,
-          }
-        : { ID: NO_MATCH_ID }
-    );
+    /*
+     * Still-pending requests, plus every request this user has already
+     * approved (any status, so they can check it back afterwards).
+     */
+    const conditions = [];
+
+    if (myRequestIds.length) {
+      conditions.push({
+        xpr: [
+          { ref: ["ID"] },
+          "in",
+          idList(myRequestIds),
+          "and",
+          { ref: ["status_code"] },
+          "=",
+          { val: REQUEST_STATUS.PENDING_APPROVAL },
+        ],
+      });
+    }
+
+    if (myApprovedIds.length) {
+      conditions.push({
+        xpr: [{ ref: ["ID"] }, "in", idList(myApprovedIds)],
+      });
+    }
+
+    if (!conditions.length) {
+      request.query.where({ ID: NO_MATCH_ID });
+
+      return;
+    }
+
+    const orXpr = [];
+
+    conditions.forEach((condition, index) => {
+      if (index > 0) {
+        orXpr.push("or");
+      }
+
+      orXpr.push(condition);
+    });
+
+    request.query.where([{ xpr: orXpr }]);
 
     return;
   }
@@ -246,6 +321,32 @@ module.exports = async function scopeRequestsList(request) {
    * showing it here would surface another requestor's still-private,
    * in-progress draft.
    */
+  const user = request.user;
+  const canViewReport =
+    user &&
+    typeof user.is === "function" &&
+    (user.is(REPORT_ROLE_ADMIN) || user.is(REPORT_ROLE_BCM));
+
+  /*
+   * The draft half of a union read (My Requests, Pending Approvals
+   * with "Editing Status: All") reaches this handler a second time
+   * with the flag filter already stripped, so it looks like the
+   * unscoped report. The block is therefore enforced on the active
+   * entity only - the report's own read always includes that half.
+   */
+  const isDraftRead = String(request.target?.name || "").endsWith(".drafts");
+
+  if (!canViewReport && !isDraftRead) {
+    LOG.warn(
+      `Request Report blocked for ${userEmail || "unknown user"} - Admin or BCM role required.`
+    );
+
+    return request.reject(
+      403,
+      "Only Admin and BCM users can view the Request Report."
+    );
+  }
+
   request.query.where({ status_code: { "!=": REQUEST_STATUS.DRAFT } });
 
   LOG.info(`Virement Requests unscoped (excluding Draft) for ${userEmail || "unknown user"}.`);

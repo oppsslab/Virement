@@ -1,6 +1,7 @@
 const cds = require("@sap/cds");
 
 const insertRequestHistory = require("./insert-request-history");
+const { formatLocalDate, formatLocalTime } = require("./utils/date-utils");
 
 const { REQUEST_STATUS, APPROVER_STATUS } = require("./utils/request-status");
 
@@ -19,6 +20,53 @@ function normalizeEmail(value) {
   return String(value ?? "")
     .trim()
     .toLowerCase();
+}
+
+/**
+ * Applies a delegation to the draft copy of the request tree so a later
+ * draft activation does not revert it. See the call site.
+ */
+async function mirrorToDraft(
+  tx,
+  { approverRowId, requestId, delegateEmail, historyMessage, user },
+) {
+  const { Requests, RequestApprovers, RequestHistory } =
+    cds.entities(SERVICE_NAMESPACE);
+
+  await tx.run(
+    UPDATE(RequestApprovers.drafts)
+      .set({ emailAddress: delegateEmail })
+      .where({ ID: approverRowId }),
+  );
+
+  const draftRequest = await tx.run(
+    SELECT.one
+      .from(Requests.drafts)
+      .columns("DraftAdministrativeData_DraftUUID")
+      .where({ ID: requestId }),
+  );
+
+  if (!draftRequest) {
+    return;
+  }
+
+  const now = new Date();
+
+  await tx.run(
+    INSERT.into(RequestHistory.drafts).entries({
+      ID: cds.utils.uuid(),
+      request_ID: requestId,
+      date: formatLocalDate(now),
+      time: formatLocalTime(now),
+      changedBy: user || "system",
+      changes: historyMessage,
+      IsActiveEntity: false,
+      HasActiveEntity: false,
+      HasDraftEntity: false,
+      DraftAdministrativeData_DraftUUID:
+        draftRequest.DraftAdministrativeData_DraftUUID,
+    }),
+  );
 }
 
 /**
@@ -110,7 +158,10 @@ module.exports = async function delegatePendingApproval(request) {
   }
 
   if (approverRow.status_code !== APPROVER_STATUS.PENDING_APPROVAL) {
-    request.error(409, "This approval assignment is no longer pending.");
+    request.error(
+      409,
+      "Only a Pending approver can be delegated. This approver has already completed their approval or is not yet active.",
+    );
     return;
   }
 
@@ -137,11 +188,25 @@ module.exports = async function delegatePendingApproval(request) {
       .where({ ID: approverRowId }),
   );
 
-  await insertRequestHistory(
-    request,
-    approverRow.request_ID,
-    `${request.user?.id || "An admin"} delegated ${approverRow.emailAddress}'s Level ${approverRow.level} approval to ${delegateEmail}.`,
-  );
+  const historyMessage = `${request.user?.id || "An admin"} delegated ${approverRow.emailAddress}'s Level ${approverRow.level} approval to ${delegateEmail}.`;
+
+  await insertRequestHistory(request, approverRow.request_ID, historyMessage);
+
+  /*
+   * Invoked from a Request edit draft (RequestApprovers.drafts): the
+   * active row above is the source of truth, but the draft copy of the
+   * tree would overwrite it - stale email, no new history row - when
+   * the admin saves the draft. Mirror both onto the draft copy.
+   */
+  if (request.target?.isDraft) {
+    await mirrorToDraft(tx, {
+      approverRowId,
+      requestId: approverRow.request_ID,
+      delegateEmail,
+      historyMessage,
+      user: request.user?.id,
+    });
+  }
 
   await tx.commit();
 

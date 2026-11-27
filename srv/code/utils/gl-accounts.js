@@ -1,4 +1,9 @@
-const { fetchValueHelp, narrowToTerm } = require("./value-help");
+const {
+  fetchValueHelp,
+  narrowToTerm,
+  fetchExactByKey,
+  ensureExactMatch,
+} = require("./value-help");
 
 const GL_ACCOUNT_PATH = "/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/GLAccountVH";
 
@@ -35,9 +40,41 @@ async function readGLAccounts(term, paging = {}) {
     isExpenseAccount: row.IsExpenseAccount,
   }));
 
-  return narrowToTerm(mapped, term, {
+  const narrowed = narrowToTerm(mapped, term, {
     key: "glAccount",
     text: ["glAccountName", "glAccountLongName"],
+  });
+
+  /*
+   * S/4's fuzzy search sometimes doesn't surface an exact code the
+   * user typed directly within the page fetched (near-miss neighbours
+   * outrank it instead) - without this, Fiori Elements' own
+   * post-typing validation call ("glAccount eq '<value>'") sees no
+   * exact match and silently reverts the field, even though the code
+   * is genuinely valid. See utils/value-help.js's ensureExactMatch -
+   * the same bug confirmed and fixed for Material Group (see
+   * utils/material-groups.js).
+   */
+  return ensureExactMatch(narrowed, term, {
+    key: "glAccount",
+    fetchExact: async () => {
+      const row = await fetchExactByKey({
+        path: GL_ACCOUNT_PATH,
+        selectFields: SELECT_FIELDS,
+        key: term,
+        label: "GL account",
+      });
+
+      return row
+        ? {
+            glAccount: row.GLAccount,
+            glAccountName: row.GLAccountName,
+            glAccountLongName: row.GLAccountLongName,
+            companyCode: row.CompanyCode,
+            isExpenseAccount: row.IsExpenseAccount,
+          }
+        : null;
+    },
   });
 }
 

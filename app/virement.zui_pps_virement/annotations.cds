@@ -275,7 +275,10 @@ annotate service.Requests with @(
      * isPendingApprover is a virtual field, so it cannot be filtered in
      * SQL. requests-list-scope-logic intercepts this filter and rewrites
      * it into a real ID restriction before the query reaches the
-     * database. status 2 keeps drafts and decided requests off the page.
+     * database. That rewrite keeps drafts off the page and returns the
+     * still-pending requests plus the ones this user has already approved
+     * (any status). The Status filter defaults to Pending Approval here,
+     * but is only a default - the user can change it to see approved ones.
      */
     UI.SelectionVariant #PendingApprovals: {
         $Type        : 'UI.SelectionVariantType',
@@ -438,27 +441,9 @@ annotate service.Requests with @(
             $Type        : 'UI.DataFieldForAction',
             Action       : 'service.delegateApprovalAsAdmin',
             Label        : '{i18n>Delegate}',
-            // Admin-only, regardless of who the current pending
-            // approver is - contrast with delegateApproval above,
-            // which is self-service-only and unconditionally hidden.
-            // Not in use for now - unconditionally hidden at the
-            // user's request. Restore the condition below
-            // (status_code/isAdmin/IsActiveEntity) to bring the button
-            // back.
-            // ![@UI.Hidden]: {$edmJson: {$Or: [
-            //     {$Ne: [
-            //         {$Path: 'status_code'},
-            //         2
-            //     ]},
-            //     {$Eq: [
-            //         {$Path: 'isAdmin'},
-            //         false
-            //     ]},
-            //     {$Eq: [
-            //         {$Path: 'IsActiveEntity'},
-            //         false
-            //     ]}
-            // ]}}
+            // Replaced by the Delegate Selected action on the Approvers
+            // table (manifest.json), which lets an admin pick the exact
+            // approver row(s) - person and level - to delegate.
             ![@UI.Hidden]: true
         },
         /*
@@ -476,6 +461,103 @@ annotate service.Requests with @(
             // Completion is automatic on approval (see approve-reject-request.js);
             // the manual retry is hidden.
             ![@UI.Hidden]: true
+        },
+        /*
+         * Admin-only manual remediation for a request left "Completed"
+         * without ever being posted to S/4 (see the syncOnly bypass in
+         * approve-reject-request.js and retry-post-document-logic.js).
+         * Shown only to admins, only once the request is Completed,
+         * and only while the Transfer Out & In Document Number is
+         * still empty - the same guard the action itself enforces
+         * server-side.
+         */
+        {
+            $Type        : 'UI.DataFieldForAction',
+            Action       : 'service.retryPostDocument',
+            Label        : '{i18n>RetryPostDocument}',
+            Criticality  : #Critical,
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Eq: [
+                    {$Path: 'isAdmin'},
+                    false
+                ]},
+                {$Ne: [
+                    {$Path: 'status_code'},
+                    3
+                ]},
+                {$Ne: [
+                    {$Path: 'transferOutDocNumber'},
+                    {$Null: null}
+                ]},
+                {$Eq: [
+                    {$Path: 'IsActiveEntity'},
+                    false
+                ]}
+            ]}}
+        },
+        /*
+         * Admin-only Reject by System: rejects a Pending Approval
+         * request on the system's behalf (history reads "System").
+         */
+        {
+            $Type        : 'UI.DataFieldForAction',
+            Action       : 'service.rejectBySystem',
+            Label        : '{i18n>RejectBySystem}',
+            Criticality  : #Negative,
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Eq: [
+                    {$Path: 'isAdmin'},
+                    false
+                ]},
+                {$Ne: [
+                    {$Path: 'status_code'},
+                    2
+                ]},
+                {$Eq: [
+                    {$Path: 'IsActiveEntity'},
+                    false
+                ]}
+            ]}}
+        },
+        /*
+         * Admin-only: complete the Earmarked Funds document of a
+         * Rejected Virement that S/4 still shows as open. Visible only
+         * to admins, only on a Rejected request that has such a
+         * document and is not already complete (the flag is read live
+         * from S/4 for rejected requests - see
+         * requests-after-read-logic.js). The server enforces the same
+         * rules; this only controls visibility.
+         */
+        {
+            $Type        : 'UI.DataFieldForAction',
+            Action       : 'service.completeRejectedEarmarkedFunds',
+            Label        : '{i18n>CompleteRejectedEarmarkedFunds}',
+            ![@UI.Hidden]: {$edmJson: {$Or: [
+                {$Ne: [
+                    {$Path: 'isAdmin'},
+                    true
+                ]},
+                {$Ne: [
+                    {$Path: 'status_code'},
+                    1
+                ]},
+                {$Ne: [
+                    {$Path: 'requestType_code'},
+                    'T'
+                ]},
+                {$Eq: [
+                    {$Path: 'earmarkedFundsDocNumber'},
+                    {$Null: null}
+                ]},
+                {$Eq: [
+                    {$Path: 'earmarkedFundsIsCompleted'},
+                    true
+                ]},
+                {$Eq: [
+                    {$Path: 'IsActiveEntity'},
+                    false
+                ]}
+            ]}}
         },
     ],
     // Edit is only ever shown for Draft(0) or Pending Approval(2).
@@ -1173,6 +1255,30 @@ annotate service.Requests actions {
             // workflowStatus to REJECTED in the same transaction.
             'in/workflowStatus',
             // See approveRequest above for why this is needed.
+            'in/isPendingApprover'
+        ],
+        TargetEntities  : [
+            RequestApprovers,
+            RequestHistory
+        ]
+    })
+};
+
+annotate service.Requests actions {
+    completeRejectedEarmarkedFunds @(
+        // releases a budget reservation in S/4 - ask for confirmation first
+        Common.IsActionCritical: true,
+        Common.SideEffects     : {
+            TargetProperties: ['in/earmarkedFundsIsCompleted'],
+            TargetEntities  : [RequestHistory]
+        }
+    )
+};
+annotate service.Requests actions {
+    rejectBySystem @(Common.SideEffects: {
+        TargetProperties: [
+            'in/status_code',
+            'in/workflowStatus',
             'in/isPendingApprover'
         ],
         TargetEntities  : [
@@ -2610,17 +2716,25 @@ annotate service.WorkflowLogs with @(
 // Request Attachments
 // =============================================================================
 
-// Upload/Delete are only for a request that has never been submitted
-// (Draft, status_code 0) - same rule and reasoning as RequestItems'
-// Insert/DeleteRestrictions above. up_ is the auto-generated
-// composition-parent navigation back to Requests (no explicit
-// association is declared on the reusable @cap-js/attachments
-// Attachments aspect this entity extends).
+// Upload is allowed for a request that has never been submitted
+// (Draft, status_code 0) AND while it is still Pending Approval
+// (status_code 2) - the same two statuses the request itself can
+// still be edited in (see UI.UpdateHidden below). Delete stays
+// Draft-only, unchanged. up_ is the auto-generated composition-parent
+// navigation back to Requests (no explicit association is declared on
+// the reusable @cap-js/attachments Attachments aspect this entity
+// extends).
 annotate service.Requests.RequestAttachments with @(
     Capabilities.SearchRestrictions           : {Searchable: false},
-    Capabilities.InsertRestrictions.Insertable: {$edmJson: {$Eq: [
-        {$Path: 'up_/status_code'},
-        0
+    Capabilities.InsertRestrictions.Insertable: {$edmJson: {$Or: [
+        {$Eq: [
+            {$Path: 'up_/status_code'},
+            0
+        ]},
+        {$Eq: [
+            {$Path: 'up_/status_code'},
+            2
+        ]}
     ]}},
     Capabilities.DeleteRestrictions.Deletable : {$edmJson: {$Eq: [
         {$Path: 'up_/status_code'},

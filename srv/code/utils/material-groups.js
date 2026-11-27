@@ -1,4 +1,9 @@
-const { fetchValueHelp, narrowToTerm } = require("./value-help");
+const {
+  fetchValueHelp,
+  narrowToTerm,
+  fetchExactByKey,
+  ensureExactMatch,
+} = require("./value-help");
 
 const MATERIAL_GROUP_PATH =
   "/sap/opu/odata/sap/ZFGL_GW_JV_VALUEHELP_O2/MaterialGroupVH";
@@ -32,9 +37,37 @@ async function readMaterialGroups(term, paging = {}) {
     materialGroupDescription: row.MaterialGroupDescription,
   }));
 
-  return narrowToTerm(mapped, term, {
+  const narrowed = narrowToTerm(mapped, term, {
     key: "materialGroup",
     text: ["materialGroupDescription"],
+  });
+
+  /*
+   * S/4's fuzzy search sometimes doesn't surface an exact code the
+   * user typed directly within the page fetched (near-miss neighbours
+   * outrank it instead) - without this, Fiori Elements' own
+   * post-typing validation call ("materialGroup eq '<value>'") sees
+   * no exact match and silently reverts the field, even though the
+   * code is genuinely valid. See utils/value-help.js's
+   * ensureExactMatch.
+   */
+  return ensureExactMatch(narrowed, term, {
+    key: "materialGroup",
+    fetchExact: async () => {
+      const row = await fetchExactByKey({
+        path: MATERIAL_GROUP_PATH,
+        selectFields: SELECT_FIELDS,
+        key: term,
+        label: "material group",
+      });
+
+      return row
+        ? {
+            materialGroup: row.MaterialGroup,
+            materialGroupDescription: row.MaterialGroupDescription,
+          }
+        : null;
+    },
   });
 }
 

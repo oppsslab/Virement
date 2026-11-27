@@ -21,6 +21,9 @@ sap.ui.define(
 
     const ACTION_DELEGATE = "ZSVC_PPS_VIREMENT.delegatePendingApproval";
 
+    // RequestApprovers.status_code of a Pending Approval row.
+    const PENDING_STATUS = 2;
+
     const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     function extractErrorMessage(oError) {
@@ -49,7 +52,13 @@ sap.ui.define(
     function labelOf(oContext) {
       const oData = oContext.getObject() || {};
 
-      return oData.request?.requestNumber || oData.emailAddress || oContext.getPath();
+      return (
+        oData.request?.requestNumber ||
+        [oData.level && `Level ${oData.level}`, oData.emailAddress]
+          .filter(Boolean)
+          .join(" - ") ||
+        oContext.getPath()
+      );
     }
 
     function executeBoundAction(sAction, oContext, mParameters) {
@@ -208,7 +217,55 @@ sap.ui.define(
           return;
         }
 
-        openDelegateDialog(aSelectedContexts);
+        /*
+         * Only a Pending approver row can be delegated - an approver who
+         * has already acted (Completed / Rejected) or whose level has not
+         * started (Inactive) cannot. Checked here, before the dialog, so
+         * the admin is told up front which rows are skipped instead of
+         * getting a per-row server error afterwards. The server enforces
+         * the same rule (delegate-pending-approval-logic.js).
+         */
+        Promise.all(
+          aSelectedContexts.map(function (oCtx) {
+            return oCtx.requestProperty("status_code").then(function (iStatus) {
+              return { oCtx: oCtx, iStatus: iStatus };
+            });
+          }),
+        )
+          .then(function (aRows) {
+            const aPending = aRows.filter(function (oRow) {
+              return Number(oRow.iStatus) === PENDING_STATUS;
+            });
+            const aSkipped = aRows.filter(function (oRow) {
+              return Number(oRow.iStatus) !== PENDING_STATUS;
+            });
+
+            if (!aPending.length) {
+              MessageBox.error(
+                "Only approvers with Pending status can be delegated. " +
+                  "Approvers who have already completed their approval " +
+                  "cannot be delegated.",
+              );
+
+              return;
+            }
+
+            if (aSkipped.length) {
+              MessageToast.show(
+                `${aSkipped.length} selected approver(s) skipped - only Pending approvers can be delegated.`,
+              );
+            }
+
+            openDelegateDialog(
+              aPending.map(function (oRow) {
+                return oRow.oCtx;
+              }),
+            );
+          })
+          .catch(function () {
+            // Status could not be read - fall back to the server-side check.
+            openDelegateDialog(aSelectedContexts);
+          });
       },
 
       /**

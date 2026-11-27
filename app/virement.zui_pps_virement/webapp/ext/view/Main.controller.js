@@ -28,7 +28,7 @@ sap.ui.define(
 
         this._oRouter.attachRouteMatched(this._onRouteChange, this);
 
-        this._applyAdminOnlyVisibility();
+        this._applyRoleBasedNavVisibility();
       },
 
       /*
@@ -47,13 +47,38 @@ sap.ui.define(
         "SystemConfiguration",
       ],
 
+      /*
+       * Approver-only nav tabs - REQUEST_APPROVE is this app's base
+       * "has access at all" role, shared by regular requestors and
+       * approvers alike (not approval-specific despite the name), so
+       * a user with none of it has no legitimate access to any of
+       * these - PendingApprovals (mass Approve/Reject), MyRequests
+       * and VirementRequests (the other two List Report views over
+       * /Requests - see README §9) are all hidden for them, same as
+       * admin-only tabs are for a non-admin. Home itself and its own
+       * "Create Virement Request" access stay gated separately via
+       * DashboardModel>/isApprover in Home.view.xml, since Home is
+       * always reachable as the landing page.
+       */
+      APPROVER_ONLY_NAV_KEYS: [
+        "PendingApprovals",
+        "MyRequests",
+      ],
+
+      /*
+       * Request Report (the all-requestors List Report) is visible to
+       * Admin and BCM (role BUDGET_ZERORISE) users only.
+       */
+      ADMIN_OR_BCM_NAV_KEYS: ["VirementRequests"],
+
       /**
-       * Hides the admin-only entries in MenuModel's navigation array
-       * for a non-admin user, based on UserDetails.isAdmin.
+       * Hides the admin-only and approver-only entries in MenuModel's
+       * navigation array for a user lacking the matching role, based
+       * on UserDetails.isAdmin / isApprover.
        *
        * @returns {Promise<void>}
        */
-      _applyAdminOnlyVisibility: async function () {
+      _applyRoleBasedNavVisibility: async function () {
         const oMenuModel = this.getOwnerComponent().getModel("MenuModel");
 
         if (!oMenuModel) {
@@ -61,6 +86,8 @@ sap.ui.define(
         }
 
         let bIsAdmin = false;
+        let bIsApprover = false;
+        let bIsBCM = false;
 
         try {
           const oMainModel = this.getOwnerComponent().getModel();
@@ -76,7 +103,7 @@ sap.ui.define(
           await oMainModel.getMetaModel().requestObject("/");
 
           const oListBinding = oMainModel.bindList("/UserDetails", null, null, null, {
-            $select: "isAdmin",
+            $select: "isAdmin,isApprover,isBCM",
           });
 
           const aContexts = await oListBinding.requestContexts(0, 1);
@@ -84,21 +111,32 @@ sap.ui.define(
           bIsAdmin = Boolean(
             aContexts.length && aContexts[0].getProperty("isAdmin"),
           );
+
+          bIsApprover = Boolean(
+            aContexts.length && aContexts[0].getProperty("isApprover"),
+          );
+
+          bIsBCM = Boolean(
+            aContexts.length && aContexts[0].getProperty("isBCM"),
+          );
         } catch (oError) {
           console.error(
-            "Failed to determine admin status for nav visibility:",
+            "Failed to determine role-based nav visibility:",
             oError,
           );
-        }
-
-        if (bIsAdmin) {
-          return;
         }
 
         const aNavigation = oMenuModel.getProperty("/navigation") || [];
 
         aNavigation.forEach(function (oItem, iIndex) {
-          if (this.ADMIN_ONLY_NAV_KEYS.includes(oItem.key)) {
+          const bHide =
+            (!bIsAdmin && this.ADMIN_ONLY_NAV_KEYS.includes(oItem.key)) ||
+            (!bIsApprover && this.APPROVER_ONLY_NAV_KEYS.includes(oItem.key)) ||
+            (!bIsAdmin &&
+              !bIsBCM &&
+              this.ADMIN_OR_BCM_NAV_KEYS.includes(oItem.key));
+
+          if (bHide) {
             oMenuModel.setProperty(
               `/navigation/${iIndex}/visible`,
               false,

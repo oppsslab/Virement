@@ -37,11 +37,31 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
 
         /*
          * Assigned approvers can update requests pending approval.
+         *
+         * tolower() on both sides because RequestApprovers.emailAddress
+         * and $user (the JWT's email claim) are not guaranteed to agree
+         * in case - requests-after-read-logic.js's isPendingApprover
+         * flag (which decides whether Approve/Reject even show) already
+         * compares case-insensitively via normalizeUserId(), so this
+         * check must match it or a user can see the buttons and then
+         * get a 403 Forbidden clicking them.
          */
         {
             grant: 'UPDATE',
             to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and exists RequestApprovers[emailAddress = $user]'
+            where: 'status_code = 2 and exists RequestApprovers[tolower(emailAddress) = tolower($user)]'
+        },
+
+        /*
+         * An ADMIN can edit any request regardless of who created it
+         * or who the current approver is - matches the same statuses
+         * the Edit button is ever shown for (see UI.UpdateHidden in
+         * annotations.cds: Draft(0) or Pending Approval(2) only).
+         */
+        {
+            grant: 'UPDATE',
+            to   : 'ADMIN',
+            where: 'status_code = 2 or status_code = 0'
         },
 
         /*
@@ -65,6 +85,8 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
 
         /*
          * Only the assigned approver can approve/reject/delegate a pending approval request.
+         *
+         * tolower() on both sides - see the UPDATE rule above for why.
          */
         {
             grant: [
@@ -74,7 +96,7 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
                 'delegateApproval'
             ],
             to   : 'REQUEST_APPROVE',
-            where: 'status_code = 2 and exists RequestApprovers[emailAddress = $user]'
+            where: 'status_code = 2 and exists RequestApprovers[tolower(emailAddress) = tolower($user)]'
         },
 
         /*
@@ -89,7 +111,25 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         {
             grant: ['retryEarmarkedFundsCompletion'],
             to   : 'REQUEST_APPROVE',
-            where: 'exists RequestApprovers[emailAddress = $user]'
+            where: 'exists RequestApprovers[tolower(emailAddress) = tolower($user)]'
+        },
+
+        /*
+         * Admin-only manual remediation for a request stuck
+         * "Completed" without ever being posted to S/4 - see
+         * retry-post-document-logic.js. Bound actions on an entity
+         * that already has a @restrict block must be explicitly
+         * listed here too, or they are denied by default regardless
+         * of their own @requires annotation.
+         */
+        {
+            grant: [
+                'retryPostDocument',
+                'rejectBySystem',
+                'delegateApprovalAsAdmin',
+                'completeRejectedEarmarkedFunds'
+            ],
+            to   : 'ADMIN'
         },
     ])
     @odata.draft.enabled
@@ -174,6 +214,36 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
              */
             @requires: ['REQUEST_APPROVE']
             action retryEarmarkedFundsCompletion() returns Requests;
+
+            /*
+             * Admin-only manual remediation for a request marked
+             * "Completed" that was never actually posted to S/4 - see
+             * the syncOnly bypass in approve-reject-request.js and
+             * retry-post-document-logic.js. Only usable while the
+             * Transfer Out & In Document Number is still empty;
+             * performPostToS4 itself is also idempotent as a second
+             * line of defense.
+             */
+            @requires: ['ADMIN']
+            action retryPostDocument()               returns Requests;
+
+            /*
+             * Admin-only: rejects a Pending Approval request on the
+             * system's behalf. History and approver rows read "System".
+             * See reject-by-system-logic.js.
+             */
+            @requires: ['ADMIN']
+            action rejectBySystem(
+                                 @title: 'Reason'
+                                 comment: String)    returns Requests;
+
+            /*
+             * Admin-only: completes the Earmarked Funds document of a
+             * Rejected Virement that is still open in S/4. See
+             * complete-rejected-earmarked-funds-logic.js.
+             */
+            @requires: ['ADMIN']
+            action completeRejectedEarmarkedFunds()  returns Requests;
 
             action uploadItems(content: LargeString) returns Requests;
 
@@ -343,6 +413,8 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
         key emailAddress : String(255);
             fullName     : String(200);
             isAdmin      : Boolean;
+            isApprover   : Boolean;
+            isBCM        : Boolean;
     }
 
     /*
@@ -440,6 +512,13 @@ service ZSVC_PPS_VIREMENT @(requires: 'authenticated-user') {
             isActive         : Boolean;
             startDate        : Date;
             endDate          : Date;
+            /*
+             * Set when this row matches an existing ApproverMatrix row
+             * on userRole + departmentBranch + emailAddress together -
+             * the client updates that row in place instead of creating
+             * a duplicate. Unset for a genuinely new assignment.
+             */
+            existingId       : UUID;
         };
     };
 

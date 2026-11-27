@@ -33,6 +33,14 @@ const buildMessage = {
     return `Earmarked Funds document ${documentNumber} has been created`;
   },
 
+  earmarkedFundsCompletedOnRejection(documentNumber) {
+    return `Earmarked Funds document ${documentNumber} has been marked complete by System`;
+  },
+
+  earmarkedFundsCompletionFailedOnRejection(documentNumber, reason) {
+    return `Earmarked Funds document ${documentNumber} could NOT be marked complete after rejection and needs manual follow-up: ${reason || "unknown error"}`;
+  },
+
   statusChangedTo(statusCode) {
     const label = REQUEST_STATUS_LABEL[statusCode] || `status ${statusCode}`;
     return `Virement status changed to ${label}`;

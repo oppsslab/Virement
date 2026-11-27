@@ -13,14 +13,20 @@ const {
 const postToS4Module = require("./post-to-s4-logic");
 const { performPostToS4, businessError } = postToS4Module;
 
-const { completeEarmarkedFundsDocument } = require("./utils/earmarked-funds");
+const {
+  completeEarmarkedFundsDocument,
+  getEarmarkedFundsDocumentStatus,
+} = require("./utils/earmarked-funds");
 
 const insertRequestHistory = require("./insert-request-history");
-const { formatLocalDate, formatLocalTime } = require("./utils/date-utils");
 
 const { REQUEST_STATUS } = require("./utils/request-status");
 
 const { loadEmailContext } = require("./utils/approval-email-context");
+
+const {
+  completeEarmarkedFundsAfterRejection,
+} = require("./utils/earmarked-funds-rejection");
 
 const {
   renderEmailConfig,
@@ -190,12 +196,42 @@ async function prepareApprovalAction(request) {
     return null;
   }
 
-  const { approverRow, rows, lastApprover } = await findMyPendingApproverRow(
+  const found = await findMyPendingApproverRow(
     tx,
     RequestApprovers,
     requestId,
     approverEmail,
   );
+
+  const { rows, lastApprover } = found;
+
+  /*
+   * Only an approver at the request's CURRENT level may act. The
+   * current level is the lowest level that still has a Pending
+   * approver, not the stored currentApprovalLevel: an earlier bug
+   * could leave a request's stored level behind its approver rows
+   * (every Level 1 row Completed, Level 2 Pending, stored level
+   * still 1), which would otherwise lock out the real next approver.
+   * The stored level is corrected in memory so the rest of the
+   * approve flow (final-level check, next level) works from it too.
+   */
+  const pendingLevelNumbers = rows
+    .map((row) => getLevelNumber(row.level))
+    .filter((levelNumber) => Number.isFinite(levelNumber));
+
+  const currentLevelNumber = pendingLevelNumbers.length
+    ? Math.min(...pendingLevelNumbers)
+    : Number(requestRow.currentApprovalLevel);
+
+  if (Number.isFinite(currentLevelNumber)) {
+    requestRow.currentApprovalLevel = currentLevelNumber;
+  }
+
+  const approverRow = Number.isFinite(currentLevelNumber)
+    ? found.approverRow.filter(
+        (row) => getLevelNumber(row.level) === currentLevelNumber,
+      )
+    : found.approverRow;
 
   if (!approverRow.length) {
     LOG.warn(
@@ -214,27 +250,54 @@ async function prepareApprovalAction(request) {
   let openTask = [];
 
   try {
-    openTask = await getOpenTaskForWorkflowInstance(
+    /*
+     * getOpenTaskForWorkflowInstance returns null (not []) when it
+     * finds no open task - normalized here so every "no task" path
+     * below can rely on openTask always being an array.
+     */
+    openTask = (await getOpenTaskForWorkflowInstance(
       requestRow.workflowInstanceId,
-    );
-    console.log(openTask);
+    )) || [];
   } catch (error) {
-    LOG.error(
-      "Failed to look up the open task for this request.",
+    const status = error.response?.status || error.statusCode;
+
+    /*
+     * A 404 here means BPA has no record of this workflow instance
+     * at all (it never existed, errored out before being indexed, or
+     * was purged) - not a transient problem retrying would fix. This
+     * app's own RequestApprovers rows are still the real source of
+     * truth for who may approve (see README's authorization model),
+     * so treat it the same as "no open task" below rather than
+     * hard-blocking the approver indefinitely. Anything else (timeout,
+     * 5xx, auth failure) stays a hard block - those usually ARE
+     * transient and a blind approve could paper over a real outage.
+     */
+    if (status !== 404) {
+      LOG.error(
+        "Failed to look up the open task for this request.",
+        JSON.stringify({
+          requestId,
+          workflowInstanceId: requestRow.workflowInstanceId,
+          message: error.message,
+          status,
+        }),
+      );
+
+      request.error(
+        502,
+        "Unable to reach the approval workflow to process your decision.",
+      );
+
+      return null;
+    }
+
+    LOG.warn(
+      "Workflow instance not found in BPA - treating as no open task.",
       JSON.stringify({
         requestId,
         workflowInstanceId: requestRow.workflowInstanceId,
-        message: error.message,
-        status: error.response?.status || error.statusCode,
       }),
     );
-
-    request.error(
-      502,
-      "Unable to reach the approval workflow to process your decision.",
-    );
-
-    return null;
   }
 
   if (!openTask.length) {
@@ -248,7 +311,9 @@ async function prepareApprovalAction(request) {
      * stuck Pending with no task left to complete. Rather than
      * dead-ending on "already actioned", let the caller resync its
      * own records: taskIds stays empty, so no BPA call is attempted
-     * again.
+     * again. The same applies when the workflow instance is missing
+     * from BPA entirely (see the 404 handling above) - either way,
+     * there is nothing left for this app to complete there.
      */
     let completedExternally = false;
 
@@ -289,21 +354,36 @@ async function prepareApprovalAction(request) {
       };
     }
 
-    LOG.error(
-      "No open task instance found for workflow instance.",
+    /*
+     * Genuinely no open task and no completed one either - most
+     * often a workflow instance that errored out or never properly
+     * registered in BPA (see the 404 handling above). This app's own
+     * RequestApprovers row already confirmed this user has a
+     * legitimate pending approval here, so let the decision proceed
+     * through this app's own records rather than blocking the
+     * approver indefinitely on a broken BPA side-channel - same
+     * fallback as the "actioned externally" case above, just for a
+     * different reason. Logged clearly so these can be audited.
+     */
+    LOG.warn(
+      "No open or completed task found for this workflow instance - " +
+        "proceeding on this app's own records only, without a BPA " +
+        "task to complete.",
       JSON.stringify({
         requestId,
         workflowInstanceId: requestRow.workflowInstanceId,
       }),
     );
 
-    request.error(
-      409,
-      "No open approval task was found for this request. " +
-        "It may have already been actioned.",
-    );
-
-    return null;
+    return {
+      requestId,
+      requestRow,
+      approverRow,
+      rows,
+      lastApprover,
+      taskIds: [],
+      syncOnly: true,
+    };
   }
 
   /*
@@ -380,54 +460,6 @@ async function prepareApprovalAction(request) {
  *
  * @param {cds.Request} request
  */
-/**
- * Restores the approval state captured before this approval action, after
- * a failed Earmarked Funds completion. The Transfer document numbers
- * already posted are kept, so retrying only redoes the completion.
- */
-async function revertFinalApproval({ requestId, snapshot, approverEmail, reason }) {
-  const { Requests, RequestApprovers, RequestHistory } = cds.entities(SERVICE_NAMESPACE);
-
-  await cds.tx(async (tx) => {
-    for (const row of snapshot.approvers) {
-      await tx.run(
-        UPDATE(RequestApprovers)
-          .set({
-            status_code: row.status_code,
-            comment: row.comment,
-            actionDate: row.actionDate,
-          })
-          .where({ ID: row.ID }),
-      );
-    }
-
-    await tx.run(
-      UPDATE(Requests)
-        .set({
-          status_code: snapshot.request.status_code,
-          currentApprovalLevel: snapshot.request.currentApprovalLevel,
-          workflowStatus: snapshot.request.workflowStatus,
-          approvedBy: snapshot.request.approvedBy,
-          postingDate: snapshot.request.postingDate,
-          postingPeriod: snapshot.request.postingPeriod,
-        })
-        .where({ ID: requestId }),
-    );
-
-    const now = new Date();
-
-    await tx.run(
-      INSERT.into(RequestHistory).entries({
-        request_ID: requestId,
-        date: formatLocalDate(now),
-        time: formatLocalTime(now),
-        changedBy: approverEmail,
-        changes: `Approval not completed: Earmarked Funds completion failed (${reason}). The Transfer is already posted in S/4 and is not posted again; the approver must press Approve again after the issue is resolved.`,
-      }),
-    );
-  });
-}
-
 async function approveRequest(request) {
   LOG.info("--- approveRequest started ---");
 
@@ -471,32 +503,6 @@ async function approveRequest(request) {
 
   const { Requests, RequestApprovers } = cds.entities(SERVICE_NAMESPACE);
 
-  /*
-   * Snapshot of the approval state before anything changes in this
-   * action, so a failed Earmarked Funds completion after posting can
-   * restore it exactly (see revertFinalApproval).
-   */
-  const approvalSnapshot = {
-    approvers: await tx.run(
-      SELECT.from(RequestApprovers)
-        .columns("ID", "status_code", "comment", "actionDate")
-        .where({ request_ID: requestId }),
-    ),
-    request: await tx.run(
-      SELECT.one
-        .from(Requests)
-        .columns(
-          "status_code",
-          "currentApprovalLevel",
-          "workflowStatus",
-          "approvedBy",
-          "postingDate",
-          "postingPeriod",
-        )
-        .where({ ID: requestId }),
-    ),
-  };
-
   // Approve for User
   await tx.run(
     UPDATE(RequestApprovers)
@@ -514,7 +520,10 @@ async function approveRequest(request) {
         .set({
           status_code: REQUEST_STATUS.PENDING_APPROVAL
         })
-      .where({ level: { like: `${nextLevel}%` } })   // contains "A"
+      .where({
+        request_ID: requestId,
+        level: { like: `${nextLevel}%` },   // contains "A"
+      })
     );
 
     /*
@@ -602,7 +611,7 @@ async function approveRequest(request) {
     await insertRequestHistory(
       request,
       requestId,
-      `${siblingEmails} were not required to act - request approved rejected by ${approverEmail}.`,
+      `${siblingEmails} were not required to act - request already approved by ${approverEmail}.`,
     );
 
     LOG.info(
@@ -613,35 +622,32 @@ async function approveRequest(request) {
 
   if (syncOnly) {
     /*
-     * The BPA task was already completed outside this app, so there
-     * is no task left to complete and - per how this request was
-     * resolved - no S/4 posting is attempted here either. Only the
-     * local bookkeeping (already updated above) is synced to match
-     * BPA. This is recorded explicitly so it is never mistaken for a
-     * normal, fully-posted approval.
+     * No BPA task could be confirmed for this approval (the workflow
+     * instance is missing from BPA, or was already completed outside
+     * this app) - there is simply no BPA task left to complete.
+     * This app's own RequestApprovers/Requests records remain
+     * authoritative, so the decision proceeds - and, unlike before,
+     * the S/4 posting below is NOT skipped: skipping it previously
+     * left fully-"Approved" requests with no Transfer/Supplement/
+     * Return document ever created in S/4 (the money never actually
+     * moved), which was only discovered after the fact. taskIds is
+     * already empty here, so the completeTask loop further down
+     * stays a no-op without any extra guard.
      */
     await insertRequestHistory(
       request,
       requestId,
-      `Approval status synced by ${approverEmail}: the BPA task was ` +
-        "already completed outside this app. No S/4 posting was " +
-        "attempted as part of this sync.",
+      `Approval status synced by ${approverEmail}: no BPA workflow ` +
+        "task could be confirmed (missing or already completed " +
+        "outside this app). Proceeding with S/4 posting on this " +
+        "app's own records.",
     );
-
-    await tx.commit();
 
     LOG.warn(
-      "Synced local approval status without an S/4 posting " +
-        "(BPA task was already completed externally).",
+      "No BPA task to complete for this approval - proceeding with " +
+        "S/4 posting on this app's own records only.",
       JSON.stringify({ requestId, approverEmail }),
     );
-
-    request.info(
-      "Approval status has been synced to match the workflow, which " +
-        "was already completed. No S/4 posting was attempted.",
-    );
-
-    return;
   }
 
   let s4Result;
@@ -655,20 +661,42 @@ async function approveRequest(request) {
       isTransferWithEarmarkedFunds && Boolean(requestRow.transferOutDocNumber);
 
     /*
-     * Pre-check before posting: the Earmarked Funds completion must
-     * succeed in test mode first. request.error is raised before the
-     * transaction commits, so nothing is posted in S/4 and nothing is
-     * saved if this check fails.
+     * Earmarked Funds must be completed FOR REAL before the Transfer
+     * is posted, not after: while a document stays open, it keeps
+     * holding its own budget reservation, which collides with the
+     * Transfer posting's own Availability Control check - confirmed
+     * live on N26000030, which failed with "Annual budget exceeded"
+     * while its Earmarked Funds document was still open. request.error
+     * is raised before the transaction commits, so nothing is posted
+     * in S/4 and nothing is saved if this fails.
+     *
+     * The live status is checked first so a retry after a transient
+     * failure here (or a request whose Transfer was already posted
+     * previously) never tries to complete an already-complete document
+     * a second time.
      */
-    if (isTransferWithEarmarkedFunds && !alreadyPosted) {
+    if (isTransferWithEarmarkedFunds) {
       try {
-        await completeEarmarkedFundsDocument({
+        const { isCompleted } = await getEarmarkedFundsDocumentStatus({
           documentNumber: requestRow.earmarkedFundsDocNumber,
-          test: true,
         });
+
+        if (!isCompleted) {
+          await completeEarmarkedFundsDocument({
+            documentNumber: requestRow.earmarkedFundsDocNumber,
+          });
+
+          LOG.info(
+            "Earmarked Funds document marked complete ahead of S/4 posting.",
+            JSON.stringify({
+              requestId,
+              earmarkedFundsDocNumber: requestRow.earmarkedFundsDocNumber,
+            }),
+          );
+        }
       } catch (error) {
         LOG.error(
-          "Earmarked Funds pre-check failed. The approval is not processed and nothing is posted.",
+          "Earmarked Funds completion failed. The approval is not processed and nothing is posted.",
           JSON.stringify({
             requestId,
             earmarkedFundsDocNumber: requestRow.earmarkedFundsDocNumber,
@@ -693,7 +721,8 @@ async function approveRequest(request) {
         };
 
         LOG.info(
-          "Transfer already posted - retrying the Earmarked Funds completion only.",
+          "Transfer already posted - only syncing the approval now " +
+            "(Earmarked Funds completion, if still needed, already ran above).",
           JSON.stringify({ requestId }),
         );
       } else {
@@ -734,53 +763,6 @@ async function approveRequest(request) {
       return;
     }
   }
-
-  /*
-   * The approval is only finished once the Earmarked Funds document is
-   * complete. If completion fails, the approval state is restored so
-   * the approver can press Approve again after the S/4 problem is fixed;
-   * the Transfer document already posted is reused, not posted again.
-   */
-  if (s4Result?.documentNumbers?.TRAN && s4Result?.earmarkedFundsDocNumber) {
-    try {
-      await completeEarmarkedFundsDocument({
-        documentNumber: s4Result.earmarkedFundsDocNumber,
-      });
-
-      LOG.info(
-        "Earmarked Funds document marked complete.",
-        JSON.stringify({
-          requestId,
-          earmarkedFundsDocNumber: s4Result.earmarkedFundsDocNumber,
-        }),
-      );
-    } catch (error) {
-      await revertFinalApproval({
-        requestId,
-        snapshot: approvalSnapshot,
-        approverEmail,
-        reason: error.message,
-      });
-
-      LOG.error(
-        "Earmarked Funds completion failed after posting. Approval reverted for retry.",
-        JSON.stringify({
-          requestId,
-          earmarkedFundsDocNumber: s4Result.earmarkedFundsDocNumber,
-          message: error.message,
-        }),
-      );
-
-      request.error(
-        error.statusCode || 502,
-        `The Transfer is posted in S/4, but the Earmarked Funds document could not be completed: ${error.message} The approval is not finished. Resolve the issue in S/4, then press Approve again.`,
-      );
-
-      return;
-    }
-  }
-
-
 
   try {
     for (const taskId of taskIds) {
@@ -1027,6 +1009,23 @@ async function rejectRequest(request) {
       }),
     );
   }
+  /*
+   * The rejection is committed above, so this can only add to it: a
+   * failure never blocks or undoes the rejection.
+   */
+  const earmarkedFunds = await completeEarmarkedFundsAfterRejection({
+    requestId,
+    requestRow,
+  });
+
+  if (earmarkedFunds.outcome === "failed") {
+    request.warn(
+      `Request rejected, but Earmarked Funds document ${earmarkedFunds.documentNumber} could not be marked complete: ${earmarkedFunds.message}. Please follow up manually.`,
+    );
+
+    return;
+  }
+
   request.info('Request Rejected successfully');
 }
 

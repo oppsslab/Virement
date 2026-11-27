@@ -167,6 +167,47 @@ sap.ui.define(
       return [];
     }
 
+    /**
+     * Updates one existing ApproverMatrix row in place - draftEdit to
+     * open an edit draft on the active entity, write the uploaded
+     * row's values onto it, then draftActivate to save. Done one row
+     * at a time (not batched together with the bulk create below),
+     * since interleaving a bound action + property writes + another
+     * bound action into one shared batch group proved fragile - this
+     * is infrequent admin data entry, not a hot path, so the extra
+     * round trips are an acceptable trade for reliability.
+     *
+     * @param {sap.ui.model.odata.v4.ODataModel} oModel
+     * @param {object} oRow - a validated row with a truthy existingId
+     * @returns {Promise}
+     */
+    function updateExistingRow(oModel, oRow) {
+      const oEntityContext = oModel
+        .bindContext(
+          `/ApproverMatrix(ID=${oRow.existingId},IsActiveEntity=true)`,
+        )
+        .getBoundContext();
+
+      const oEditOperation = oModel.bindContext(
+        "ZSVC_PPS_VIREMENT.draftEdit(...)",
+        oEntityContext,
+      );
+
+      return oEditOperation.execute().then(function () {
+        const oDraftContext = oEditOperation.getBoundContext();
+
+        oDraftContext.setProperty("emailAddress", oRow.emailAddress);
+        oDraftContext.setProperty("name", oRow.name);
+        oDraftContext.setProperty("isActive", oRow.isActive);
+        oDraftContext.setProperty("startDate", oRow.startDate);
+        oDraftContext.setProperty("endDate", oRow.endDate);
+
+        return oModel
+          .bindContext("ZSVC_PPS_VIREMENT.draftActivate(...)", oDraftContext)
+          .execute();
+      });
+    }
+
     function handleFileSelected(oEvent) {
       const aFiles = oEvent.getParameter("files");
       const oFile = aFiles && aFiles[0];
@@ -221,6 +262,19 @@ sap.ui.define(
           const sUpdateGroupId =
             oUploadModel.getUpdateGroupId && oUploadModel.getUpdateGroupId();
 
+          // A row matching an existing assignment (same userRole +
+          // departmentBranch + emailAddress, resolved server-side in
+          // uploadApproverMatrix) is updated in place instead of
+          // being created again - otherwise every re-upload of the
+          // same matrix duplicates every row.
+          const aRowsToCreate = aRows.filter(function (oRow) {
+            return !oRow.existingId;
+          });
+
+          const aRowsToUpdate = aRows.filter(function (oRow) {
+            return !!oRow.existingId;
+          });
+
           const oListBinding = oUploadModel.bindList(
             "/ApproverMatrix",
             null,
@@ -236,7 +290,7 @@ sap.ui.define(
            * row to become a live, visible record. Contexts are kept
            * so each one can be activated once the batch confirms it.
            */
-          const aCreatedContexts = aRows.map(function (oRow) {
+          const aCreatedContexts = aRowsToCreate.map(function (oRow) {
             return oListBinding.create({
               userRole_code: oRow.userRole_code,
               departmentBranch: oRow.departmentBranch,
@@ -263,6 +317,13 @@ sap.ui.define(
                   });
                 }),
               );
+            })
+            .then(function () {
+              return aRowsToUpdate.reduce(function (pChain, oRow) {
+                return pChain.then(function () {
+                  return updateExistingRow(oUploadModel, oRow);
+                });
+              }, Promise.resolve());
             });
         })
         .then(function () {

@@ -93,6 +93,27 @@ function parseExcel(base64Content) {
   return parsed;
 }
 
+/**
+ * Builds the matching key for "is this the same approver assignment"
+ * - userRole + departmentBranch + emailAddress together, so a
+ * re-upload of the same assignment updates that row in place, while
+ * reassigning the role to a different email creates a new row
+ * (preserving history via startDate/endDate rather than overwriting
+ * it).
+ *
+ * @param {string} userRoleCode
+ * @param {string} departmentBranch
+ * @param {string} emailAddress
+ * @returns {string}
+ */
+function buildMatchKey(userRoleCode, departmentBranch, emailAddress) {
+  return [
+    String(userRoleCode || "").trim().toUpperCase(),
+    String(departmentBranch || "").trim().toUpperCase(),
+    String(emailAddress || "").trim().toUpperCase(),
+  ].join("|");
+}
+
 function toTrimmedString(value) {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -360,6 +381,40 @@ module.exports = async function uploadApproverMatrix(request) {
       LOG.warn(`Validation failed with ${allErrors.length} error(s).`);
 
       return reportValidationErrors(request, allErrors);
+    }
+
+    const { ApproverMatrix } = cds.entities("ZSVC_PPS_VIREMENT");
+
+    const existingRows = await tx.run(
+      SELECT.from(ApproverMatrix).columns(
+        "ID",
+        "userRole_code",
+        "departmentBranch",
+        "emailAddress",
+      ),
+    );
+
+    const existingIdByMatchKey = new Map();
+
+    for (const existing of existingRows) {
+      existingIdByMatchKey.set(
+        buildMatchKey(
+          existing.userRole_code,
+          existing.departmentBranch,
+          existing.emailAddress,
+        ),
+        existing.ID,
+      );
+    }
+
+    for (const item of validRows) {
+      item.existingId = existingIdByMatchKey.get(
+        buildMatchKey(
+          item.userRole_code,
+          item.departmentBranch,
+          item.emailAddress,
+        ),
+      );
     }
 
     LOG.info(`Returning ${validRows.length} validated row(s) to the UI.`);

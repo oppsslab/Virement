@@ -43,8 +43,6 @@ const WORKFLOW_INSTANCE_EXECUTION_LOGS_PATH = (workflowInstanceId) =>
  */
 const ERROR_WORKFLOW_STATUSES = ["ERRONEOUS", "ERROR"];
 
-const ENVIRONMENT_ID = "nonprd";
-
 /*
  * Task statuses considered "still open / awaiting action" by the
  * SAP Build Process Automation Task Instance API. Different API
@@ -544,6 +542,11 @@ async function startApprovalWorkflow({
 async function fetchTaskInstances(workflowInstanceId) {
   const { destination, apiKey } = await getProcessAutomationDestination();
 
+  const WORKFLOW_ENVIRONMENT_ID = await getConfigValue(
+    "WORKFLOW_ENVIRONMENT_ID",
+    WORKFLOW_ENVIRONMENT_ID_DEFAULT,
+  );
+
   LOG.info(
     "Querying task instances for workflow instance.",
     JSON.stringify({ workflowInstanceId }),
@@ -561,7 +564,7 @@ async function fetchTaskInstances(workflowInstanceId) {
 
         params: {
           workflowInstanceId,
-          environmentId: ENVIRONMENT_ID,
+          environmentId: WORKFLOW_ENVIRONMENT_ID,
         },
 
         headers: {
@@ -636,6 +639,11 @@ async function getWorkflowInstanceStatus(workflowInstanceId) {
   try {
     const { destination, apiKey } = await getProcessAutomationDestination();
 
+    const WORKFLOW_ENVIRONMENT_ID = await getConfigValue(
+      "WORKFLOW_ENVIRONMENT_ID",
+      WORKFLOW_ENVIRONMENT_ID_DEFAULT,
+    );
+
     const response = await executeHttpRequest(
       destination,
       {
@@ -644,7 +652,7 @@ async function getWorkflowInstanceStatus(workflowInstanceId) {
         url: WORKFLOW_INSTANCE_PATH(workflowInstanceId),
 
         params: {
-          environmentId: ENVIRONMENT_ID,
+          environmentId: WORKFLOW_ENVIRONMENT_ID,
         },
 
         headers: {
@@ -699,6 +707,11 @@ async function getWorkflowInstanceErrorMessages(workflowInstanceId) {
   try {
     const { destination, apiKey } = await getProcessAutomationDestination();
 
+    const WORKFLOW_ENVIRONMENT_ID = await getConfigValue(
+      "WORKFLOW_ENVIRONMENT_ID",
+      WORKFLOW_ENVIRONMENT_ID_DEFAULT,
+    );
+
     const response = await executeHttpRequest(
       destination,
       {
@@ -707,7 +720,7 @@ async function getWorkflowInstanceErrorMessages(workflowInstanceId) {
         url: WORKFLOW_INSTANCE_ERROR_MESSAGES_PATH(workflowInstanceId),
 
         params: {
-          environmentId: ENVIRONMENT_ID,
+          environmentId: WORKFLOW_ENVIRONMENT_ID,
         },
 
         headers: {

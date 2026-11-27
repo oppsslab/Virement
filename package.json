@@ -32,7 +32,11 @@
     "requires": {
       "[production]": {
         "db": {
-          "kind": "hana"
+          "kind": "hana",
+          "pool": {
+            "max": 20,
+            "acquireTimeoutMillis": 10000
+          }
         },
         "auth": {
           "kind": "xsuaa"

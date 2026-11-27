@@ -80,10 +80,22 @@ function toApiDate(value) {
  * @param {number} index - zero-based position, used for fallback text
  * @returns {object}
  */
+/*
+ * S/4's EarmarkedFundsDocumentItem.DocumentItemText enforces
+ * MaxLength=50 (confirmed via the EDM facet rejection it returns for
+ * anything longer) - item.description is free text up to 500 chars
+ * in our own schema (db/schema.cds), so it must be truncated before
+ * being sent or S/4 rejects the whole document with a 502.
+ */
+const DOCUMENT_ITEM_TEXT_MAX_LENGTH = 50;
+
 function buildItem(item, index) {
   return {
     CommitmentItem: String(item.glAccount ?? "").trim(),
-    DocumentItemText: String(item.description ?? "").trim() || `Line ${index + 1}`,
+    DocumentItemText:
+      String(item.description ?? "")
+        .trim()
+        .slice(0, DOCUMENT_ITEM_TEXT_MAX_LENGTH) || `Line ${index + 1}`,
     EmrkdFndsAmountInTransCrcy: Number(item.transferOutAmount) || 0,
     FundsCenter: String(item.costCentre ?? "").trim(),
     TransactionCurrency: CURRENCY,

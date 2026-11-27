@@ -14,12 +14,10 @@ const {
 
 const { normalizeUserId } = require("./utils/user-id");
 
-// TEMPORARY: the live S/4 check below is disabled in favor of a local
-// derivation - see refreshEarmarkedFundsStatus's own comment. Restore
-// this import when that's reverted.
-// const {
-//   getEarmarkedFundsDocumentStatus,
-// } = require("./utils/earmarked-funds");
+// Only used for Rejected requests - see refreshEarmarkedFundsStatus.
+const {
+  getEarmarkedFundsDocumentStatus,
+} = require("./utils/earmarked-funds");
 
 const LOG = cds.log("requests-after-read-logic");
 
@@ -304,6 +302,12 @@ async function refreshLiveWorkflowStatus(rows, request) {
  * transferOutDocNumber alone a false positive for "EF completed" in
  * exactly that revert-and-retry window, which status_code is not.
  *
+ * A REJECTED request is the exception: its document is completed on a
+ * best-effort basis after the rejection (see
+ * utils/earmarked-funds-rejection.js), so status_code cannot tell
+ * whether that worked. Its status is read live from S/4 instead; a
+ * failed read shows "not completed".
+ *
  * Only on a single-entity (Object Page) read, never for a list, to
  * match the shape of the real check this replaces.
  *
@@ -322,6 +326,16 @@ async function refreshEarmarkedFundsStatus(rows, request) {
 
     for (const row of rows) {
       if (!row.earmarkedFundsDocNumber) {
+        continue;
+      }
+
+      if (row.status_code === REQUEST_STATUS.REJECTED) {
+        const { isCompleted } = await getEarmarkedFundsDocumentStatus({
+          documentNumber: row.earmarkedFundsDocNumber,
+        });
+
+        row.earmarkedFundsIsCompleted = isCompleted;
+
         continue;
       }
 
